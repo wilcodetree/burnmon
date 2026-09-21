@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claudecost - Project</title>
+
+<style>
+  html { color-scheme: light dark; }
+  :root {
+    --bg: #0A1422;
+    --panel: #112038;
+    --panel-2: #152235;
+    --mint: #3EDCB0;
+    --mint-bright: #5CEBC2;
+    --text: #EAF1F8;
+    --muted: #8A9CB5;
+    --hairline: rgba(138,156,181,0.15);
+    --hairline-2: rgba(138,156,181,0.30);
+    --amber: #F5B950;
+    --red: #F16969;
+
+    --mint-fill: rgba(62,220,176,0.14);
+    --mint-line: rgba(62,220,176,0.45);
+    --amber-fill: rgba(245, 185, 80, 0.13);
+    --amber-line: rgba(245, 185, 80, 0.42);
+    --red-fill: rgba(240, 96, 96, 0.14);
+    --red-line: rgba(240, 96, 96, 0.45);
+    --grey-fill: rgba(138, 156, 181, 0.10);
+    --grey-line: rgba(138, 156, 181, 0.30);
+
+    --header-top: #0C182A;
+    --chrome-bg: rgba(10,20,34,0.85);
+    --thead-bg: #0F1D33;
+    --hero-count-fg: #1B0F00;
+    --modal-backdrop: rgba(6, 12, 20, 0.74);
+
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: "Consolas", ui-monospace, "SF Mono", "SFMono-Regular", Menlo, "Liberation Mono", monospace;
+
+    --header-h: 87px;
+    --chrome-h: 142px;
+    --radius: 8px;
+    --radius-sm: 5px;
+  }
+
+  body[data-theme="light"] {
+    --bg: #F6F8FA;
+    --panel: #FFFFFF;
+    --panel-2: #EDF1F6;
+    --mint: #0B6B5B;
+    --mint-bright: #0E5C4E;
+    --text: #0A1422;
+    --muted: #4A5A70;
+    --hairline: rgba(10,20,34,0.12);
+    --hairline-2: rgba(10,20,34,0.22);
+    --amber: #975E10;
+    --red: #BE3830;
+    --mint-fill: rgba(11,107,91,0.10);
+    --mint-line: rgba(11,107,91,0.35);
+    --amber-fill: rgba(169, 106, 18, 0.12);
+    --amber-line: rgba(169, 106, 18, 0.42);
+    --red-fill: rgba(198, 58, 50, 0.12);
+    --red-line: rgba(198, 58, 50, 0.40);
+    --grey-fill: rgba(20, 34, 53, 0.06);
+    --grey-line: rgba(20, 34, 53, 0.22);
+    --header-top: #DCE5EF;
+    --chrome-bg: rgba(246,248,250,0.85);
+    --thead-bg: #E6ECF3;
+    --hero-count-fg: #FFFFFF;
+    --modal-backdrop: rgba(20, 34, 53, 0.40);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--mint-bright); text-decoration: none; }
+  a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+  ::selection { background: rgba(62, 220, 176, 0.30); color: #fff; }
+
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .num  { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+
+  header.deck {
+    position: sticky; top: 0; z-index: 40;
+    background: linear-gradient(180deg, var(--header-top) 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--hairline);
+    padding: 14px 28px 12px;
+    display: block;
+  }
+  /* Embed mode (2026-08-18): a page loaded inside another ZND OS shell's
+     iframe with ?embed=1 (or ?embed=true) hides its own header, so the
+     shell's own chrome is the only one shown and this page's own reference
+     row and filter bar re-anchor to the very top of the frame instead of
+     stacking two headers. measureChromeHeight() (below) recomputes
+     --header-h/--chrome-h from real offsetHeights on load, so hiding
+     header.deck here is the whole fix: the filter bar's own
+     `top: var(--header-h)` collapses to 0 with no extra rule needed.
+     Currently used by the Foreman board (framed by foreman_shell.html) and
+     BurnRate's own dashboard (framed by burnrate_shell.html, a separate repo
+     with its own equivalent implementation); Mission Control, Portfolio and
+     Money are never themselves framed, so no page appends ?embed=1 to them,
+     but the capability lives here so it is not forked per generator. */
+  body.embed header.deck { display: none; }
+  .deck-top { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; }
+  header.deck .brand { display: flex; align-items: baseline; gap: 14px; }
+  header.deck h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  header.deck h1 .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--mint); box-shadow: 0 0 10px rgba(62,220,176,0.8);
+    margin-right: 10px; vertical-align: middle;
+    animation: pulse 2.6s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  header.deck .sub { color: var(--muted); font-size: 12px; letter-spacing: 0.02em; }
+  header.deck .gen { color: var(--muted); font-size: 12px; }
+  header.deck .gen b { color: var(--text); font-weight: 500; }
+  header.deck .chrome-right { display: flex; align-items: center; gap: 16px; }
+  .theme-toggle {
+    display: inline-flex; border: 1px solid var(--hairline-2); border-radius: 20px;
+    overflow: hidden; cursor: pointer; background: transparent; padding: 0; font-family: var(--font);
+  }
+  .theme-toggle .ti {
+    padding: 5px 11px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); background: transparent; transition: color 120ms ease, background 120ms ease;
+  }
+  body:not([data-theme="light"]) .theme-toggle .dark,
+  body[data-theme="light"] .theme-toggle .light { background: var(--mint-fill); color: var(--mint-bright); }
+
+  .navrow { display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; min-height: 20px; }
+  .navlbl { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.75; }
+  .navlink { color: var(--muted); font-size: 12px; text-decoration: none; border-bottom: 1px solid transparent; padding-bottom: 1px; }
+  .navlink:hover { color: var(--text); border-bottom-color: var(--hairline-2); text-decoration: none; }
+  .navlink.own { color: var(--mint-bright); }
+  .navlink.cur { color: var(--text); border-bottom-color: var(--mint-line); cursor: default; }
+  .navlink.ext::after { content: " \2197"; font-size: 9px; opacity: 0.65; }
+  .navsep { width: 1px; height: 12px; background: var(--hairline-2); }
+
+  .filterbar {
+    position: sticky; top: var(--header-h); z-index: 39;
+    background: var(--chrome-bg);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--hairline);
+    padding: 10px 28px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .filterbar .grp { display: flex; align-items: center; gap: 6px; }
+  .filterbar label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+  select, .search input {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--hairline-2); border-radius: var(--radius-sm);
+    padding: 6px 9px; font-family: var(--font); font-size: 13px; outline: none;
+  }
+  select:focus, .search input:focus { border-color: var(--mint-line); }
+  .search { position: relative; display: flex; align-items: center; }
+  .search input { width: 210px; padding-left: 26px; }
+  .search .slash { position: absolute; left: 8px; color: var(--muted); font-family: var(--mono); font-size: 12px; pointer-events: none; }
+  .search input:focus + .slash, .search.filled .slash { opacity: 0; }
+  .filterbar .spacer { flex: 1; }
+  .counter { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+  .counter b { color: var(--text); }
+  .btn-reset {
+    background: transparent; color: var(--muted); border: 1px solid var(--hairline-2);
+    border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; cursor: pointer;
+    font-family: var(--font);
+  }
+  .btn-reset:hover { color: var(--text); border-color: var(--hairline-2); }
+
+  main { padding: 22px 28px 80px; max-width: 1680px; margin: 0 auto; }
+  .grid { display: grid; gap: 18px; }
+  .cols-2 { grid-template-columns: 1fr 1fr; }
+  .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+  .two-up section.panel { margin-bottom: 0; }
+  section.panel {
+    background: var(--panel); border: 1px solid var(--hairline);
+    border-radius: var(--radius); margin-bottom: 18px; overflow: clip;
+  }
+  /* overflow: clip, NOT hidden: hidden makes the panel a scroll container,
+     which captures any position: sticky descendant (the viewport-pinned
+     table headers) and shoves it --chrome-h px down INTO the panel even at
+     scroll 0. clip gives the same rounded-corner clipping without creating
+     a scroll container, so sticky children keep binding to the viewport. */
+  .panel > .head { display: flex; align-items: center; gap: 12px; padding: 13px 18px; border-bottom: 1px solid var(--hairline); }
+  .panel > .head h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text); }
+  .panel > .head .meta { color: var(--muted); font-size: 12px; }
+  .panel > .head .spacer { flex: 1; }
+  .panel > .body { padding: 14px 18px; }
+  .panel.flush > .body { padding: 0; }
+  .kicker { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; }
+
+  section.hero {
+    border: 1px solid var(--amber-line);
+    background: radial-gradient(120% 140% at 0% 0%, rgba(245,185,80,0.06), transparent 55%), var(--panel);
+    box-shadow: 0 0 0 1px rgba(245,185,80,0.08), 0 18px 40px -28px rgba(0,0,0,0.9);
+  }
+  section.hero.clear { border-color: var(--hairline); background: var(--panel); box-shadow: none; }
+  section.hero > .head { border-bottom: 1px solid var(--amber-line); padding: 15px 20px; }
+  section.hero.clear > .head { border-bottom-color: var(--hairline); }
+  section.hero > .head h2 { font-size: 15px; letter-spacing: 0.06em; }
+  .hero-count {
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    color: var(--hero-count-fg); background: var(--amber); padding: 2px 9px; border-radius: 20px; letter-spacing: 0.02em;
+  }
+  section.hero.clear .hero-count { color: var(--hero-count-fg); background: var(--muted); }
+  .hero-body { display: grid; grid-template-columns: 1.55fr 1fr; gap: 0; }
+  .hero-col { padding: 16px 20px; display: flex; flex-direction: column; }
+  .hero-col + .hero-col { border-left: 1px solid var(--hairline); }
+  .hero-col h3 { margin: 0 0 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .hero-col h3 .tally { color: var(--text); font-family: var(--mono); }
+
+  .gate {
+    border: 1px solid var(--hairline-2); border-left: 3px solid var(--amber);
+    border-radius: var(--radius-sm); background: var(--panel-2);
+    padding: 12px 14px; margin-bottom: 10px;
+    display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; align-items: center;
+  }
+  .gate:last-child { margin-bottom: 0; }
+  .gate.long-wait { border-left-color: var(--red); }
+  .gate .who { min-width: 0; }
+  .gate .slug { font-family: var(--mono); font-size: 13px; color: var(--text); }
+  .gate .gid { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .gate .gid .g { color: var(--mint-bright); }
+  .gate .wait { font-family: var(--mono); font-size: 12px; text-align: right; white-space: nowrap; }
+  .gate .wait .t { color: var(--amber); font-weight: 700; }
+  .gate.long-wait .wait .t { color: var(--red); }
+  .gate .wait .lbl { color: var(--muted); display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .verdicts { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+  .verdict {
+    font-family: var(--mono); font-size: 12px; padding: 5px 12px; border-radius: 20px;
+    border: 1px solid var(--hairline-2); background: transparent; cursor: pointer;
+    color: var(--text); text-decoration: none; transition: transform 120ms ease, background 120ms ease;
+  }
+  .verdict:hover { transform: translateY(-1px); text-decoration: none; }
+  .verdict.copied, .vmail.copied { background: var(--mint-fill); border-color: var(--mint-line); }
+  .verdict.copied::after, .vmail.copied::after { content: " (copied)"; font-size: 10px; opacity: 0.85; }
+  .vmail { font-family: var(--mono); font-size: 11px; padding: 5px 7px; border-radius: 20px; border: 1px solid transparent; color: var(--muted); text-decoration: none; align-self: center; }
+  .vmail:hover { border-color: var(--hairline-2); text-decoration: none; }
+  .verdict.approve { color: var(--mint-bright); border-color: var(--mint-line); }
+  .verdict.approve:hover { background: var(--mint-fill); }
+  .verdict.reject { color: var(--red); border-color: var(--red-line); }
+  .verdict.reject:hover { background: var(--red-fill); }
+  .verdict.adapt { color: var(--amber); border-color: var(--amber-line); }
+  .verdict.adapt:hover { background: var(--amber-fill); }
+  .verdict.park { color: var(--muted); border-color: var(--grey-line); }
+  .verdict.park:hover { background: var(--grey-fill); }
+
+  .deadline { display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--hairline); }
+  .deadline:last-child { border-bottom: 0; }
+  .deadline .date { font-family: var(--mono); font-size: 12px; color: var(--red); min-width: 96px; }
+  .deadline .txt { flex: 1; }
+  .deadline .txt .p { color: var(--muted); font-size: 12px; }
+  .deadline .over { font-family: var(--mono); font-size: 11px; color: var(--red); border: 1px solid var(--red-line); background: var(--red-fill); padding: 1px 7px; border-radius: 20px; white-space: nowrap; }
+  .inbox-line { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline); display: flex; align-items: center; gap: 10px; }
+  .inbox-line .n { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--amber); }
+  .inbox-line .lbl { color: var(--muted); font-size: 12px; }
+
+  /* Plain .tblwrap must NOT set overflow-x: auto: that made every wrapper a
+     scroll container, so the sticky thead bound to the wrapper instead of
+     the viewport and rendered --chrome-h px down inside its own table, with
+     data rows visible above it (Money page, 2026-08-18). The concept file
+     kept headers static for that reason; the real fix is to keep the
+     wrapper overflow-free so headers genuinely pin beneath the chrome.
+     .tblwrap.scroll stays a scroll container on purpose: its headers pin to
+     the wrapper's own top edge via the top: 0 override below. */
+  .tblwrap { width: 100%; }
+  .tblwrap.scroll { overflow-y: scroll; }
+  table.data.fx { table-layout: fixed; }
+  table.data.fx td, table.data.fx th { overflow: hidden; text-overflow: ellipsis; }
+  table.data[data-table="sprints"] thead th:nth-child(5),
+  table.data[data-table="sprints"] thead th:nth-child(6),
+  table.data[data-table="sprints"] tbody td:nth-child(5),
+  table.data[data-table="sprints"] tbody td:nth-child(6) { text-align: left; }
+  table.data[data-table="sprints"] tbody td:nth-child(6) .prog { justify-content: flex-start; }
+  table.data[data-table="flows"] thead th:nth-child(7),
+  table.data[data-table="flows"] tbody td:nth-child(7),
+  table.data[data-table="sprints"] thead th:nth-child(8),
+  table.data[data-table="sprints"] tbody td:nth-child(8),
+  table.data[data-table="sessions"] thead th:nth-child(4),
+  table.data[data-table="sessions"] tbody td:nth-child(4) { text-align: left; }
+  .tblwrap.scroll table.data thead th { top: 0; }
+  .tblwrap.rows-11 { max-height: 462px; }
+  .tblwrap.rows-4 { max-height: 186px; }
+  .tblwrap.scroll::-webkit-scrollbar { width: 10px; }
+  .tblwrap.scroll::-webkit-scrollbar-thumb { background: rgba(138,156,181,0.28); border-radius: 6px; border: 2px solid var(--panel); }
+  .tblwrap.scroll::-webkit-scrollbar-track { background: transparent; }
+
+  .gates-scroll { flex: 1 1 auto; min-height: 312px; overflow-y: auto; }
+  .deadlines-scroll { max-height: 150px; overflow-y: auto; }
+  .gates-scroll::-webkit-scrollbar, .deadlines-scroll::-webkit-scrollbar { width: 10px; }
+  .gates-scroll::-webkit-scrollbar-thumb, .deadlines-scroll::-webkit-scrollbar-thumb { background: rgba(138,156,181,0.28); border-radius: 6px; border: 2px solid var(--panel); }
+  .gates-scroll::-webkit-scrollbar-track, .deadlines-scroll::-webkit-scrollbar-track { background: transparent; }
+
+  /* Scroll, do not grow (board\DESIGN.md addendum, item 1.7): any panel body
+     whose content length is unbounded (activity, roadmap, hours, a sprint's
+     iteration cards) caps here instead of growing the panel's own grid
+     footprint. */
+  .panel-scroll { max-height: 320px; overflow-y: auto; }
+  .panel-scroll::-webkit-scrollbar { width: 10px; }
+  .panel-scroll::-webkit-scrollbar-thumb { background: rgba(138,156,181,0.28); border-radius: 6px; border: 2px solid var(--panel); }
+  .panel-scroll::-webkit-scrollbar-track { background: transparent; }
+
+  .hero-inbox { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hairline); }
+  .hero-inbox table.data { font-size: 12px; }
+  .hero-inbox table.data thead th { padding: 7px 10px; }
+  .hero-inbox table.data tbody td { padding: 7px 10px; }
+  .ts.age-neutral { color: var(--muted); }
+  .ts.age-amber { color: var(--amber); }
+  .ts.age-red { color: var(--red); }
+
+  .hero-sub, .hero-repos { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+  .hero-sub h3 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+  .hero-sub h3 .tally, .hero-repos .hr-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; }
+  .hero-repos { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 12px; }
+  .repos, .repo-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip, .repo-chip {
+    display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11.5px;
+    padding: 3px 10px; border-radius: 20px; border: 1px solid var(--hairline-2); color: var(--muted);
+  }
+  .chip.dirty, .repo-chip { color: var(--amber); border-color: var(--amber-line); background: var(--amber-fill); }
+  .chip.dirty b, .repo-chip b { font-weight: 700; }
+  .chip.clean { border-color: var(--grey-line); background: var(--grey-fill); }
+  .repos-clean, .repo-clean { color: var(--muted); font-size: 12.5px; font-family: var(--mono); }
+
+  table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data thead th {
+    position: sticky; top: var(--chrome-h); z-index: 5;
+    background: var(--thead-bg); color: var(--muted);
+    text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; padding: 9px 14px; white-space: nowrap;
+    border-bottom: 1px solid var(--hairline-2); cursor: pointer; user-select: none;
+  }
+  table.data thead th.num { text-align: right; }
+  table.data thead th.nosort { cursor: default; }
+  table.data thead th .arw { display: inline-block; width: 10px; margin-left: 5px; color: var(--mint-bright); opacity: 0; font-size: 10px; }
+  table.data thead th[aria-sort] .arw { opacity: 1; }
+  table.data thead th:hover:not(.nosort) { color: var(--text); }
+  table.data tbody td { padding: 9px 14px; border-bottom: 1px solid var(--hairline); vertical-align: middle; }
+  table.data tbody tr:nth-child(even) td { background: rgba(255,255,255,0.012); }
+  table.data tbody tr:hover td { background: rgba(62,220,176,0.05); }
+  table.data tbody tr:last-child td { border-bottom: 0; }
+  td .slug { font-family: var(--mono); font-size: 12.5px; }
+  td.dim, .dim { color: var(--muted); }
+  td .ts { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.01em;
+    padding: 2px 9px 2px 8px; border-radius: 20px; border: 1px solid; white-space: nowrap;
+  }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.run { color: var(--mint-bright); background: var(--mint-fill); border-color: var(--mint-line); }
+  .badge.wait { color: var(--amber); background: var(--amber-fill); border-color: var(--amber-line); }
+  .badge.done { color: var(--muted); background: var(--grey-fill); border-color: var(--grey-line); }
+  .badge.halt { color: var(--red); background: var(--red-fill); border-color: var(--red-line); }
+  tr[data-status-sem="done"] td { opacity: 0.72; }
+  tr[data-status-sem="done"]:hover td { opacity: 1; }
+
+  .prog { display: flex; align-items: center; gap: 9px; justify-content: flex-end; }
+  .prog .track { width: 46px; height: 5px; border-radius: 3px; background: rgba(138,156,181,0.18); overflow: hidden; }
+  .prog .fill { display: block; height: 100%; background: var(--mint); border-radius: 3px; }
+  .prog.wait .fill { background: var(--amber); }
+  .prog.halt .fill { background: var(--red); }
+  .prog .pct { font-family: var(--mono); font-variant-numeric: tabular-nums; width: 34px; text-align: right; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .pcard { position: relative; background: var(--panel-2); border: 1px solid var(--hairline); border-left: 3px solid var(--muted); border-radius: var(--radius-sm); padding: 14px 15px; }
+  .pcard.h-green { border-left-color: var(--mint); }
+  .pcard.h-yellow { border-left-color: var(--amber); }
+  .pcard.h-red { border-left-color: var(--red); }
+  .pcard .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .pcard .name { font-weight: 700; font-size: 14px; }
+  .pcard .tier { font-family: var(--mono); font-size: 10px; color: var(--muted); border: 1px solid var(--hairline-2); border-radius: 4px; padding: 1px 5px; letter-spacing: 0.04em; }
+  .pcard .stale { display: inline-block; margin-top: 8px; font-family: var(--mono); font-size: 10.5px; color: var(--amber); background: var(--amber-fill); border: 1px solid var(--amber-line); padding: 1px 7px; border-radius: 20px; letter-spacing: 0.04em; }
+  .pcard .next { margin-top: 10px; font-size: 13px; color: var(--text); }
+  .pcard .next .lbl { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; display: block; margin-bottom: 2px; }
+  .pcard .touched { margin-top: 10px; color: var(--muted); font-size: 11.5px; font-family: var(--mono); }
+
+  /* min-width: 0 on the grid items (item 1.7/1.8 follow-up, 2026-09-13):
+     grid items default to min-width: auto, so one day carrying an
+     unbreakable long string (a file path, a URL) would otherwise widen
+     its own 1fr track past its equal share and skew every other day's
+     width. Forcing 0 makes all 7 columns genuinely equal, always. */
+  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+  /* Fixed height, not min-height (item 1.7/1.8 follow-up, 2026-09-13): a
+     day with many items must scroll its own list, not grow the card, so
+     the week grid's row height never depends on content length. */
+  .day { background: var(--panel-2); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 10px; height: 240px; min-width: 0; display: flex; flex-direction: column; }
+  .day.today { border-color: var(--mint-line); box-shadow: inset 0 0 0 1px rgba(62,220,176,0.15); }
+  .day .dh { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; flex: none; }
+  .day .dow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  .day.today .dow { color: var(--mint-bright); }
+  .day .dnum { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .day .dbody-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .day .dbody-scroll::-webkit-scrollbar { width: 8px; }
+  .day .dbody-scroll::-webkit-scrollbar-thumb { background: rgba(138,156,181,0.28); border-radius: 6px; border: 2px solid var(--panel-2); }
+  .day .dbody-scroll::-webkit-scrollbar-track { background: transparent; }
+  .day ul { list-style: none; margin: 0; padding: 0; }
+  .day li { font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--hairline); color: var(--text); overflow-wrap: anywhere; }
+  .day li:last-child { border-bottom: 0; }
+  .day li .tag { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .day li .stx { display: inline-block; width: 14px; margin-right: 6px; text-align: center; }
+  .day li.st-done { color: var(--muted); opacity: 0.72; }
+  .day li.st-done .stx { color: var(--mint); }
+  .day li.st-prog .stx { color: var(--amber); }
+  .day li.st-blocked .stx { color: var(--red); }
+  .day li.st-pending .stx { color: var(--muted); opacity: 0.6; }
+  .day .rest { color: var(--muted); font-size: 11.5px; font-style: italic; opacity: 0.7; }
+
+  .empty { text-align: center; padding: 30px 18px; color: var(--muted); }
+  .empty .glyph { font-family: var(--mono); font-size: 20px; color: var(--mint); opacity: 0.6; margin-bottom: 8px; }
+  .empty .msg { font-size: 13px; }
+  .empty .sub { font-size: 12px; opacity: 0.7; margin-top: 3px; }
+  .empty.warn .glyph { color: var(--amber); }
+
+  .no-match { display: none; }
+  table.data tbody tr.no-match-row td, table.data tbody tr.no-invoices-row td { text-align: center; color: var(--muted); padding: 22px; font-style: italic; }
+
+  .unavail {
+    display: flex; align-items: center; gap: 10px; padding: 14px 16px; margin: 14px 18px;
+    border: 1px dashed var(--amber-line); background: var(--amber-fill); border-radius: var(--radius-sm);
+    color: var(--amber); font-size: 12.5px;
+  }
+  .unavail code { font-family: var(--mono); }
+  .unavail a { color: var(--amber); text-decoration: underline; text-underline-offset: 2px; }
+
+  .toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); font-size: 12px; }
+  .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .toggle .sw { width: 34px; height: 18px; border-radius: 20px; background: rgba(138,156,181,0.22); position: relative; transition: background 140ms ease; flex: none; }
+  .toggle .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform 140ms ease, background 140ms ease; }
+  .toggle input:checked + .sw { background: var(--mint-fill); }
+  .toggle input:checked + .sw::after { transform: translateX(16px); background: var(--mint); }
+  .toggle input:focus-visible + .sw { outline: 2px solid var(--mint-line); outline-offset: 2px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+  .kpi { background: var(--panel-2); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 13px 15px; }
+  .kpi.alert { border-color: var(--red-line); background: var(--red-fill); }
+  .kpi .klbl { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em; }
+  .kpi .kval { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 700; color: var(--text); margin-top: 5px; }
+  .kpi.alert .kval { color: var(--red); }
+  .kpi .ksub { font-family: var(--mono); font-size: 11.5px; margin-top: 3px; color: var(--muted); }
+  .kpi .kdelta.up { color: var(--mint-bright); }
+  .kpi .kdelta.down { color: var(--red); }
+  td.money { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  table.data[data-table="revenue"] thead th:nth-child(6) { text-align: right; }
+  table.data[data-table="revenue"] thead th:nth-child(7),
+  table.data[data-table="revenue"] tbody td:nth-child(7) { text-align: center; }
+  .pipe-wrap { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--hairline); display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; }
+  .pipe-h { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em; margin-bottom: 8px; }
+  .pipe { display: flex; height: 12px; border-radius: 3px; overflow: hidden; gap: 2px; }
+  .pipe .seg { height: 100%; }
+  .pipe .seg.committed { background: var(--mint); }
+  .pipe .seg.probable { background: var(--amber); }
+  .pipe .seg.early { background: rgba(138,156,181,0.5); }
+  .pipe-legend, .legend { display: flex; gap: 16px; margin-top: 9px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+  .pipe-legend .k, .legend .k { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); }
+  .pipe-legend .sw, .legend .sw { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .pipe-legend .sw.committed { background: var(--mint); }
+  .pipe-legend .sw.probable { background: var(--amber); }
+  .pipe-legend .sw.early { background: rgba(138,156,181,0.5); }
+  .cash30 { text-align: right; }
+  .cash30 .lbl { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em; }
+  .cash30 .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 700; color: var(--mint-bright); margin-top: 3px; }
+
+  /* Month window toggle (This year / Last 12 months). Both variants are
+     server-rendered; JS only swaps visibility, so no client-side
+     recomputation of formatted numbers ever happens. The server marks the
+     "year" variant .on so a no-JS load still shows one honest window. */
+  .win-toggle { display: inline-flex; margin-left: auto; border: 1px solid var(--hairline-2); border-radius: 20px; overflow: hidden; }
+  .win-btn {
+    background: transparent; border: 0; color: var(--muted); font-family: var(--font);
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 5px 11px; cursor: pointer; transition: color 120ms ease, background 120ms ease;
+  }
+  .win-btn.cur { background: var(--mint-fill); color: var(--mint-bright); }
+  .win-btn:hover:not(.cur) { color: var(--text); }
+  [data-mwin] { display: none; }
+  [data-mwin].on { display: block; }
+
+  .mchart { display: flex; align-items: flex-end; gap: 12px; height: 220px; }
+  .mcol { flex: 1; display: flex; flex-direction: column; height: 100%; }
+  .mbars { flex: 1; display: flex; align-items: flex-end; gap: 4px; }
+  .mbar { flex: 1; border-radius: 2px 2px 0 0; min-height: 2px; }
+  .mbar.inc { background: var(--mint); }
+  .mbar.cost { background: var(--amber); opacity: 0.85; }
+  .mnet { font-family: var(--mono); font-size: 11px; text-align: center; margin-top: 7px; }
+  .mnet.pos { color: var(--mint-bright); }
+  .mnet.neg { color: var(--red); }
+  .blbl { font-family: var(--mono); font-size: 10px; text-align: center; color: var(--muted); margin-top: 2px; }
+  .legend .sw.inc { background: var(--mint); }
+  .legend .sw.cost { background: var(--amber); opacity: 0.85; }
+  .legend .sw.net { background: transparent; border: 1px solid var(--hairline-2); }
+  .tsum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+  .tcell { background: var(--panel-2); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 11px 13px; }
+  .tcell.warn { border-color: var(--amber-line); background: var(--amber-fill); }
+  .tcell .lbl { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em; }
+  .tcell .v { font-family: var(--mono); font-size: 20px; font-weight: 700; margin-top: 4px; }
+  .tcell.warn .v { color: var(--amber); }
+  .tcell .s { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+
+  .footnote { margin-top: 26px; border-top: 1px solid var(--hairline); padding-top: 16px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+  .footnote h3 { color: var(--text); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 8px; }
+  .footnote code { font-family: var(--mono); color: var(--mint-bright); font-size: 11.5px; }
+  .footnote ul { margin: 0; padding-left: 18px; }
+  .footnote li { margin-bottom: 5px; }
+
+  .drill-link { cursor: pointer; }
+  a.drill { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  a.drill:hover { color: var(--mint-bright); text-decoration: none; }
+  table.data.fx td:has(a.drill), table.data.fx th.nosort { white-space: nowrap; }
+  table.data.fx td:has(.badge) { white-space: nowrap; overflow: visible; padding-left: 10px; padding-right: 10px; }
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 500;
+    background: var(--modal-backdrop); padding: 28px;
+  }
+  .modal-overlay.open { display: flex; flex-direction: column; }
+  .modal-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--panel); border: 1px solid var(--hairline-2); border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0; padding: 8px 14px;
+    color: var(--muted); font-size: 12px;
+  }
+  .modal-bar .modal-title { font-family: var(--mono); color: var(--text); font-size: 12.5px; }
+  .modal-bar .modal-actions { display: flex; gap: 14px; align-items: center; }
+  .modal-bar a { color: var(--mint); text-decoration: none; }
+  .modal-bar a:hover { text-decoration: underline; }
+  .modal-close {
+    background: none; border: 1px solid var(--hairline-2); color: var(--text);
+    border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; line-height: 1; padding: 4px 10px;
+  }
+  .modal-close:hover { border-color: var(--mint-line); color: var(--mint); }
+  .modal-frame-wrap { flex: 1; background: var(--bg); border: 1px solid var(--hairline-2); border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; }
+  .modal-frame-wrap iframe { width: 100%; height: 100%; border: 0; background: var(--panel); }
+
+  .stamp { margin-top: 20px; color: var(--muted); font-size: 11.5px; font-family: var(--mono); display: flex; align-items: center; gap: 9px; opacity: 0.85; }
+  .stamp .dotm { width: 5px; height: 5px; border-radius: 50%; background: var(--hairline-2); flex: none; }
+
+  @media (max-width: 1180px) {
+    .hero-body { grid-template-columns: 1fr; }
+    .hero-col + .hero-col { border-left: 0; border-top: 1px solid var(--hairline); }
+    .cols-2, .two-up { grid-template-columns: 1fr; }
+    .week { grid-template-columns: repeat(4, 1fr); }
+    .tsum { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+    }
+  }
+  @media (prefers-color-scheme: light) {
+    body:not([data-theme]) {
+      --bg: #F6F8FA; --panel: #FFFFFF; --panel-2: #EDF1F6;
+      --mint: #0B6B5B; --mint-bright: #0E5C4E;
+      --text: #0A1422; --muted: #4A5A70;
+      --hairline: rgba(10,20,34,0.12); --hairline-2: rgba(10,20,34,0.22);
+      --amber: #975E10; --red: #BE3830;
+      --mint-fill: rgba(11,107,91,0.10); --mint-line: rgba(11,107,91,0.35);
+      --amber-fill: rgba(169, 106, 18, 0.12); --amber-line: rgba(169, 106, 18, 0.42);
+      --red-fill: rgba(198, 58, 50, 0.12); --red-line: rgba(198, 58, 50, 0.40);
+      --grey-fill: rgba(20, 34, 53, 0.06); --grey-line: rgba(20, 34, 53, 0.22);
+      --header-top: #DCE5EF; --chrome-bg: rgba(246,248,250,0.85);
+      --thead-bg: #E6ECF3; --hero-count-fg: #FFFFFF;
+      --modal-backdrop: rgba(20, 34, 53, 0.40);
+    }
+  }
+  .board-head { padding: 18px 28px 14px; border-bottom: 1px solid var(--hairline); }
+  .board-top { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+  .board-type { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; display: block; }
+  .board-head h1 { margin: 2px 0 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  .board-controls { display: none; align-items: center; gap: 10px; }
+  body.js .board-controls { display: flex; }
+  .skip-link {
+    position: absolute; left: -9999px; top: 0; z-index: 100;
+    background: var(--panel); color: var(--text); padding: 8px 14px;
+    border: 1px solid var(--mint-line); border-radius: var(--radius-sm);
+  }
+  .skip-link:focus { left: 12px; top: 12px; }
+  .breadcrumb { margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .breadcrumb a { color: var(--muted); }
+  .freshness { margin-top: 6px; color: var(--muted); font-size: 12px; }
+  main.board-main { padding: 22px 28px 60px; max-width: 1400px; margin: 0 auto; }
+  .panels .panel { margin-bottom: 0; }
+  .panels .panel .head { cursor: grab; }
+  .panels .panel.dragging { opacity: 0.5; }
+  .panels .panel.drag-over { outline: 2px dashed var(--mint-line); outline-offset: -2px; }
+  .panel .empty .glyph { display: none; }
+  .strip { margin-top: 18px; }
+  .strip > .head h2 { margin: 0; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .children-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+  .funnel-board { display: flex; gap: 12px; overflow-x: auto; }
+  .funnel-col { flex: 0 0 200px; min-width: 200px; }
+  .funnel-col-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+  .funnel-col-head h3 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .funnel-col-cards { display: flex; flex-direction: column; gap: 8px; }
+  .funnel-card { border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 8px 10px; }
+  .funnel-card .ct { margin: 0 0 4px; font-size: 12.5px; }
+  .funnel-card .cm { margin: 0; font-size: 11px; color: var(--muted); }
+  .board-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+  .board-table th, .board-table td { padding: 6px 10px; border-bottom: 1px solid var(--hairline); text-align: left; vertical-align: top; }
+  .board-table th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.06em; }
+  .queue-block { border: 1px solid var(--amber-line); background: var(--amber-fill); border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 18px; }
+  @media (max-width: 699px) { .board-table { display: block; overflow-x: auto; } }
+
+  /* Roadmap date-range timeline (plan item 1.11, pattern 1): three
+     server-rendered zoom variants share one track, JS only swaps which one
+     is visible, no client-side date math. */
+  .tl-zoom-toggle, .slice-rail { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+  .tl-zoom-btn, .slice-btn {
+    font-family: var(--mono); font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    border: 1px solid var(--hairline-2); background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .tl-zoom-btn.tl-zoom-active, .slice-btn.slice-active {
+    border-color: var(--mint-line); color: var(--text); background: var(--mint-fill);
+  }
+  .tl-variant { display: none; }
+  .tl-variant.tl-active { display: block; }
+  .tl-track { position: relative; height: 28px; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); margin-bottom: 4px; }
+  .tl-mark, .tl-gate { position: absolute; top: 0; bottom: 0; }
+  .tl-mark { width: 8px; height: 8px; margin-top: 10px; border-radius: 50%; background: var(--mint); transform: translateX(-4px); }
+  .tl-gate { border-left: 2px dashed var(--red-line); }
+  .tl-gate-label { position: absolute; top: -2px; left: 4px; font-family: var(--mono); font-size: 10px; color: var(--red); white-space: nowrap; }
+  .tl-range { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-bottom: 12px; }
+
+  /* Group headers with sums (plan item 1.11, pattern 2): the roadmap
+     backlog and the hours panel both group their rows under a header that
+     carries the group's own count/sum, instead of a flat list. */
+  .groups, .backlog-groups { display: flex; flex-direction: column; gap: 10px; }
+  .group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .group-head h3 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .group ul { margin: 4px 0 0; }
+  .panels { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  @media (min-width: 1200px) { .panels { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-width: 1199px) { .panels .panel { grid-column: 1 / -1 !important; grid-row: auto !important; } }
+  @media print {
+    :root {
+      --bg: #FFFFFF; --panel: #FFFFFF; --panel-2: #EDF1F6;
+      --text: #0A1422; --muted: #4A5A70;
+      --hairline: #D6DEE7; --hairline-2: #D6DEE7;
+      --mint: #0E5C4E; --mint-bright: #0E5C4E;
+    }
+    .board-controls { display: none; }
+    .badge::before { display: none; }
+    .badge { background: transparent; border: 1px solid var(--hairline); }
+    .board-table thead { display: table-header-group; }
+  }
+</style>
+</head>
+<body>
+<script>document.body.classList.add("js");document.body.setAttribute("data-theme-init", "1");try{var t=localStorage.getItem("znd-theme");if(t==="light"||t==="dark")document.body.setAttribute("data-theme",t);}catch(e){}</script>
+<a class="skip-link" href="#board-main" data-i18n="skip_to_content">Skip to content</a>
+<header class="board-head">
+  <div class="board-top">
+    <div class="board-brand">
+      <span class="board-type" data-i18n="project">Project</span>
+      <h1>claudecost</h1>
+    </div>
+    <div class="board-controls">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme">
+        <span class="ti" id="theme-toggle-label" data-i18n="theme_system">System</span>
+      </button>
+      <button id="lang-toggle" class="theme-toggle" type="button" aria-label="Language">
+        <span class="ti" id="lang-toggle-label">EN</span>
+      </button>
+    </div>
+  </div>
+  <nav class="breadcrumb" aria-label="Breadcrumb"><span data-i18n="breadcrumb_root">Part of ZeroNonsense.dev</span></nav>
+  <p class="freshness mono" data-i18n-template="up_to_date_as_of" data-time="2026-09-13 15:18 UTC" data-count="1">Up to date as of 2026-09-13 15:18 UTC, sources read 1</p>
+</header>
+<main class="board-main" id="board-main">
+  <div class="panels" data-layout-columns="4">
+    <section class="panel" data-panel="status" style="grid-column: 1 / span 4; grid-row: 1 / span 1;"><div class="head"><h2 data-i18n="status">Status</h2></div><div class="body"><p class="empty"><span class="msg" data-i18n="state_empty">Nothing to show yet.</span></p></div></section><section class="panel" data-panel="next_weeks" style="grid-column: 1 / span 4; grid-row: 2 / span 1;"><div class="head"><h2 data-i18n-template="next_weeks_other" data-n="2">Next 2 weeks</h2></div><div class="body"><p class="empty"><span class="msg" data-i18n="state_empty">Nothing to show yet.</span></p></div></section><section class="panel" data-panel="waiting_on_you" style="grid-column: 1 / span 4; grid-row: 3 / span 1;"><div class="head"><h2 data-i18n="waiting_on_you">Waiting on you</h2></div><div class="body"><ul class="rows"><li>01_inbox: Replace the harness of Claude Code in Siteoffice (wilco)</li><li>01_inbox: Premortem: Replace the harness of Claude Code in Siteoffice (wilco)</li><li>01_inbox: 01_inbox (unknown)</li><li>02_shaped: 02_shaped (unknown)</li><li>03_scored: Remote always-on control (wilco)</li><li>03_scored: 03_scored (unknown)</li><li>03_scored: Score sheet: Remote always-on control (unknown)</li><li>03_scored: Score sheet: Remote always-on control (unknown)</li><li>03_scored: Score sheet: Remote always-on control (unknown)</li><li>03_scored: Score sheet: Remote always-on control (unknown)</li><li>04_selected: 04_selected (unknown)</li></ul></div></section><section class="panel" data-panel="roadmap" style="grid-column: 1 / span 4; grid-row: 4 / span 1;"><div class="head"><h2 data-i18n="roadmap">Roadmap</h2></div><div class="body"><p class="empty"><span class="msg" data-i18n="state_empty">Nothing to show yet.</span></p></div></section><section class="panel" data-panel="funnel" style="grid-column: 1 / span 4; grid-row: 5 / span 1;"><div class="head"><h2 data-i18n="funnel">Funnel</h2></div><div class="body"><div class="funnel-board"><div class="funnel-col"><div class="funnel-col-head"><h3>inbox</h3></div><div class="funnel-col-cards"><div class="funnel-card"><p class="ct">Replace the harness of Claude Code in Siteoffice</p><p class="cm"><span class="chip mono">G1</span>wilco &middot; 2026-09-12</p></div><div class="funnel-card"><p class="ct">Premortem: Replace the harness of Claude Code in Siteoffice</p><p class="cm"><span class="chip mono">G1</span>wilco &middot; 2026-09-12</p></div><div class="funnel-card"><p class="ct">01_inbox</p><p class="cm"><span class="chip mono">G1</span>unknown &middot; 2026-09-12</p></div></div></div><div class="funnel-col"><div class="funnel-col-head"><h3>shaped</h3></div><div class="funnel-col-cards"><div class="funnel-card"><p class="ct">02_shaped</p><p class="cm"><span class="chip mono">G2</span>unknown &middot; 2026-09-12</p></div></div></div><div class="funnel-col"><div class="funnel-col-head"><h3>scored</h3></div><div class="funnel-col-cards"><div class="funnel-card"><p class="ct">Remote always-on control</p><p class="cm"><span class="chip mono">G3</span>wilco &middot; 2026-09-12</p></div><div class="funnel-card"><p class="ct">03_scored</p><p class="cm"><span class="chip mono">G3</span>unknown &middot; 2026-09-12</p></div><div class="funnel-card"><p class="ct">Score sheet: Remote always-on control</p><p class="cm"><span class="chip mono">G3</span>unknown &middot; 2026-09-12</p></div><div class="funnel-card"><p class="ct">Score sheet: Remote always-on control</p><p class="cm"><span class="chip mono">G3</span>unknown &middot; 2026-09-12</p></div><div class="funnel-card"><p class="ct">Score sheet: Remote always-on control</p><p class="cm"><span class="chip mono">G3</span>unknown &middot; 2026-09-12</p></div><div class="funnel-card"><p class="ct">Score sheet: Remote always-on control</p><p class="cm"><span class="chip mono">G3</span>unknown &middot; 2026-09-12</p></div></div></div><div class="funnel-col"><div class="funnel-col-head"><h3>selected</h3></div><div class="funnel-col-cards"><div class="funnel-card"><p class="ct">04_selected</p><p class="cm"><span class="chip mono">G4</span>unknown &middot; 2026-09-12</p></div></div></div><div class="funnel-col"><div class="funnel-col-head"><h3>poc</h3></div><div class="funnel-col-cards"><div class="funnel-card"><p class="ct">05_poc</p><p class="cm">unknown &middot; 2026-09-12</p></div></div></div></div></div></section><section class="panel" data-panel="sync_status" style="grid-column: 1 / span 4; grid-row: 6 / span 1;"><div class="head"><h2 data-i18n="sync_status">Sync status</h2></div><div class="body"><p class="empty" id="sync-status-body"><span class="msg" data-i18n="state_loading">Loading.</span></p><button id="sync-btn" type="button" hidden data-i18n="sync_action">Sync</button><button id="approve-btn" type="button" hidden data-i18n="approve_action">Approve</button></div></section><section class="panel" data-panel="receipts" style="grid-column: 1 / span 4; grid-row: 7 / span 1;"><div class="head"><h2 data-i18n="receipts">Receipts</h2></div><div class="body"><p class="empty"><span class="msg" data-i18n="state_empty">Nothing to show yet.</span></p></div></section>
+  </div>
+  <section class="panel strip" data-panel="children"><div class="head"><h2 data-i18n="children">Children</h2></div><div class="body"><p class="empty"><span class="msg" data-i18n="state_empty">Nothing to show yet.</span></p></div></section>
+  <section class="panel strip" data-panel="activity"><div class="head"><h2 data-i18n="activity">Activity</h2></div><div class="body"><p class="empty warn"><span class="msg" data-i18n="state_unavailable">Source unavailable.</span></p></div></section>
+  <div class="stamp"><span class="dotm"></span><span>Generated by Siteoffice board renderer v1. Edit the generator, not this file.</span><span class="dotm"></span><span>state: C:\ZND\projects\claudecost\siteoffice.json</span></div>
+</main>
+<script src="sync_status.js"></script>
+<script>
+window.__ZND_BOARD_LANGS__ = ["en"];
+window.__ZND_BOARD_LABELS__ = {"en": {"holding": "Holding", "hub": "Hub", "company": "Company", "department": "Department", "project": "Project", "board": "Board", "breadcrumb_root": "Part of {name}", "theme_system": "System", "theme_light": "Light", "theme_dark": "Dark", "language_switch": "Language", "skip_to_content": "Skip to content", "up_to_date_as_of": "Up to date as of {time}, sources read {count}", "status": "Status", "deadlines": "Deadlines", "decisions": "Decisions", "log": "Activity", "waiting_on_you": "Waiting on you", "next_weeks": "Next weeks", "next_weeks_one": "Next {n} week", "next_weeks_other": "Next {n} weeks", "funnel": "Funnel", "flows": "Flows", "sprints": "Sprints", "roadmap": "Roadmap", "backlog": "Backlog", "hours": "Hours", "so_hours": "S&O hours", "hours_criterion": "Hours criterion", "unlogged_days": "Unlogged days", "unlogged_days_one": "{n} working day not logged for more than 10 working days", "unlogged_days_other": "{n} working days not logged for more than 10 working days", "entries_one": "{n} entry", "entries_other": "{n} entries", "backlog_items_one": "{n} item", "backlog_items_other": "{n} items", "ungrouped": "Ungrouped", "zoom_month": "Month", "zoom_quarter": "Quarter", "zoom_year": "Year", "slice_all": "All", "sync_status": "Sync status", "receipts": "Receipts", "decided": "decided", "overruled": "overruled", "last_30_days": "Last 30 days", "last_90_days": "Last 90 days", "activity": "Activity", "children": "Children", "green": "On track", "amber": "Attention", "red": "Blocked", "grey": "Closed", "state_unavailable": "Source unavailable.", "state_stale": "This panel is older than its usual schedule.", "state_empty": "Nothing to show yet.", "state_loading": "Loading.", "no_sync_status": "No sync status.", "sync_action": "Sync", "approve_action": "Approve"}};
+window.__ZND_SYNC_NODE__ = "claudecost";
+(function () {
+  "use strict";
+  var THEME_KEY = "znd-theme", LANG_KEY = "znd-lang";
+  var THEME_ORDER = ["system", "light", "dark"];
+  var LANGS = window.__ZND_BOARD_LANGS__ || [];
+  var LABELS = window.__ZND_BOARD_LABELS__ || {};
+
+  function readStored(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function writeStored(key, val) {
+    try { localStorage.setItem(key, val); } catch (e) { /* file:// may block storage */ }
+  }
+  function systemPrefersLight() {
+    try { return window.matchMedia("(prefers-color-scheme: light)").matches; } catch (e) { return false; }
+  }
+
+  function applyTheme(choice) {
+    if (choice === "light" || choice === "dark") {
+      document.body.setAttribute("data-theme", choice);
+    } else {
+      document.body.removeAttribute("data-theme");
+    }
+    var lbl = document.getElementById("theme-toggle-label");
+    if (lbl) lbl.textContent = choice.charAt(0).toUpperCase() + choice.slice(1);
+  }
+
+  function applyLang(lang) {
+    document.documentElement.setAttribute("lang", lang);
+    document.documentElement.setAttribute("dir", "ltr");
+    var set = LABELS[lang] || {};
+    var i = 0;
+    var nodes = document.querySelectorAll("[data-i18n]");
+    for (i = 0; i < nodes.length; i++) {
+      var key = nodes[i].getAttribute("data-i18n");
+      if (set.hasOwnProperty(key)) nodes[i].textContent = set[key];
+    }
+    var tpl = document.querySelectorAll("[data-i18n-template]");
+    for (i = 0; i < tpl.length; i++) {
+      var tkey = tpl[i].getAttribute("data-i18n-template");
+      var text = set.hasOwnProperty(tkey) ? set[tkey] : tkey;
+      text = text.replace("{time}", tpl[i].getAttribute("data-time") || "");
+      text = text.replace("{count}", tpl[i].getAttribute("data-count") || "");
+      text = text.replace("{n}", tpl[i].getAttribute("data-n") || "");
+      tpl[i].textContent = text;
+    }
+    var langLbl = document.getElementById("lang-toggle-label");
+    if (langLbl) langLbl.textContent = lang.toUpperCase();
+  }
+
+  var storedTheme = readStored(THEME_KEY);
+  var effectiveTheme = storedTheme || (systemPrefersLight() ? "light" : "system-dark");
+  applyTheme(storedTheme || "system");
+
+  var storedLang = readStored(LANG_KEY);
+  var initialLang = (storedLang && LANGS.indexOf(storedLang) !== -1) ? storedLang : (LANGS[0] || "en");
+  if (storedLang) applyLang(initialLang);
+
+  var themeBtn = document.getElementById("theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var cur = readStored(THEME_KEY) || "system";
+      var next = THEME_ORDER[(THEME_ORDER.indexOf(cur) + 1) % THEME_ORDER.length];
+      writeStored(THEME_KEY, next);
+      applyTheme(next);
+    });
+  }
+  var langBtn = document.getElementById("lang-toggle");
+  if (langBtn && LANGS.length > 1) {
+    langBtn.addEventListener("click", function () {
+      var cur = readStored(LANG_KEY) || LANGS[0];
+      var next = LANGS[(LANGS.indexOf(cur) + 1) % LANGS.length];
+      writeStored(LANG_KEY, next);
+      applyLang(next);
+    });
+  }
+
+  // sync_status.js (SYNC_STATUS_CONTRACT.md) has already had its chance to
+  // run by now (script tags execute in document order); a 404 there is a
+  // silent no-op in a browser, so window.ZND_SYNC_STATUS is simply absent.
+  var syncEl = document.getElementById("sync-status-body");
+  var syncBtn = document.getElementById("sync-btn");
+  var approveBtn = document.getElementById("approve-btn");
+
+  function renderSyncFallback() {
+    if (!syncEl) return;
+    var syncSet = LABELS[initialLang] || {};
+    var s = window.ZND_SYNC_STATUS;
+    if (syncBtn) syncBtn.hidden = true;
+    if (approveBtn) approveBtn.hidden = true;
+    if (s && typeof s === "object") {
+      var bits = [];
+      if (s.node) bits.push(s.node);
+      if (s.state) bits.push(s.state);
+      if (s.lastPull) bits.push("pull " + s.lastPull);
+      if (s.lastPush) bits.push("push " + s.lastPush);
+      if (typeof s.behind === "number" && s.behind) bits.push(s.behind + " behind");
+      if (typeof s.ahead === "number" && s.ahead) bits.push(s.ahead + " ahead");
+      if (s.conflicts && s.conflicts.length) bits.push(s.conflicts.length + " conflict(s)");
+      if (s.message) bits.push(s.message);
+      syncEl.textContent = bits.join(" · ");
+      syncEl.className = "empty" + (s.state === "ok" ? "" : " warn");
+    } else {
+      syncEl.textContent = syncSet.no_sync_status || "No sync status.";
+      syncEl.className = "empty";
+    }
+  }
+
+  var lastSyncBody = null;
+
+  function renderSyncPanel(body) {
+    lastSyncBody = body;
+    if (!syncEl) return;
+    var hideBoth = body.state === "conflict" || body.state === "refused" || body.state === "error";
+    if (hideBoth) {
+      if (syncBtn) syncBtn.hidden = true;
+      if (approveBtn) approveBtn.hidden = true;
+    } else {
+      if (syncBtn) { syncBtn.hidden = false; syncBtn.disabled = false; }
+      if (approveBtn) { approveBtn.hidden = !body.hasLocalChanges; approveBtn.disabled = false; }
+    }
+    var bits = [];
+    if (body.node) bits.push(body.node);
+    if (body.state) bits.push(body.state);
+    if (body.lastPull) bits.push("pull " + body.lastPull);
+    if (body.lastPush) bits.push("push " + body.lastPush);
+    if (typeof body.behind === "number" && body.behind) bits.push(body.behind + " behind");
+    if (typeof body.ahead === "number" && body.ahead) bits.push(body.ahead + " ahead");
+    if (body.conflicts && body.conflicts.length) bits.push(body.conflicts.length + " conflict(s)");
+    if (body.message) bits.push(body.message);
+    syncEl.textContent = bits.join(" · ");
+    syncEl.className = "empty" + (body.state === "ok" ? "" : " warn");
+  }
+
+  function _postJson(url, payload, cb) {
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(function (resp) { return resp.json(); })
+      .then(function (body) { cb(body); })
+      .catch(function () { cb(null); });
+  }
+
+  function onSyncClick() {
+    if (!syncBtn) return;
+    syncBtn.disabled = true;
+    var op = "pull";
+    if (lastSyncBody) {
+      if (lastSyncBody.state === "behind") op = "pull";
+      else if (lastSyncBody.state === "ok" && lastSyncBody.ahead > 0) op = "push";
+    }
+    _postJson("http://127.0.0.1:8765/sync", { op: op }, function (body) {
+      syncBtn.disabled = false;
+      if (body) renderSyncPanel(body);
+    });
+  }
+
+  function onApproveClick() {
+    if (!approveBtn) return;
+    approveBtn.disabled = true;
+    var message = "Approved via board, " + new Date().toISOString();
+    _postJson("http://127.0.0.1:8765/commit", { message: message }, function (body) {
+      approveBtn.disabled = false;
+      if (body) renderSyncPanel(body);
+    });
+  }
+
+  function wireSyncButtons() {
+    if (syncBtn && !syncBtn._wired) {
+      syncBtn._wired = true;
+      syncBtn.addEventListener("click", function () { onSyncClick(); });
+    }
+    if (approveBtn && !approveBtn._wired) {
+      approveBtn._wired = true;
+      approveBtn.addEventListener("click", function () { onApproveClick(); });
+    }
+  }
+
+  function probeSyncHelper() {
+    if (!syncEl) return;
+    var node = encodeURIComponent(window.__ZND_SYNC_NODE__ || "");
+    var url = "http://127.0.0.1:8765/status?node=" + node + "&clone=";
+    var opts = {};
+    try { opts.signal = AbortSignal.timeout(1500); } catch (e) { /* older engine, no timeout */ }
+    fetch(url, opts)
+      .then(function (resp) {
+        if (!resp.ok) throw new Error("bad status " + resp.status);
+        return resp.json();
+      })
+      .then(function (body) { renderSyncPanel(body); wireSyncButtons(); })
+      .catch(function () { renderSyncFallback(); });
+  }
+
+  // Drag-and-drop panel layout (plan item 1.10): a panel's placement lives
+  // in the inline grid-column/grid-row style _place_panel_html already
+  // wrote server-side, so no extra layout data needs embedding; dragging
+  // one panel's .head onto another swaps their two placements, both in the
+  // DOM (instant feedback) and via the sync helper's /layout endpoint
+  // (persisted writeback, item 1.2's helper, never a direct file write).
+  function _parseGridPlacement(el) {
+    function part(value) {
+      var m = /^(\d+)\s*\/\s*span\s*(\d+)$/.exec(value || "");
+      return m ? [parseInt(m[1], 10), parseInt(m[2], 10)] : [1, 1];
+    }
+    var col = part(el.style.gridColumn);
+    var row = part(el.style.gridRow);
+    return { col: col[0], w: col[1], row: row[0], h: row[1] };
+  }
+
+  function _applyGridPlacement(el, pos) {
+    el.style.gridColumn = pos.col + " / span " + pos.w;
+    el.style.gridRow = pos.row + " / span " + pos.h;
+  }
+
+  function postLayout() {
+    var container = document.querySelector(".panels");
+    if (!container) return;
+    var columns = parseInt(container.getAttribute("data-layout-columns"), 10) || 4;
+    var panels = container.querySelectorAll(".panel");
+    var entries = [];
+    for (var i = 0; i < panels.length; i++) {
+      var pos = _parseGridPlacement(panels[i]);
+      entries.push({
+        id: panels[i].getAttribute("data-panel"),
+        col: pos.col, row: pos.row, w: pos.w, h: pos.h,
+      });
+    }
+    // Best-effort, same posture as the sync/approve buttons: a failed
+    // write leaves the DOM's optimistic swap in place until the next real
+    // render picks up whatever settings.layout still says on disk.
+    _postJson("http://127.0.0.1:8765/layout", { layout: { columns: columns, panels: entries } }, function () {});
+  }
+
+  function onPanelDragStart(ev) {
+    var head = ev.target.closest ? ev.target.closest(".head") : null;
+    if (!head) { ev.preventDefault(); return; }
+    var panelEl = ev.currentTarget;
+    ev.dataTransfer.setData("text/plain", panelEl.getAttribute("data-panel") || "");
+    ev.dataTransfer.effectAllowed = "move";
+    panelEl.classList.add("dragging");
+  }
+
+  function onPanelDragEnd(ev) {
+    ev.currentTarget.classList.remove("dragging");
+  }
+
+  function onPanelDragOver(ev) {
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+    ev.currentTarget.classList.add("drag-over");
+  }
+
+  function onPanelDragLeave(ev) {
+    ev.currentTarget.classList.remove("drag-over");
+  }
+
+  function onPanelDrop(ev) {
+    ev.preventDefault();
+    var targetEl = ev.currentTarget;
+    targetEl.classList.remove("drag-over");
+    var draggedId = ev.dataTransfer.getData("text/plain");
+    var targetId = targetEl.getAttribute("data-panel");
+    if (!draggedId || draggedId === targetId) return;
+    var draggedEl = document.querySelector('.panels .panel[data-panel="' + draggedId + '"]');
+    if (!draggedEl) return;
+    var draggedPos = _parseGridPlacement(draggedEl);
+    var targetPos = _parseGridPlacement(targetEl);
+    _applyGridPlacement(draggedEl, targetPos);
+    _applyGridPlacement(targetEl, draggedPos);
+    postLayout();
+  }
+
+  function wireDragAndDrop() {
+    var panels = document.querySelectorAll(".panels .panel");
+    for (var i = 0; i < panels.length; i++) {
+      var el = panels[i];
+      if (el._dragWired) continue;
+      el._dragWired = true;
+      el.setAttribute("draggable", "true");
+      el.addEventListener("dragstart", onPanelDragStart);
+      el.addEventListener("dragend", onPanelDragEnd);
+      el.addEventListener("dragover", onPanelDragOver);
+      el.addEventListener("dragleave", onPanelDragLeave);
+      el.addEventListener("drop", onPanelDrop);
+    }
+  }
+
+  // Roadmap timeline zoom (plan item 1.11, pattern 1): three server-
+  // rendered variants share one panel; a click only swaps which one carries
+  // .tl-active, never any client-side date math.
+  function wireZoomToggles() {
+    var toggles = document.querySelectorAll(".tl-zoom-toggle");
+    for (var i = 0; i < toggles.length; i++) {
+      var toggle = toggles[i];
+      if (toggle._zoomWired) continue;
+      toggle._zoomWired = true;
+      toggle.addEventListener("click", function (ev) {
+        var btn = ev.target.closest ? ev.target.closest("[data-zoom-btn]") : null;
+        if (!btn) return;
+        var panel = btn.closest(".panel");
+        if (!panel) return;
+        var zoom = btn.getAttribute("data-zoom-btn");
+        var variants = panel.querySelectorAll(".tl-variant");
+        for (var j = 0; j < variants.length; j++) {
+          variants[j].classList.toggle("tl-active", variants[j].getAttribute("data-zoom") === zoom);
+        }
+        var btns = btn.closest(".tl-zoom-toggle").querySelectorAll("[data-zoom-btn]");
+        for (var k = 0; k < btns.length; k++) {
+          btns[k].classList.toggle("tl-zoom-active", btns[k] === btn);
+        }
+      });
+    }
+  }
+
+  // Slice-by rail (plan item 1.11, pattern 3): a button sets data-slice on
+  // the grouped container; rows carry their own data-gate, hidden/shown by
+  // a plain attribute match, "all" clears the filter. No framework.
+  function wireSliceRails() {
+    var rails = document.querySelectorAll(".slice-rail");
+    for (var i = 0; i < rails.length; i++) {
+      var rail = rails[i];
+      if (rail._sliceWired) continue;
+      rail._sliceWired = true;
+      rail.addEventListener("click", function (ev) {
+        var btn = ev.target.closest ? ev.target.closest("[data-slice-btn]") : null;
+        if (!btn) return;
+        var railEl = btn.closest(".slice-rail");
+        var target = railEl.parentNode.querySelector("[data-slice]");
+        if (!target) return;
+        var value = btn.getAttribute("data-slice-btn");
+        target.setAttribute("data-slice", value);
+        var rows = target.querySelectorAll("[data-gate]");
+        for (var j = 0; j < rows.length; j++) {
+          rows[j].hidden = !(value === "all" || rows[j].getAttribute("data-gate") === value);
+        }
+        var groups = target.querySelectorAll(".group");
+        for (var g = 0; g < groups.length; g++) {
+          groups[g].hidden = groups[g].querySelectorAll("[data-gate]:not([hidden])").length === 0;
+        }
+        var btns = railEl.querySelectorAll("[data-slice-btn]");
+        for (var k = 0; k < btns.length; k++) {
+          btns[k].classList.toggle("slice-active", btns[k] === btn);
+        }
+      });
+    }
+  }
+
+  wireZoomToggles();
+  wireSliceRails();
+  wireDragAndDrop();
+  probeSyncHelper();
+})();
+</script>
+</body>
+</html>

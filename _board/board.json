@@ -1,0 +1,328 @@
+{
+  "generatedBy": "Siteoffice board renderer v1",
+  "renderedAt": "2026-09-13T15:18:11.536402+00:00",
+  "name": "claudecost",
+  "type": "project",
+  "displayName": "claudecost",
+  "parent": "ZeroNonsense.dev",
+  "children": [],
+  "settings": {
+    "planningHorizonWeeks": 2,
+    "languages": [
+      "en"
+    ],
+    "timeRegistration": false,
+    "refreshDays": 7,
+    "layout": {
+      "columns": 4,
+      "panels": [
+        {
+          "id": "status",
+          "col": 1,
+          "row": 1,
+          "w": 4,
+          "h": 1
+        },
+        {
+          "id": "next_weeks",
+          "col": 1,
+          "row": 2,
+          "w": 4,
+          "h": 1
+        },
+        {
+          "id": "waiting_on_you",
+          "col": 1,
+          "row": 3,
+          "w": 4,
+          "h": 1
+        },
+        {
+          "id": "roadmap",
+          "col": 1,
+          "row": 4,
+          "w": 4,
+          "h": 1
+        },
+        {
+          "id": "funnel",
+          "col": 1,
+          "row": 5,
+          "w": 4,
+          "h": 1
+        },
+        {
+          "id": "hours",
+          "col": 1,
+          "row": 6,
+          "w": 4,
+          "h": 1
+        },
+        {
+          "id": "sync_status",
+          "col": 1,
+          "row": 7,
+          "w": 4,
+          "h": 1
+        },
+        {
+          "id": "receipts",
+          "col": 1,
+          "row": 8,
+          "w": 4,
+          "h": 1
+        }
+      ]
+    }
+  },
+  "sourcePath": "C:\\ZND\\projects\\claudecost\\siteoffice.json",
+  "panels": {
+    "waiting_on_you": {
+      "state": "normal",
+      "data": {
+        "items": [
+          {
+            "text": "01_inbox: Replace the harness of Claude Code in Siteoffice (wilco)",
+            "date": null
+          },
+          {
+            "text": "01_inbox: Premortem: Replace the harness of Claude Code in Siteoffice (wilco)",
+            "date": null
+          },
+          {
+            "text": "01_inbox: 01_inbox (unknown)",
+            "date": null
+          },
+          {
+            "text": "02_shaped: 02_shaped (unknown)",
+            "date": null
+          },
+          {
+            "text": "03_scored: Remote always-on control (wilco)",
+            "date": null
+          },
+          {
+            "text": "03_scored: 03_scored (unknown)",
+            "date": null
+          },
+          {
+            "text": "03_scored: Score sheet: Remote always-on control (unknown)",
+            "date": null
+          },
+          {
+            "text": "03_scored: Score sheet: Remote always-on control (unknown)",
+            "date": null
+          },
+          {
+            "text": "03_scored: Score sheet: Remote always-on control (unknown)",
+            "date": null
+          },
+          {
+            "text": "03_scored: Score sheet: Remote always-on control (unknown)",
+            "date": null
+          },
+          {
+            "text": "04_selected: 04_selected (unknown)",
+            "date": null
+          }
+        ],
+        "prCount": null
+      }
+    },
+    "next_weeks": {
+      "state": "empty",
+      "data": {
+        "rows": [],
+        "horizonWeeks": 2,
+        "horizonNote": null
+      }
+    },
+    "roadmap": {
+      "state": "empty",
+      "data": {
+        "priorities": [],
+        "backlog": []
+      }
+    },
+    "children": {
+      "state": "empty",
+      "data": {
+        "cards": [],
+        "missing": []
+      }
+    },
+    "activity": {
+      "state": "unavailable",
+      "data": {
+        "entries": []
+      }
+    },
+    "funnel": {
+      "state": "normal",
+      "data": {
+        "columns": [
+          {
+            "stage": "01_inbox",
+            "labelKey": "inbox",
+            "cards": [
+              {
+                "file": "2026-09-12_wilco_replace-claude-code-harness.md",
+                "title": "Replace the harness of Claude Code in Siteoffice",
+                "author": "wilco",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "wilco",
+                "gate": "G1"
+              },
+              {
+                "file": "2026-09-12_wilco_replace-claude-code-harness_premortem.md",
+                "title": "Premortem: Replace the harness of Claude Code in Siteoffice",
+                "author": "wilco",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "wilco",
+                "gate": "G1"
+              },
+              {
+                "file": "README.md",
+                "title": "01_inbox",
+                "author": "unknown",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "unknown",
+                "gate": "G1"
+              }
+            ],
+            "overLimit": false
+          },
+          {
+            "stage": "02_shaped",
+            "labelKey": "shaped",
+            "cards": [
+              {
+                "file": "README.md",
+                "title": "02_shaped",
+                "author": "unknown",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "unknown",
+                "gate": "G2"
+              }
+            ],
+            "overLimit": false
+          },
+          {
+            "stage": "03_scored",
+            "labelKey": "scored",
+            "cards": [
+              {
+                "file": "2026-09-12_wilco_remote-always-on.md",
+                "title": "Remote always-on control",
+                "author": "wilco",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "wilco",
+                "gate": "G3"
+              },
+              {
+                "file": "README.md",
+                "title": "03_scored",
+                "author": "unknown",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "unknown",
+                "gate": "G3"
+              },
+              {
+                "file": "remote-always-on_bart.md",
+                "title": "Score sheet: Remote always-on control",
+                "author": "unknown",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "unknown",
+                "gate": "G3"
+              },
+              {
+                "file": "remote-always-on_jeroen.md",
+                "title": "Score sheet: Remote always-on control",
+                "author": "unknown",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "unknown",
+                "gate": "G3"
+              },
+              {
+                "file": "remote-always-on_martijn.md",
+                "title": "Score sheet: Remote always-on control",
+                "author": "unknown",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "unknown",
+                "gate": "G3"
+              },
+              {
+                "file": "remote-always-on_wilco.md",
+                "title": "Score sheet: Remote always-on control",
+                "author": "unknown",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "unknown",
+                "gate": "G3"
+              }
+            ],
+            "overLimit": false
+          },
+          {
+            "stage": "04_selected",
+            "labelKey": "selected",
+            "cards": [
+              {
+                "file": "README.md",
+                "title": "04_selected",
+                "author": "unknown",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "unknown",
+                "gate": "G4"
+              }
+            ],
+            "overLimit": false
+          },
+          {
+            "stage": "05_poc",
+            "labelKey": "poc",
+            "cards": [
+              {
+                "file": "README.md",
+                "title": "05_poc",
+                "author": "unknown",
+                "date": "2026-09-12",
+                "request": "",
+                "owner": "unknown",
+                "gate": null
+              }
+            ],
+            "overLimit": false
+          }
+        ],
+        "columnLimit": null
+      }
+    },
+    "hours": {
+      "state": "disabled",
+      "data": {}
+    },
+    "receipts": {
+      "state": "empty",
+      "data": {}
+    },
+    "status": {
+      "state": "empty",
+      "data": {}
+    },
+    "sync_status": {
+      "state": "empty",
+      "data": {}
+    }
+  }
+}

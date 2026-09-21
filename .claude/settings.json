@@ -1,0 +1,38 @@
+{
+  "disableClaudeAiConnectors": true,
+  "enableAllProjectMcpServers": false,
+  "enabledMcpjsonServers": [],
+  "disabledMcpjsonServers": [
+    "graphify-zerononsense",
+    "graphify-jarvis",
+    "graphify-github-actions",
+    "graphify-datastream",
+    "graphify-cipher",
+    "graphify-burnrate",
+    "graphify-shoppilot",
+    "graphify-tiktok-shop",
+    "graphify-global"
+  ],
+  "enabledPlugins": {
+    "ecc@ecc": false,
+    "claude-obsidian@agricidaniel-claude-obsidian": false,
+    "hookify@claude-plugins-official": false,
+    "ralph-loop@claude-plugins-official": false,
+    "znd-private@znd-skills": true,
+    "superpowers@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true
+  },
+  "permissions": {
+    "deny": [
+      "mcp__graphify-zerononsense__*",
+      "mcp__graphify-jarvis__*",
+      "mcp__graphify-github-actions__*",
+      "mcp__graphify-datastream__*",
+      "mcp__graphify-cipher__*",
+      "mcp__graphify-burnrate__*",
+      "mcp__graphify-shoppilot__*",
+      "mcp__graphify-tiktok-shop__*",
+      "mcp__graphify-global__*"
+    ]
+  }
+}

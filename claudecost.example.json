@@ -1,0 +1,26 @@
+{
+  "_comment": "Optional overrides. Rename to claudecost.json next to claudecost.exe. Any subset of fields works; everything omitted keeps the compiled-in default. Values below are illustrative, not a real invoice: replace them with your own seat counts and invoice total.",
+  "fx_usd_eur": 0.92,
+  "prices": {
+    "opus":   {"label": "Opus",   "in": 5.0,  "out": 25.0},
+    "sonnet": {"label": "Sonnet", "in": 3.0,  "out": 15.0},
+    "haiku":  {"label": "Haiku",  "in": 1.0,  "out": 5.0},
+    "fable":  {"label": "Fable",  "in": 10.0, "out": 50.0}
+  },
+  "subscription": {
+    "monthly_subscription_eur": 2000.00,
+    "monthly_subscription_usd": 2160.00,
+    "seats_purchased": 50,
+    "seats": {"Standard": 45, "Premium": 5},
+    "seat_price_usd": {"Standard": 20.00, "Premium": 100.00},
+    "company_consumption_usd": 1000.00,
+    "output_cost_factor": 1.8085,
+    "calibrated_on": "example",
+    "window": "example",
+    "your_seat": "Premium"
+  },
+  "_comment_wsl": "wsl_scan, extra_sources and wsl_interval_hours are new in v0.7.0. The three values below are shown at their defaults (auto-scan, nothing extra, 4-hour WSL cadence), so leaving this block out entirely is equivalent. Set wsl_scan to \"off\" if you do not want the app touching a WSL distro at all.",
+  "wsl_scan": "auto",
+  "extra_sources": [],
+  "wsl_interval_hours": 4
+}
