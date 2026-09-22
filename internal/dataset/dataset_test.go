@@ -29,6 +29,80 @@ func TestDedupeCaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestAdapterForPathClassifiesByRoots(t *testing.T) {
+	roots := map[string][]string{
+		"claude": {`C:\Users\x\.claude\projects`},
+		"codex":  {`C:\Users\x\.codex\sessions`},
+	}
+	got := adapterForPath(`C:\Users\x\.codex\sessions\2026\09\20\rollout-1.jsonl`, roots)
+	if got == nil || got.Name() != "codex" {
+		t.Fatalf("got %v, want codex adapter", got)
+	}
+	got2 := adapterForPath(`C:\Users\x\.claude\projects\proj\sess.jsonl`, roots)
+	if got2 == nil || got2.Name() != "claude" {
+		t.Fatalf("got %v, want claude adapter", got2)
+	}
+	got3 := adapterForPath(`C:\Users\x\somewhere-else\file.jsonl`, roots)
+	if got3 != nil {
+		t.Fatalf("got %v, want nil for a path under no known root", got3)
+	}
+}
+
+func TestAdapterForPathFallsBackToClaudeWhenRootsEmpty(t *testing.T) {
+	got := adapterForPath(`C:\anything.jsonl`, nil)
+	if got == nil || got.Name() != "claude" {
+		t.Fatalf("got %v, want claude fallback when roots is empty", got)
+	}
+}
+
+// TestIngestDispatchesToCodexAdapter exercises the real store round trip
+// (ingest -> UpsertEvents -> AllEvents) for a Codex trail, without touching
+// this machine's real ~/.codex or ~/.claude folders: RootsByAdapter is set
+// directly rather than going through resolveSources's auto-detection, so
+// the test stays hermetic.
+func TestIngestDispatchesToCodexAdapter(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	codexRoot := filepath.Join(dir, "codex-sessions")
+	if err := os.MkdirAll(codexRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "testdata", "codex", "three-turns.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(codexRoot, "rollout-fixture.jsonl")
+	if err := os.WriteFile(dst, fixture, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := Cache{Store: st, RootsByAdapter: map[string][]string{"codex": {codexRoot}}}
+	if err := c.ingest([]string{dst}, nil, false, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := st.AllEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("got %d events, want 3", len(events))
+	}
+	for _, e := range events {
+		if e.Vendor != "openai" || e.Agent != "codex" {
+			t.Fatalf("event %+v, want vendor openai / agent codex", e)
+		}
+		if e.SessionID != "rollout-fixture" {
+			t.Fatalf("SessionID = %q, want rollout-fixture (the file basename)", e.SessionID)
+		}
+	}
+}
+
 func TestCollectFromStoreMatchesFixture(t *testing.T) {
 	dir := t.TempDir()
 	st, err := store.Open(filepath.Join(dir, "burnmon.db"))

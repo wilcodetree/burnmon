@@ -79,7 +79,7 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 	perModel := map[string]*scan.PerModel{}
 	daily := map[string]*scan.PerModel{}
 	tools := map[string]int64{}
-	var fresh, cacheW, cacheR, out, callsN int64
+	var fresh, cacheW, cacheR, out, callsN, unpriced int64
 	var cost, costSub float64
 
 	for _, e := range events {
@@ -100,10 +100,28 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		if e.CacheRead != nil {
 			cr = *e.CacheRead
 		}
-		fam := cfg.ModelFamily(e.Model)
-		c := cfg.CallCostUSD(fam, e.Input, cw, cr, e.Output)
-		cs := cfg.CallCostSubUSD(fam, e.Input, e.Output)
 		tokens := e.Input + cw + cr + e.Output
+
+		var c, cs float64
+		var label string
+		if e.Vendor == "openai" {
+			// No subscription-share calibration exists for Codex/ChatGPT
+			// plans in v0.1 (only Anthropic's OutputCostFactor is
+			// calibrated against a real invoice): cost and cost_sub are
+			// the same list-price figure for an OpenAI event.
+			var unpricedCall bool
+			c, unpricedCall = cfg.OpenAICallCostUSD(e.Model, e.Input, cr, e.Output)
+			cs = c
+			label = cfg.OpenAILabel(e.Model)
+			if unpricedCall {
+				unpriced += tokens
+			}
+		} else {
+			fam := cfg.ModelFamily(e.Model)
+			c = cfg.CallCostUSD(fam, e.Input, cw, cr, e.Output)
+			cs = cfg.CallCostSubUSD(fam, e.Input, e.Output)
+			label = cfg.Label(fam)
+		}
 		fresh += e.Input
 		cacheW += cw
 		cacheR += cr
@@ -111,7 +129,6 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		cost += c
 		costSub += cs
 
-		label := cfg.Label(fam)
 		pm := perModel[label]
 		if pm == nil {
 			pm = &scan.PerModel{}
@@ -187,5 +204,6 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		Tools:          toolsOut,
 		Daily:          daily,
 		Long:           callsN > scan.LongSessionCalls,
+		Unpriced:       unpriced,
 	}
 }

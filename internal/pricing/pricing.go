@@ -19,6 +19,27 @@ type ModelPrice struct {
 	Out   float64 `json:"out"`
 }
 
+// OpenAIModelPrice is USD per million tokens for one Codex model id, keyed
+// by exact model string rather than a family (unlike Claude's ModelPrice,
+// OpenAI model ids are not aliased into families here). CachedIn is an
+// explicit rate rather than a multiplier off In: every model id priced in
+// Defaults happens to cache at 10% of its input rate, but the rate card is
+// not guaranteed to keep that ratio for a model added later.
+type OpenAIModelPrice struct {
+	Label    string  `json:"label"`
+	In       float64 `json:"in"`
+	CachedIn float64 `json:"cached_in"`
+	Out      float64 `json:"out"`
+}
+
+// AnthropicPriceBookDate and OpenAIPriceBookDate are the dates the
+// compiled-in list prices below were last checked against their source
+// pages, printed by `burnmon-cli.exe price-check`.
+const (
+	AnthropicPriceBookDate = "2026-09-22"
+	OpenAIPriceBookDate    = "2026-09-22"
+)
+
 // Subscription is the calibration that turns token counts into a share of the
 // real monthly invoice. Source: the actual invoice, not seats times list
 // price. Recalibrate quarterly or when seats or prices change; see the
@@ -53,6 +74,13 @@ type Config struct {
 	FallbackFamily string                `json:"fallback_family"`
 	Prices         map[string]ModelPrice `json:"prices"`
 	Subscription   Subscription          `json:"subscription"`
+
+	// OpenAIPrices is the Codex price book, keyed by exact model id (e.g.
+	// "gpt-5.6-terra"), populated with only the ids seen on Wilco's laptop
+	// (SESSION_LOG.md, v0.1 Step 2). A model id with no entry here is
+	// unpriced: OpenAICallCostUSD below returns 0 and unpriced=true so the
+	// caller can count it under "unpriced" rather than guess a price.
+	OpenAIPrices map[string]OpenAIModelPrice `json:"openai_prices"`
 
 	// WSLScan controls whether source detection is allowed to probe WSL
 	// distributions for Claude Code transcripts. "auto" (the default, same
@@ -89,6 +117,18 @@ func Defaults() Config {
 			"sonnet": {Label: "Sonnet", In: 3.0, Out: 15.0},
 			"haiku":  {Label: "Haiku", In: 1.0, Out: 5.0},
 			"fable":  {Label: "Fable", In: 10.0, Out: 50.0},
+		},
+		// OpenAI list prices, USD per million tokens, checked 2026-09-22
+		// against developers.openai.com/api/docs/pricing (see
+		// SESSION_LOG.md, v0.1 Step 2). Only the model ids actually seen in
+		// Wilco's own ~/.codex/sessions trail: "codex-auto-review", also
+		// seen there, has no published per-token rate and is deliberately
+		// left out, so it prices as 0/unpriced.
+		OpenAIPrices: map[string]OpenAIModelPrice{
+			"gpt-6-astra":   {Label: "GPT-6 Astra", In: 10.00, CachedIn: 1.00, Out: 50.00},
+			"gpt-5.6-sol":   {Label: "GPT-5.6 Sol", In: 4.00, CachedIn: 0.40, Out: 20.00},
+			"gpt-5.6-terra": {Label: "GPT-5.6 Terra", In: 2.00, CachedIn: 0.20, Out: 12.00},
+			"gpt-5.6-luna":  {Label: "GPT-5.6 Luna", In: 0.20, CachedIn: 0.02, Out: 1.20},
 		},
 		Subscription: Subscription{
 			// Illustrative example calibration, not a real invoice. Drop a
@@ -200,4 +240,25 @@ func (c *Config) CallCostUSD(fam string, fresh, cacheW, cacheR, out int64) float
 func (c *Config) CallCostSubUSD(fam string, fresh, out int64) float64 {
 	p := c.price(fam)
 	return (float64(out)*p.Out + float64(fresh)*p.In) / 1e6 * c.Subscription.OutputCostFactor
+}
+
+// OpenAILabel returns model's display label, or model itself when it has no
+// price-book entry (still useful as a per-model grouping key).
+func (c *Config) OpenAILabel(model string) string {
+	if p, ok := c.OpenAIPrices[model]; ok {
+		return p.Label
+	}
+	return model
+}
+
+// OpenAICallCostUSD is the full API list price of one Codex turn. unpriced
+// is true when model has no price-book entry, in which case cost is always
+// 0 and the caller is expected to count the turn's tokens under "unpriced"
+// rather than guess a rate for it.
+func (c *Config) OpenAICallCostUSD(model string, fresh, cacheRead, out int64) (cost float64, unpriced bool) {
+	p, ok := c.OpenAIPrices[model]
+	if !ok {
+		return 0, true
+	}
+	return (float64(fresh)*p.In + float64(cacheRead)*p.CachedIn + float64(out)*p.Out) / 1e6, false
 }

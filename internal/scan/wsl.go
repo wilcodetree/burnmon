@@ -128,9 +128,17 @@ func distroRoot(name, basePath string, version uint32) string {
 // directory) are not worth surfacing; they just mean nothing was found
 // there.
 func distroSources(root string) []string {
+	return distroGlobSources(root, ".claude/projects")
+}
+
+// distroGlobSources generalises distroSources to an arbitrary home-relative
+// path (forward-slash form), so an adapter other than Claude can reuse the
+// same "no /etc/passwd" fallback.
+func distroGlobSources(root, relPath string) []string {
+	rel := filepath.FromSlash(relPath)
 	var out []string
-	candidates, _ := filepath.Glob(filepath.Join(root, "home", "*", ".claude", "projects"))
-	candidates = append(candidates, filepath.Join(root, "root", ".claude", "projects"))
+	candidates, _ := filepath.Glob(filepath.Join(root, "home", "*", rel))
+	candidates = append(candidates, filepath.Join(root, "root", rel))
 	for _, p := range candidates {
 		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
 			out = append(out, p)
@@ -212,11 +220,14 @@ func linuxToWindowsPath(root, linuxPath string) string {
 	return filepath.Join(root, rel)
 }
 
-// claudeConfigDirRe matches a shell assignment to CLAUDE_CONFIG_DIR, with or
-// without a leading "export", capturing the value up to an optional trailing
-// comment. Matching is case-sensitive, same as a shell reading its own
-// startup files.
-var claudeConfigDirRe = regexp.MustCompile(`^\s*(?:export\s+)?CLAUDE_CONFIG_DIR\s*=\s*(.+?)\s*(?:#.*)?$`)
+// envAssignmentRegex builds a shell-assignment matcher for an arbitrary env
+// var name, with or without a leading "export", capturing the value up to
+// an optional trailing comment. Matching is case-sensitive, same as a shell
+// reading its own startup files. Compiled on demand rather than cached: it
+// runs once per home directory per full WSL pass, not per line.
+func envAssignmentRegex(envVar string) *regexp.Regexp {
+	return regexp.MustCompile(`^\s*(?:export\s+)?` + regexp.QuoteMeta(envVar) + `\s*=\s*(.+?)\s*(?:#.*)?$`)
+}
 
 // maxShellFileBytes bounds how much of any one shell startup file
 // configDirFromShellFiles will read. A CLAUDE_CONFIG_DIR assignment, if
@@ -257,6 +268,13 @@ func parseConfigDirValue(raw, home string) (string, bool) {
 // wins, the same as a shell evaluating them in order would behave. Returns
 // "" if nothing was found.
 func configDirFromShellFiles(root, home string) string {
+	return configDirFromShellFilesFor(root, home, "CLAUDE_CONFIG_DIR")
+}
+
+// configDirFromShellFilesFor generalises configDirFromShellFiles to an
+// arbitrary env var name, so an adapter other than Claude can reuse the same
+// shell-startup-file search (e.g. Codex's CODEX_HOME).
+func configDirFromShellFilesFor(root, home, envVar string) string {
 	files := []string{
 		linuxToWindowsPath(root, "/etc/environment"),
 		linuxToWindowsPath(root, "/etc/profile"),
@@ -267,6 +285,7 @@ func configDirFromShellFiles(root, home string) string {
 		filepath.Join(linuxToWindowsPath(root, home), ".zshrc"),
 	}
 
+	re := envAssignmentRegex(envVar)
 	var resolved string
 	for _, f := range files {
 		fi, err := os.Stat(f)
@@ -279,7 +298,7 @@ func configDirFromShellFiles(root, home string) string {
 		}
 		sc := bufio.NewScanner(fh)
 		for sc.Scan() {
-			m := claudeConfigDirRe.FindStringSubmatch(sc.Text())
+			m := re.FindStringSubmatch(sc.Text())
 			if m == nil {
 				continue
 			}
@@ -301,11 +320,23 @@ func configDirFromShellFiles(root, home string) string {
 // read, which is also the normal case for a container-style distro with no
 // real passwd database.
 func distroProjectDirs(root string) []string {
+	return distroHomeSources(root, ".claude/projects", "CLAUDE_CONFIG_DIR")
+}
+
+// distroHomeSources generalises distroProjectDirs to an arbitrary
+// home-relative path and override env var, so an adapter other than Claude
+// (e.g. Codex's ".codex/sessions" plus CODEX_HOME) can reuse the same
+// passwd-driven home discovery. The override env var's value is treated the
+// same way CLAUDE_CONFIG_DIR is: it names the parent folder, and relPath's
+// last path segment is appended back on.
+func distroHomeSources(root, relPath, envVar string) []string {
 	entries, err := readPasswdHomes(root)
 	if err != nil {
-		return distroSources(root)
+		return distroGlobSources(root, relPath)
 	}
 
+	rel := filepath.FromSlash(relPath)
+	leaf := filepath.Base(relPath)
 	var out []string
 	add := func(p, layer string) {
 		fi, statErr := os.Stat(p)
@@ -318,9 +349,9 @@ func distroProjectDirs(root string) []string {
 
 	for _, e := range entries {
 		winHome := linuxToWindowsPath(root, e.home)
-		add(filepath.Join(winHome, ".claude", "projects"), "passwd default")
-		if custom := configDirFromShellFiles(root, e.home); custom != "" {
-			add(filepath.Join(linuxToWindowsPath(root, custom), "projects"), "shell-file CLAUDE_CONFIG_DIR")
+		add(filepath.Join(winHome, rel), "passwd default")
+		if custom := configDirFromShellFilesFor(root, e.home, envVar); custom != "" {
+			add(filepath.Join(linuxToWindowsPath(root, custom), leaf), "shell-file "+envVar)
 		}
 	}
 	return out
@@ -337,6 +368,55 @@ var (
 	wslNamesMu    sync.Mutex
 	wslNamesFound []string
 )
+
+// WSLHomeSources finds relPath (forward-slash form, e.g. ".codex/sessions")
+// under every account home directory in every installed WSL distribution,
+// honouring envVar (e.g. "CODEX_HOME") as a CLAUDE_CONFIG_DIR-style override
+// found in that home's shell startup files. Same distro enumeration and
+// deadline behaviour as wslSources, exported so an adapter other than
+// Claude can reuse the discovery without duplicating the registry and
+// per-distro probing logic. Returns nil if WSL is not installed or nothing
+// was found before deadline.
+func WSLHomeSources(deadline time.Duration, relPath, envVar string) []string {
+	distros, err := readDistros()
+	if err != nil || len(distros) == 0 {
+		return nil
+	}
+
+	var (
+		mu  sync.Mutex
+		out []string
+	)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		var wg sync.WaitGroup
+		for _, d := range distros {
+			d := d
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				root := distroRoot(d.name, d.basePath, d.version)
+				found := distroHomeSources(root, relPath, envVar)
+				if len(found) > 0 {
+					mu.Lock()
+					out = append(out, found...)
+					mu.Unlock()
+				}
+			}()
+		}
+		wg.Wait()
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(deadline):
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	return append([]string(nil), out...)
+}
 
 // WSLDistroNames returns the display names of the WSL distributions that
 // contributed at least one source to the most recent wslSources call. Empty

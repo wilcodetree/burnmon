@@ -17,6 +17,7 @@ import (
 
 	"burnmon/internal/adapter"
 	"burnmon/internal/adapter/claude"
+	"burnmon/internal/adapter/codex"
 	"burnmon/internal/agg"
 	"burnmon/internal/pricing"
 	"burnmon/internal/scan"
@@ -88,11 +89,12 @@ type subOut struct {
 }
 
 type totalsOut struct {
-	Sessions int     `json:"sessions"`
-	Calls    int64   `json:"calls"`
-	Tokens   int64   `json:"tokens"`
-	Cost     float64 `json:"cost"`
-	CostSub  float64 `json:"cost_sub"`
+	Sessions       int     `json:"sessions"`
+	Calls          int64   `json:"calls"`
+	Tokens         int64   `json:"tokens"`
+	Cost           float64 `json:"cost"`
+	CostSub        float64 `json:"cost_sub"`
+	UnpricedTokens int64   `json:"unpriced_tokens,omitempty"`
 }
 
 // Payload is the full dataset injected into the dashboard template.
@@ -149,6 +151,9 @@ func BuildPayload(cfg *pricing.Config, seat string, cutoff, today time.Time,
 	}
 	t.Cost = round4(t.Cost)
 	t.CostSub = round4(t.CostSub)
+	for _, s := range kept {
+		t.UnpricedTokens += s.Unpriced
+	}
 
 	sub := cfg.Subscription
 	return Payload{
@@ -201,6 +206,11 @@ type Cache struct {
 	SlowFiles         []string
 	SlowScannedAt     time.Time
 	DroppedDuplicates int
+
+	// RootsByAdapter is resolveSources's per-adapter root list from the last
+	// full pass, cached across fast-tier passes exactly like SlowFiles, so
+	// ingest can classify a reused WSL file's adapter without re-probing WSL.
+	RootsByAdapter map[string][]string
 }
 
 // dedupSessions removes the same conversation when it was recorded under
@@ -272,21 +282,53 @@ type CollectOpts struct {
 // whatever Cache.SlowFiles already holds from the last full pass.
 // cfg.ExtraSources is appended to the fast tier in every case, then the
 // caller dedupes.
-func resolveSources(cfg *pricing.Config, opts CollectOpts) (fast, slow []string) {
+// roots is, per adapter name, every root folder resolved this pass (native
+// plus WSL when scanned); ingest uses it to classify which adapter parses a
+// given file. It is nil on the explicit -source path, which has only ever
+// meant Claude (Codex has no CLI flag of its own in v0.1), and on a
+// fast-tier pass, where the caller is expected to reuse the roots recorded
+// by the last full pass, exactly as it reuses c.SlowFiles.
+func resolveSources(cfg *pricing.Config, opts CollectOpts) (fast, slow []string, roots map[string][]string) {
 	switch {
 	case len(opts.Sources) > 0:
 		slow = opts.SlowSources
 		fast = subtractCaseInsensitive(opts.Sources, slow)
+		roots = map[string][]string{"claude": append([]string{}, opts.Sources...)}
 	case opts.RefreshSlow:
-		native := scan.DefaultSourcesWithOptions(false)
-		full := scan.DefaultSourcesWithOptions(cfg.WSLScan != "off")
-		fast = native
-		slow = subtractCaseInsensitive(full, native)
+		nativeClaude := scan.DefaultSourcesWithOptions(false)
+		fullClaude := scan.DefaultSourcesWithOptions(cfg.WSLScan != "off")
+		nativeCodex := codex.NativeSources()
+		fullCodex := codex.DefaultSourcesWithOptions(cfg.WSLScan != "off")
+		fast = append(append([]string{}, nativeClaude...), nativeCodex...)
+		slow = append(subtractCaseInsensitive(fullClaude, nativeClaude),
+			subtractCaseInsensitive(fullCodex, nativeCodex)...)
+		roots = map[string][]string{"claude": fullClaude, "codex": fullCodex}
 	default:
-		fast = scan.DefaultSourcesWithOptions(false)
+		fast = append(scan.DefaultSourcesWithOptions(false), codex.NativeSources()...)
 	}
 	fast = append(fast, cfg.ExtraSources...)
-	return fast, slow
+	return fast, slow, roots
+}
+
+// adapterForPath classifies which adapter owns path by matching it against
+// each registered adapter's resolved roots. Falls back to the claude
+// adapter when roots is empty (no full pass has run yet on this Cache),
+// matching v0.1 Step 1 behaviour exactly, since Claude was the only adapter
+// before this step.
+func adapterForPath(path string, roots map[string][]string) adapter.Adapter {
+	lp := strings.ToLower(path)
+	for _, a := range adapters {
+		for _, r := range roots[a.Name()] {
+			lr := strings.ToLower(r)
+			if lp == lr || strings.HasPrefix(lp, lr+string(os.PathSeparator)) || strings.HasPrefix(lp, lr+"/") {
+				return a
+			}
+		}
+	}
+	if len(roots) == 0 {
+		return adapterFor("claude")
+	}
+	return nil
 }
 
 // subtractCaseInsensitive returns the entries of all that are not present in
@@ -348,9 +390,9 @@ func filesUnderAny(files, roots []string) []string {
 	return out
 }
 
-// Registered adapters. v0.1 Step 1 wires only Claude; Step 2 adds Codex
+// Registered adapters. v0.1 Step 1 wired only Claude; Step 2 adds Codex
 // alongside it without touching this loop's shape.
-var adapters = []adapter.Adapter{claude.Adapter{}}
+var adapters = []adapter.Adapter{claude.Adapter{}, codex.Adapter{}}
 
 func adapterFor(name string) adapter.Adapter {
 	for _, a := range adapters {
@@ -373,8 +415,14 @@ func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool
 	if progress != nil {
 		progress(0, total)
 	}
-	a := adapterFor("claude")
 	for i, f := range files {
+		a := adapterForPath(f, c.RootsByAdapter)
+		if a == nil {
+			if progress != nil {
+				progress(i+1, total)
+			}
+			continue
+		}
 		offset, mtime, size, ok, err := c.Store.Cursor(f)
 		if err != nil {
 			return fmt.Errorf("dataset: cursor for %s: %w", f, err)
@@ -446,13 +494,16 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 		return Payload{}, err
 	}
 
-	fast, slow := resolveSources(cfg, opts)
+	fast, slow, roots := resolveSources(cfg, opts)
 	fast = dedupeCaseInsensitive(fast)
 	slow = dedupeCaseInsensitive(slow)
 	all := dedupeCaseInsensitive(append(append([]string{}, fast...), slow...))
 	c.Sources = all
 	if len(all) == 0 {
 		return Payload{}, ErrNoSources
+	}
+	if roots != nil {
+		c.RootsByAdapter = roots
 	}
 
 	var files []string

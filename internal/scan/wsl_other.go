@@ -9,3 +9,9 @@ import "time"
 func wslSources(deadline time.Duration) []string {
 	return nil
 }
+
+// WSLHomeSources returns nil on every platform except Windows, same reason
+// as wslSources. See wsl.go for the real implementation.
+func WSLHomeSources(deadline time.Duration, relPath, envVar string) []string {
+	return nil
+}

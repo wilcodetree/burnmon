@@ -39,7 +39,50 @@ func (m *multiFlag) Set(v string) error {
 	return nil
 }
 
-func main() { os.Exit(run()) }
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "price-check" {
+		os.Exit(runPriceCheck(os.Args[2:]))
+		return
+	}
+	os.Exit(run())
+}
+
+// runPriceCheck prints every compiled-in (or burnmon.json-overridden) price
+// book with the date it was last checked, per the v0.1 Step 2 done-when:
+// "price-check CLI command prints every book with its date."
+func runPriceCheck(args []string) int {
+	fs := flag.NewFlagSet("price-check", flag.ExitOnError)
+	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	cfg, err := loadConfig(*cfgPath, true)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config error:", err)
+		return 1
+	}
+
+	fmt.Println("Anthropic price book, dated", pricing.AnthropicPriceBookDate)
+	for _, fam := range cfg.Families() {
+		p := cfg.Prices[fam]
+		fmt.Printf("  %-10s in %6.2f  out %6.2f  USD/MTok\n", p.Label, p.In, p.Out)
+	}
+
+	fmt.Println()
+	fmt.Println("OpenAI price book, dated", pricing.OpenAIPriceBookDate)
+	models := make([]string, 0, len(cfg.OpenAIPrices))
+	for m := range cfg.OpenAIPrices {
+		models = append(models, m)
+	}
+	sort.Strings(models)
+	for _, m := range models {
+		p := cfg.OpenAIPrices[m]
+		fmt.Printf("  %-20s (%-14s) in %6.3f  cached-in %6.3f  out %6.3f  USD/MTok\n",
+			m, p.Label, p.In, p.CachedIn, p.Out)
+	}
+	return 0
+}
 
 func run() int {
 	monthsN := flag.Int("months", 2, "how many months to include, counting the current one")

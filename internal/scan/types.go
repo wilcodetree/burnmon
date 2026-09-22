@@ -51,6 +51,12 @@ type Session struct {
 	Tools          map[string]int64     `json:"tools,omitempty"`
 	Daily          map[string]*PerModel `json:"-"`
 	Long           bool                 `json:"long"`
+
+	// Unpriced is the token count of calls whose model had no price-book
+	// entry (v0.1 Step 2: an OpenAI model id burnmon has not seen priced
+	// yet, e.g. "codex-auto-review"). Zero cost, not zero usage; surfaced
+	// separately so the dashboard does not silently under-report.
+	Unpriced int64 `json:"unpriced_tokens,omitempty"`
 }
 
 // ToolGroup maps a raw tool name to the thing a human recognises: the
