@@ -29,6 +29,7 @@ import (
 
 	"burnmon/internal/adapter/codex"
 	"burnmon/internal/dataset"
+	"burnmon/internal/history"
 	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
@@ -326,6 +327,22 @@ func main() {
 		return snap, nil
 	}); err != nil {
 		log.Println("could not bind bmLive:", err)
+	}
+
+	// bmHistory (P2): queried on demand from the History tab's filter
+	// controls, not polled, so it re-reads the whole store on every call
+	// rather than the windowed query bmLive uses for its 2-second poll.
+	if err := w.Bind("bmHistory", func(f history.Filter) (history.Payload, error) {
+		a.mu.Lock()
+		cfg := a.cfg
+		a.mu.Unlock()
+		events, err := st.AllEvents()
+		if err != nil {
+			return history.Payload{}, err
+		}
+		return history.Build(events, &cfg, f), nil
+	}); err != nil {
+		log.Println("could not bind bmHistory:", err)
 	}
 
 	if err := w.Bind("ccSaveSettings", func(p settingsPayload) error {

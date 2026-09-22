@@ -2,6 +2,51 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 41A: History, one page (P2)
+
+New package `internal\history`: `Filter{Period,From,To,Vendor,Owner}` in, `Payload{Filter,
+Totals,Rows,Vendors,Owners}` out, built by `Build(events, cfg, filter)` from the store's own
+events, never from a session-shaped intermediate (unlike Overview/Months/Weeks/Days, which run
+through `scan.Session` and lose vendor identity). Buckets by day/week/month using the same key
+shapes `internal\agg` already uses (`YYYY-MM-DD`, `YYYY-Www`, `YYYY-MM`), so the page's existing
+`monthLabel`/`weekLabel`/`dayWithName` formatters carry over unchanged. Sessions counted as
+distinct `(vendor, session_id)` pairs touching a bucket; turns exclude the claude adapter's
+synthetic tool-only events, matching `buildSession`'s own filter. Cost is plain list price
+(`CallCostUSD` / `OpenAICallCostUSD`), no subscription-share math: the open call from the spec
+("cost only where the price book covers the vendor, otherwise tokens only until v0.3") was put
+to Wilco directly rather than guessed, since it forks three ways once "All" mixes covered and
+uncovered vendors. Decided: cost only ever appears when the vendor filter is narrowed to one
+covered vendor (`anthropic` or `openai`, i.e. Claude Code, Cowork or Codex); "All", Hermes and
+Copilot CLI always show `cost_note: "tokens only until v0.3"` instead, even when the filtered
+data happens to be all-covered. Wired into `cmd\burnmon\main.go` as `bmHistory`, bound once
+alongside `bmLive`: unlike `bmLive`'s windowed 2-second poll, it reads `st.AllEvents()` fresh on
+every call, since History is queried on filter change, not polled.
+
+`internal\report\template.html`: `#history` now has real filter controls (period, range with a
+custom from/to, vendor, owner shown only when `payload.owners` is non-empty), a totals block, one
+bar chart (`ch_history`, cost or tokens per bucket depending on `showCost`) and one table
+(`t_history`): one visual per question, not three. Deleted `#months`, `#weeks`, `#days` and
+their `periodRows`/`renderPeriods` functions (Overview stays, per 40B's note: P1 only took it off
+`TAB_IDS`, and it is not part of P2's scope); kept `dayWithName`/`weekLabel`, now History's own
+formatters. Filter state rides the URL hash as `#history?period=week&range=30&vendor=codex&
+owner=ZND`, written with `history.replaceState` (never `pushState`, so it still never triggers
+the Cowork-artifact-host reload 40B's comment warns about) and only while the History tab is
+actually open; the deep-link reader at the bottom of the script now splits the hash on `?` before
+matching it against `TAB_IDS`, since `#history?...` no longer equals the bare `'history'` it used
+to. A saved CLI report (no `window.bmHistory`) shows "History needs the BurnMon app window" in
+place of the totals and table, the same pattern `pollNow` already uses for `bmLive`.
+
+Test: `internal\history\history_test.go`, a real store fixture (via `internal/store`, not a
+fake) with two vendors (`claude-code`/anthropic, `codex`/openai) across three ISO weeks in
+September 2026. `Build` for `period=week` gives three rows, two sessions and two turns each,
+tokens matching hand totals, `cost_note` set (vendor is "All"); narrowing to `vendor=claude-code`
+turns on `cost_usd`, checked against `pricing.Defaults()`'s sonnet rate by hand; `period=month`
+over the same range collapses the three weeks into one `2026-09` row with the combined totals. A
+second test checks the owner filter excludes the other owner's session while `Owners` still
+lists both. `node --check` on the extracted inline script, `go test ./... -count=1`, and
+`.\build.ps1` all green. Not committed; see the end of this session's chat for the commit
+command.
+
 ## 2026-09-22, v0.2 40B: five tabs, Now default, English only (P1, P4, P5)
 
 `internal\report\template.html` only, no Go touched. Tab bar is now Now, History, Sessions,

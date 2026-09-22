@@ -191,12 +191,36 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 </section>
 
 <section id="history" class="hidden">
-  <p class="lede">History arrives in the next session.</p>
+  <p class="lede">Tokens and cost across every vendor. Filters set the period, range, vendor and (when owner rules are configured) owner; the totals, chart and table below always describe exactly what is selected. State lives in the page's URL, so a view can be reopened.</p>
+  <div class="controls">
+    <div><label>Period</label><select id="h_period">
+      <option value="day">Day</option><option value="week">Week</option><option value="month">Month</option>
+    </select></div>
+    <div><label>Range</label><select id="h_range">
+      <option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="custom">Custom</option>
+    </select></div>
+    <div id="h_custom_wrap" class="hidden"><label>From</label><input type="date" id="h_from">
+      <label style="margin-left:6px">To</label><input type="date" id="h_to"></div>
+    <div><label>Vendor</label><select id="h_vendor"><option value="">All</option></select></div>
+    <div id="h_owner_wrap" class="hidden"><label>Owner</label><select id="h_owner"><option value="">All</option></select></div>
+  </div>
+
+  <div id="h_empty" class="note hidden"></div>
+  <div class="grid g4" id="h_totals"></div>
+
+  <h2>Burn per period</h2>
+  <div class="chartbox"><canvas id="ch_history"></canvas></div>
+
+  <h2>Per period</h2>
+  <div class="scroll"><table id="t_history"><thead><tr>
+    <th class="nosort">Period</th><th>Sessions</th><th>Turns</th><th>Tokens</th><th>Cost</th>
+  </tr></thead><tbody></tbody></table></div>
 </section>
 
-<!-- Overview, Months, Weeks and Days are no longer on the tab bar (v0.2 P1). Their
-     markup and render functions stay in place, unreferenced, for 41A (P2 History) to
-     reuse; see SESSION_LOG.md tick 40B. -->
+<!-- Overview is no longer on the tab bar (v0.2 P1); its markup and render functions
+     stay in place, unreferenced. Months, Weeks and Days were retired the same way in
+     40B, then deleted outright in 41A once History (above) rendered everything they
+     did: see SESSION_LOG.md. -->
 <section id="overview" class="hidden">
   <div class="controls">
     <div><label>Cost basis</label>
@@ -237,31 +261,6 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
     <div class="chartbox"><canvas id="ch_split"></canvas></div>
     <div class="card plain" id="split_text"></div>
   </div>
-</section>
-
-<section id="months" class="hidden">
-  <h2>Per month</h2>
-  <p class="lede">Current month is partial. Everything is priced at API list rates, so this is what your usage would cost if it were metered rather than covered by a seat.</p>
-  <div class="scroll"><table id="t_months"><thead><tr>
-    <th class="nosort">Month</th><th>Sessions</th><th>API calls</th><th>Tokens</th><th>Cost</th><th>Per session</th><th>Per call</th><th class="nosort">Top surface</th><th class="nosort">Top model</th>
-  </tr></thead><tbody></tbody></table></div>
-</section>
-
-<section id="weeks" class="hidden">
-  <h2>Per week</h2>
-  <p class="lede">ISO weeks. Useful because Claude's usage limits reset weekly, so this is the rhythm that actually matters if you keep hitting them.</p>
-  <div class="chartbox" style="margin-bottom:18px"><canvas id="ch_weeks"></canvas></div>
-  <div class="scroll"><table id="t_weeks"><thead><tr>
-    <th class="nosort">Week</th><th>Sessions</th><th>API calls</th><th>Tokens</th><th>Cost</th><th>Per session</th><th>Per call</th><th class="nosort">Top surface</th><th class="nosort">Top model</th>
-  </tr></thead><tbody></tbody></table></div>
-</section>
-
-<section id="days" class="hidden">
-  <h2>Per day</h2>
-  <p class="lede">A call is attributed to the day it actually ran, so a session that crosses midnight is split across both days.</p>
-  <div class="scroll tall"><table id="t_days"><thead><tr>
-    <th class="nosort">Date</th><th>Sessions</th><th>API calls</th><th>Tokens</th><th>Cost</th><th>Per session</th><th>Per call</th><th class="nosort">Top surface</th><th class="nosort">Top model</th>
-  </tr></thead><tbody></tbody></table></div>
 </section>
 
 <section id="sessions" class="hidden">
@@ -801,34 +800,11 @@ function drawOverviewCharts(comp, pc){
   }
 }
 
-// ---------- period tables ----------
-function periodRows(src, tbodySel, opts){
-  var keys = Object.keys(src||{}).sort().reverse();
-  var tb = document.querySelector(tbodySel);
-  tb.innerHTML = '';
-  keys.forEach(function(k){
-    var b = src[k];
-    var cf = UI.basis==='list' ? 'cost' : 'cost_sub';
-    var ts = topOf(b.by_surface, cf), tm = topOf(b.by_model, cf);
-    var cells = ['<td>'+esc(opts.label(k))+'</td>',
-      '<td>'+n(b.sessions)+'</td>', '<td>'+n(b.calls)+'</td>', '<td>'+tok(b.tokens)+'</td>',
-      '<td><b>'+money(pick(b))+'</b></td>'];
-    if(opts.perSession) cells.push('<td>'+(b.sessions?money(pick(b)/b.sessions,2):'—')+'</td>');
-    cells.push('<td>'+(b.calls?money(pick(b)/b.calls,3):'—')+'</td>');
-    if(opts.surfaces === 'all'){
-      var list = Object.keys(b.by_surface||{}).sort(function(a,c){ return pick(b.by_surface[c])-pick(b.by_surface[a]); });
-      cells.push('<td>'+list.map(function(s){ return '<span class="pill pine">'+esc(SL[s]||s)+'</span>'; }).join(' ')+'</td>');
-    } else {
-      cells.push('<td>'+(ts?'<span class="pill pine">'+esc(SL[ts]||ts)+'</span>':'—')+'</td>');
-      if(opts.topModel) cells.push('<td>'+(tm?'<span class="pill lav">'+esc(tm)+'</span>':'—')+'</td>');
-    }
-    var tr = document.createElement('tr');
-    tr.innerHTML = cells.join('');
-    tb.appendChild(tr);
-  });
-  if(!keys.length) tb.innerHTML = '<tr><td colspan="9" class="small">'+t('nothing_in_period')+'</td></tr>';
-}
-
+// ---------- period labels ----------
+// dayWithName and weekLabel are Months/Weeks/Days' old label formatters
+// (41A retired those three tabs into History, deleted their own periodRows
+// table renderer and per-tab chart, but kept these two: History's period
+// table (renderHistory, below) formats its bucket keys the same way).
 function dayWithName(k){
   var d = new Date(k + 'T12:00:00Z');
   var full = DOW_FULL.en;
@@ -837,31 +813,6 @@ function dayWithName(k){
 function weekLabel(k){
   var p = k.split('-W');
   return t('week_label', {n: parseInt(p[1],10), y: p[0]});
-}
-
-function renderPeriods(){
-  periodRows(D.months, '#t_months tbody', {label:monthLabel, perSession:true, topModel:true});
-  periodRows(D.weeks,  '#t_weeks tbody',  {label:weekLabel,  perSession:true, topModel:true});
-  periodRows(D.days,   '#t_days tbody',   {label:dayWithName, perSession:true, topModel:true});
-
-  var wk = Object.keys(D.weeks||{}).sort();
-  if(charts.weeks) charts.weeks.destroy();
-  if(wk.length && typeof Chart === 'undefined'){
-    chartFallback('ch_weeks', t('chart_cost_per_week', {sym: sym()}));
-  } else if(wk.length){
-    try {
-      var P = chartPalette();
-      charts.weeks = new Chart(document.getElementById('ch_weeks'), {type:'bar',
-        data:{labels:wk.map(weekLabel),
-          datasets:[{label:t('chart_cost_label'), data:wk.map(function(k){ return +(pick(D.weeks[k])*rate()).toFixed(2); }),
-            backgroundColor:P.accent, borderRadius:4}]},
-        options:{responsive:true, maintainAspectRatio:false,
-          plugins:{legend:{display:false}, title:{display:true, text:t('chart_cost_per_week', {sym: sym()}), font:{size:12.5,weight:'600'}, color:P.text}},
-          scales:{y:{beginAtZero:true, grid:{color:P.grid}}, x:{grid:{display:false}}}}});
-    } catch(e){
-      chartFallback('ch_weeks', t('chart_cost_per_week', {sym: sym()}));
-    }
-  }
 }
 
 // ---------- tools ----------
@@ -1411,11 +1362,200 @@ function startNowPolling(){
   nowTimer = setInterval(pollNow, 2000);
 }
 
+// ---------- History (v0.2 P2): filters -> bmHistory(filter) -> totals, chart, table ----------
+// Vendor-agnostic replacement for the old Months/Weeks/Days tabs (41A):
+// one page, one bound Go-side call per filter change, never the page
+// aggregating raw events itself.
+var AGENT_LABELS = {'claude-code':'Claude Code', 'cowork':'Cowork', 'codex':'Codex', 'hermes':'Hermes', 'copilot-cli':'Copilot CLI'};
+var UI_HIST = {period:'week', range:'30', from:'', to:'', vendor:'', owner:''};
+var histFiltersBuilt = false;
+
+function isoDate(d){ return d.toISOString().slice(0,10); }
+
+function histRangeDates(){
+  if(UI_HIST.range === 'custom') return {from: UI_HIST.from, to: UI_HIST.to};
+  var days = parseInt(UI_HIST.range, 10) || 30;
+  var to = new Date();
+  var from = new Date(to.getTime() - (days-1)*86400000);
+  return {from: isoDate(from), to: isoDate(to)};
+}
+
+// parseHistHash reads UI_HIST from "#history?period=week&range=30&vendor=codex&owner=ZND"
+// once at load, the same "deep link, read once" pattern every other tab
+// uses; writeHistHash (below) is the only thing that ever writes it back,
+// and only via history.replaceState, never pushState (see the tab
+// navigation note further down for why this page avoids the browser's own
+// history stack).
+function parseHistHash(){
+  var h = (window.location.hash || '').slice(1);
+  if(h.indexOf('history') !== 0) return;
+  var qIdx = h.indexOf('?');
+  if(qIdx === -1) return;
+  h.slice(qIdx+1).split('&').forEach(function(p){
+    var kv = p.split('=');
+    var k = decodeURIComponent(kv[0]||''), v = decodeURIComponent(kv[1]||'');
+    if(k === 'period' && v) UI_HIST.period = v;
+    else if(k === 'range' && v) UI_HIST.range = v;
+    else if(k === 'from') UI_HIST.from = v;
+    else if(k === 'to') UI_HIST.to = v;
+    else if(k === 'vendor') UI_HIST.vendor = v;
+    else if(k === 'owner') UI_HIST.owner = v;
+  });
+}
+
+function writeHistHash(){
+  if(currentTab() !== 'history') return;
+  var parts = ['period='+encodeURIComponent(UI_HIST.period), 'range='+encodeURIComponent(UI_HIST.range)];
+  if(UI_HIST.range === 'custom'){
+    parts.push('from='+encodeURIComponent(UI_HIST.from||''));
+    parts.push('to='+encodeURIComponent(UI_HIST.to||''));
+  }
+  if(UI_HIST.vendor) parts.push('vendor='+encodeURIComponent(UI_HIST.vendor));
+  if(UI_HIST.owner) parts.push('owner='+encodeURIComponent(UI_HIST.owner));
+  try{ window.history.replaceState(null, '', '#history?'+parts.join('&')); }catch(e){}
+}
+
+function applyHistControlsFromState(){
+  document.getElementById('h_period').value = UI_HIST.period;
+  document.getElementById('h_range').value = UI_HIST.range;
+  document.getElementById('h_from').value = UI_HIST.from || '';
+  document.getElementById('h_to').value = UI_HIST.to || '';
+  document.getElementById('h_custom_wrap').classList.toggle('hidden', UI_HIST.range !== 'custom');
+  if(UI_HIST.vendor && document.querySelector('#h_vendor option[value="'+UI_HIST.vendor+'"]')){
+    document.getElementById('h_vendor').value = UI_HIST.vendor;
+  }
+  if(UI_HIST.owner && document.querySelector('#h_owner option[value="'+UI_HIST.owner+'"]')){
+    document.getElementById('h_owner').value = UI_HIST.owner;
+  }
+}
+
+// buildHistFilterOptions fills the vendor and (when P6's rules are
+// configured) owner dropdowns from the first payload: the store, not a
+// compiled-in list, decides which vendors and owners have ever been seen.
+function buildHistFilterOptions(payload){
+  if(histFiltersBuilt) return;
+  var vSel = document.getElementById('h_vendor');
+  (payload.vendors||[]).forEach(function(v){
+    var opt = document.createElement('option');
+    opt.value = v; opt.textContent = AGENT_LABELS[v] || v;
+    vSel.appendChild(opt);
+  });
+  if(payload.owners && payload.owners.length){
+    document.getElementById('h_owner_wrap').classList.remove('hidden');
+    var oSel = document.getElementById('h_owner');
+    payload.owners.forEach(function(o){
+      var opt = document.createElement('option');
+      opt.value = o; opt.textContent = o;
+      oSel.appendChild(opt);
+    });
+  }
+  histFiltersBuilt = true;
+  applyHistControlsFromState();
+}
+
+function histPeriodLabel(period, key){
+  if(period === 'month') return monthLabel(key);
+  if(period === 'week') return weekLabel(key);
+  return dayWithName(key);
+}
+
+function renderHistTotals(totals){
+  var costHtml = totals.cost_usd != null
+    ? money(totals.cost_usd)
+    : '<span class="small">'+esc(totals.cost_note || 'tokens only until v0.3')+'</span>';
+  document.getElementById('h_totals').innerHTML =
+    '<div class="card pine"><div class="k">Tokens</div><div class="v">'+tok(totals.tokens)+'</div>'
+      + '<div class="sub">fresh '+tok(totals.fresh)+' &middot; cache write '+tok(totals.cache_w)
+      + ' &middot; cache read '+tok(totals.cache_r)+' &middot; output '+tok(totals.out)+'</div></div>'
+    + '<div class="card"><div class="k">'+t('th_sessions')+'</div><div class="v">'+n(totals.sessions)+'</div></div>'
+    + '<div class="card"><div class="k">Turns</div><div class="v">'+n(totals.turns)+'</div></div>'
+    + '<div class="card sun"><div class="k">'+t('th_cost')+'</div><div class="v">'+costHtml+'</div></div>';
+}
+
+function drawHistoryChart(rows, period, showCost){
+  var canvas = document.getElementById('ch_history');
+  if(typeof Chart === 'undefined'){ chartFallback('ch_history', 'Burn per period'); return; }
+  try {
+    var P = chartPalette();
+    var labels = rows.map(function(r){ return histPeriodLabel(period, r.key); });
+    var data = rows.map(function(r){ return showCost ? +((r.cost_usd||0)*rate()).toFixed(2) : r.tokens; });
+    if(charts.history) charts.history.destroy();
+    charts.history = new Chart(canvas, {type:'bar',
+      data:{labels:labels, datasets:[{
+        label: showCost ? t('chart_cost_label') : t('th_tokens'),
+        data: data, backgroundColor:P.accent, borderRadius:4}]},
+      options:{responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false}, title:{display:true,
+          text: (showCost ? 'Cost' : 'Tokens') + ' per ' + period, font:{size:12.5,weight:'600'}, color:P.text}},
+        scales:{y:{beginAtZero:true, grid:{color:P.grid}}, x:{grid:{display:false}}}}});
+  } catch(e){
+    chartFallback('ch_history', 'Burn per period');
+  }
+}
+
+function renderHistTable(rows, period, showCost){
+  var tb = document.querySelector('#t_history tbody');
+  if(!rows.length){ tb.innerHTML = '<tr><td colspan="5" class="small">'+t('nothing_in_period')+'</td></tr>'; return; }
+  tb.innerHTML = rows.slice().reverse().map(function(r){
+    var cost = showCost ? money(r.cost_usd||0) : '<span class="small">'+esc(r.cost_note||'tokens only until v0.3')+'</span>';
+    return '<tr><td>'+esc(histPeriodLabel(period, r.key))+'</td><td>'+n(r.sessions)+'</td>'
+      + '<td>'+n(r.turns)+'</td><td>'+tok(r.tokens)+'</td><td>'+cost+'</td></tr>';
+  }).join('');
+}
+
+function renderHistory(){
+  var empty = document.getElementById('h_empty');
+  if(typeof window.bmHistory !== 'function'){
+    empty.classList.remove('hidden');
+    empty.textContent = 'History needs the BurnMon app window; a saved report has no live store to query.';
+    document.getElementById('h_totals').innerHTML = '';
+    document.querySelector('#t_history tbody').innerHTML = '';
+    return;
+  }
+  empty.classList.add('hidden');
+  var range = histRangeDates();
+  var filter = {period: UI_HIST.period, from: range.from, to: range.to, vendor: UI_HIST.vendor, owner: UI_HIST.owner};
+  Promise.resolve(window.bmHistory(filter)).then(function(payload){
+    buildHistFilterOptions(payload);
+    var showCost = payload.totals.cost_usd != null;
+    renderHistTotals(payload.totals);
+    drawHistoryChart(payload.rows||[], UI_HIST.period, showCost);
+    renderHistTable(payload.rows||[], UI_HIST.period, showCost);
+    writeHistHash();
+  }).catch(function(e){
+    empty.classList.remove('hidden');
+    empty.textContent = 'Could not read history: ' + (e && e.message ? e.message : String(e));
+  });
+}
+
+['h_period','h_range','h_vendor','h_owner'].forEach(function(id){
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('change', function(){
+    UI_HIST.period = document.getElementById('h_period').value;
+    UI_HIST.range = document.getElementById('h_range').value;
+    UI_HIST.vendor = document.getElementById('h_vendor').value;
+    UI_HIST.owner = document.getElementById('h_owner').value;
+    document.getElementById('h_custom_wrap').classList.toggle('hidden', UI_HIST.range !== 'custom');
+    renderHistory();
+  });
+});
+['h_from','h_to'].forEach(function(id){
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('change', function(){
+    UI_HIST.from = document.getElementById('h_from').value;
+    UI_HIST.to = document.getElementById('h_to').value;
+    renderHistory();
+  });
+});
+parseHistHash();
+
 // ---------- wiring ----------
 function renderAll(){
   // Each stage runs independently: one broken stage (e.g. a chart library that
   // failed to load) must not blank out the tables that come after it.
-  [renderStamp, renderSubtitle, renderOverview, renderPeriods, renderSessions, renderTools, renderBasisDetail].forEach(function(fn){
+  [renderStamp, renderSubtitle, renderOverview, renderSessions, renderTools, renderBasisDetail].forEach(function(fn){
     try { fn(); } catch(e){ console.error('claude-cost-user render stage failed:', fn.name, e); }
   });
 }
@@ -1451,6 +1591,9 @@ function showTab(id){
   }
   if(id === 'now'){
     try{ pollNow(); }catch(e){}
+  }
+  if(id === 'history'){
+    try{ renderHistory(); }catch(e){}
   }
   return id;
 }
@@ -1501,10 +1644,15 @@ window.addEventListener('mouseup', function(e){
 updateTabBackBtn();
 // Deep links (#now, #history, #sessions, #tools, #about): read once at load,
 // same in-memory back stack otherwise, per the note above on why this never
-// writes to location.hash on navigation.
+// writes to location.hash on navigation. History (v0.2 P2) is the one
+// exception: its own filter state rides after a "?" on the #history hash
+// (parseHistHash, written back by writeHistHash via history.replaceState,
+// never pushState, so it still never triggers a navigation or reload); the
+// tab id itself is always the part before that "?".
 (function(){
   var h = (window.location.hash || '').slice(1);
-  if(TAB_IDS.indexOf(h) !== -1 && h !== currentTab()) showTab(h);
+  var tabID = h.split('?')[0];
+  if(TAB_IDS.indexOf(tabID) !== -1 && tabID !== currentTab()) showTab(tabID);
 })();
 
 document.getElementById('cur').value = UI.cur;
