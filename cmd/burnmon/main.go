@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"burnmon/internal/adapter/codex"
+	"burnmon/internal/adapter/copilotcli"
 	"burnmon/internal/adapter/hermes"
 	"burnmon/internal/dataset"
 	"burnmon/internal/history"
@@ -241,6 +242,7 @@ func main() {
 	a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)
 	a.startLiveWatch(nativeClaudeRoots, nativeCodexRoots)
 	startHermesPoll(a, st)
+	startCopilotCLIPoll(a, st)
 
 	// First collection happens off the UI goroutine so the page already on
 	// screen (warming or the stale dashboard) can paint immediately. With a
@@ -594,6 +596,43 @@ func startHermesPoll(a *app, st *store.Store) {
 			}
 			if err := st.UpsertEvents(events); err != nil {
 				log.Println("hermes poll: upsert:", err)
+			}
+		}
+	}()
+}
+
+// startCopilotCLIPoll starts A2's 5-second Copilot CLI poll, a no-op if no
+// Copilot CLI install is found (DefaultDBPath returns ""). Same shape as
+// startHermesPoll for the same reason: session-store.db is a SQLite WAL
+// file, not a .jsonl trail, so it does not fit watch.Watcher's
+// fsnotify-plus-offset design; PollOnce needs no cursor either, since it
+// always returns every session's current latest-row totals and the store's
+// own upsert skips a no-op write when a session has not grown.
+func startCopilotCLIPoll(a *app, st *store.Store) {
+	dbPath := copilotcli.DefaultDBPath()
+	if dbPath == "" {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			events, err := copilotcli.PollOnce(dbPath)
+			if err != nil {
+				log.Println("copilot cli poll:", err)
+				continue
+			}
+			if len(events) == 0 {
+				continue
+			}
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			for i := range events {
+				events[i].Owner = cfg.OwnerFor(events[i].Project)
+			}
+			if err := st.UpsertEvents(events); err != nil {
+				log.Println("copilot cli poll: upsert:", err)
 			}
 		}
 	}()

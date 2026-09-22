@@ -2,6 +2,62 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 43B: Copilot CLI adapter, OTel check (A2, A3)
+
+A2 killed the plan's assumption on Wilco's live install (COPILOT_HOME `~/.copilot`,
+Copilot CLI running, PID observed live) plus the three fixture sessions he recorded
+today under `cwd = C:\ZND\projects\burnmon\testdata\copilot`, on two separate counts.
+First, the file: there is no `data.db`; the store is `session-store.db` (+ `-wal`/`-shm`,
+WAL mode). Second, the timing: usage is not written once at session close; table
+`assistant_usage_events(session_id, turn_index, model, input_tokens, output_tokens,
+cache_read_tokens, cache_write_tokens, reasoning_tokens, total_nano_aiu, created_at, ...)`
+gets one row per API call, seconds apart, while the turn is in progress (57 rows over
+~30 minutes of one real conversation, watched mid-run). Neither `sessions(id, cwd,
+repository, host_type, branch, summary, created_at, updated_at)` nor `turns` nor
+`session-state\<uuid>\workspace.yaml` carries an `ended_at`, `status` or `closed`
+column: "session closed" is not a fact this store records at all. `input_tokens` and
+`cache_read_tokens` grow monotonically per call within a session (the conversation's
+own growing context, same shape as Codex's cumulative counters), so per-session
+aggregation is last-row-wins, not a sum. Put this to Wilco as an open choice (the A2
+build instruction's "totals at session end" framing was entirely premised on the killed
+assumption); he chose to build it like Hermes instead: `internal\adapter\copilotcli`
+(`PollOnce`, `DefaultDBPath`) polls `session-store.db` read-only every 5 seconds (wired
+in `cmd\burnmon\main.go`'s new `startCopilotCLIPoll`, same shape as
+`startHermesPoll`), emits one Event per session from a correlated-subquery "latest row"
+per `session_id`, `RequestID` fixed to the session id for the store's upsert, `At` set
+to that row's own `created_at` (a real recent timestamp while active, not a "now"
+substitute) so `internal/live`'s existing generic last-event-recency window decides
+running vs finished exactly as it does for every other adapter, no adapter-side "wait
+for close" logic. Vendor/agent/surface `github`/`copilot-cli`/`cli` and the display
+label "Copilot CLI" were already wired in `vendorstrip.AgentLabel` and
+`history.AgentLabel` from earlier v0.2 work, needing no change. Fixture:
+`testdata\copilot\copilot_fixture.db`, the three real sessions' `sessions` and
+`assistant_usage_events` rows only (no `turns`, which carries real message text), built
+from a live copy with a one-off Go script, not committed source.
+
+A3, capped at one hour: GitHub Copilot in VS Code cannot emit OpenTelemetry on this
+laptop's *current* extension set (only `ms-azuretools.vscode-azure-github-copilot`
+shows in `code --list-extensions`, no `GitHub.copilot-chat` there), but Wilco chose to
+test the real thing rather than stop at that; `GitHub.copilot-chat` turned out to
+already be a VS Code 1.138.0 *built-in* (v0.66.0, invisible to `--list-extensions`,
+confirmed by the install command's own conflict error), so no extension install was
+needed. Settings tried (from code.visualstudio.com/docs/agents/guides/monitoring-agents,
+fetched today), added to `%APPDATA%\Code\User\settings.json` and reverted after the
+test: `github.copilot.chat.otel.enabled: true`, `github.copilot.chat.otel.exporterType:
+"file"`, `github.copilot.chat.otel.outfile` pointed at a scratch path, and
+`github.copilot.chat.otel.dbSpanExporter.enabled: true`. `code chat "say hello in one
+word"` against Wilco's already-running VS Code window created the target file
+immediately (extension reacts to the setting) but it stayed at 0 bytes after an 11
+second wait: the CLI's `chat` subcommand only pre-fills the chat panel's input box, it
+does not submit, and getting a real span written needs an interactive send in a signed-
+in chat session. Declined to force that with a synthetic keystroke into Wilco's live,
+multi-window daily editor (out of scope for a one-hour, no-product-code check). Answer
+for the spec's yes/no: not proven yes this session, treated as **no** for the A3 gate
+(Copilot VS Code stays out of v0.3 pending a real confirmation); one further step would
+close it, Wilco re-enabling those four settings and sending one real chat message, then
+asking for the outfile to be checked. `go test ./... -count=1` and `.\build.ps1` both
+green.
+
 ## 2026-09-22, v0.2 43A: markers, ticker, spike drawer (I3 on Now)
 
 Wired every I3 piece onto the Now page from the findings `bmLive` already computes.
