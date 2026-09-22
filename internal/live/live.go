@@ -55,6 +55,11 @@ type Session struct {
 	// grouped, so a running session's re-prefill and compaction findings
 	// are free of any extra store read.
 	Findings []insight.Finding `json:"findings,omitempty"`
+	// Runway is I2's context-runway rule rendered as the Now card's one-line
+	// gauge text (42B): "about N turns to 80%", or "runway unknown" when
+	// insight found no context-runway finding for this session. The marker,
+	// ticker and drawer for every other finding kind stay 43A's job.
+	Runway string `json:"runway"`
 }
 
 // ForecastDay is one day of the Now page's forecast placeholder.
@@ -222,9 +227,10 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 			ContextWindow: window,
 			Tokens:        tokens,
 			Cost:          cost,
-			Findings:      insight.Analyze(turns, cfg),
 			CacheHitRatio: hitRatio,
 		}
+		s.Findings = insight.Analyze(turns, cfg)
+		s.Runway = insight.RunwayText(s.Findings)
 		sessions[g.id] = s
 		runningOrder = append(runningOrder, g.id)
 		if p := turns[0].ParentID; p != "" {

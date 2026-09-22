@@ -8,6 +8,7 @@ package insight
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -19,8 +20,10 @@ import (
 type Kind string
 
 const (
-	KindReprefill  Kind = "re-prefill"
-	KindCompaction Kind = "compaction"
+	KindReprefill     Kind = "re-prefill"
+	KindCompaction    Kind = "compaction"
+	KindContextRunway Kind = "context-runway"
+	KindExpensiveTurn Kind = "expensive-turn"
 )
 
 // Finding is one thing insight noticed about one turn of one session.
@@ -37,6 +40,15 @@ type Finding struct {
 // than this between consecutive turns, while the session continues. Not
 // configurable in v0.2, unlike the re-prefill threshold, per the spec.
 const compactionDropRatio = 0.30
+
+// runwayFitTurns is how many of the session's most recent turns
+// context-runway fits its line over, per the spec ("a linear fit over the
+// last 10 turns of context size").
+const runwayFitTurns = 10
+
+// expensiveTurnPercentile is expensive-turn's threshold: a turn whose total
+// tokens land strictly above this percentile of the session's own turns.
+const expensiveTurnPercentile = 0.95
 
 // isTurn reports whether e is a real API-call turn rather than the claude
 // adapter's synthetic tool-only event. Mirrors internal/live's own isTurn
@@ -135,6 +147,11 @@ func Analyze(events []schema.Event, cfg *pricing.Config) []Finding {
 		})
 	}
 
+	if f := contextRunway(turns, cfg); f != nil {
+		findings = append(findings, *f)
+	}
+	findings = append(findings, expensiveTurns(turns)...)
+
 	sort.SliceStable(findings, func(i, j int) bool {
 		if findings[i].Turn != findings[j].Turn {
 			return findings[i].Turn < findings[j].Turn
@@ -142,6 +159,175 @@ func Analyze(events []schema.Event, cfg *pricing.Config) []Finding {
 		return findings[i].Kind < findings[j].Kind
 	})
 	return findings
+}
+
+// contextRunway implements I2's context-runway rule: a linear fit over the
+// session's last runwayFitTurns turns' context size, reporting turns to 80%
+// and 90% of the model's context window. Returns nil, not a Finding, when
+// the window is unknown, fewer than two turns exist to fit a line over, or
+// the fit's slope is zero or negative (a shrinking or flat session has no
+// runway to report); RunwayText renders that absence as "runway unknown" for
+// the Now card.
+func contextRunway(turns []schema.Event, cfg *pricing.Config) *Finding {
+	last := turns[len(turns)-1]
+	window, ok := cfg.ContextWindow(last.Model)
+	if !ok || window <= 0 {
+		return nil
+	}
+	from := len(turns) - runwayFitTurns
+	if from < 0 {
+		from = 0
+	}
+	sample := turns[from:]
+	if len(sample) < 2 {
+		return nil
+	}
+	y := make([]float64, len(sample))
+	for i, e := range sample {
+		y[i] = float64(contextOf(e))
+	}
+	slope, intercept := linearFit(y)
+	if slope <= 0 {
+		return nil
+	}
+	lastX := float64(len(y) - 1)
+	turnsTo80 := turnsToTarget(0.8*float64(window), slope, intercept, lastX)
+	turnsTo90 := turnsToTarget(0.9*float64(window), slope, intercept, lastX)
+	return &Finding{
+		Kind: KindContextRunway,
+		Turn: len(turns),
+		At:   last.At,
+		Evidence: map[string]float64{
+			"slope":       slope,
+			"window":      float64(window),
+			"turns_to_80": turnsTo80,
+			"turns_to_90": turnsTo90,
+		},
+		Cause:      fmt.Sprintf("about %d turns to 80%% of the window", int64(turnsTo80)),
+		Confidence: 0.6,
+	}
+}
+
+// linearFit is ordinary least squares over y against its own index (0, 1,
+// 2, ...), returning the fitted slope and intercept.
+func linearFit(y []float64) (slope, intercept float64) {
+	n := float64(len(y))
+	var sumX, sumY, sumXY, sumXX float64
+	for i, v := range y {
+		x := float64(i)
+		sumX += x
+		sumY += v
+		sumXY += x * v
+		sumXX += x * x
+	}
+	denom := n*sumXX - sumX*sumX
+	if denom == 0 {
+		return 0, sumY / n
+	}
+	slope = (n*sumXY - sumX*sumY) / denom
+	intercept = (sumY - slope*sumX) / n
+	return slope, intercept
+}
+
+// turnsToTarget returns how many turns past lastX the fit line (slope,
+// intercept) needs to reach target, floored at zero when the fit already
+// meets or exceeds it.
+func turnsToTarget(target, slope, intercept, lastX float64) float64 {
+	current := intercept + slope*lastX
+	if current >= target {
+		return 0
+	}
+	turns := math.Ceil((target - current) / slope)
+	if turns < 0 {
+		turns = 0
+	}
+	return turns
+}
+
+// RunwayText renders the Now card's one-line context-runway gauge: the
+// context-runway finding's Cause when Analyze found one for this session, or
+// "runway unknown" when it did not (window unknown, fewer than two turns, or
+// a zero-or-negative fit slope).
+func RunwayText(findings []Finding) string {
+	for _, f := range findings {
+		if f.Kind == KindContextRunway {
+			return f.Cause
+		}
+	}
+	return "runway unknown"
+}
+
+// expensiveTurns implements I2's expensive-turn rule: a turn whose total
+// tokens (fresh + cache write + cache read + output) land strictly above the
+// expensiveTurnPercentile (nearest-rank) of the session's own turns, with
+// the dominant token class flagged in Evidence. Needs at least two turns; a
+// session too small to have a meaningful percentile reports nothing.
+func expensiveTurns(turns []schema.Event) []Finding {
+	if len(turns) < 2 {
+		return nil
+	}
+	totals := make([]float64, len(turns))
+	for i, e := range turns {
+		totals[i] = float64(turnTotal(e))
+	}
+	sorted := append([]float64(nil), totals...)
+	sort.Float64s(sorted)
+	rank := int(math.Ceil(expensiveTurnPercentile * float64(len(sorted))))
+	if rank < 1 {
+		rank = 1
+	}
+	if rank > len(sorted) {
+		rank = len(sorted)
+	}
+	p95 := sorted[rank-1]
+
+	var findings []Finding
+	for i, e := range turns {
+		if totals[i] <= p95 {
+			continue
+		}
+		fresh := float64(e.Input)
+		cw := float64(cacheWriteOf(e))
+		cr := float64(cacheReadOf(e))
+		out := float64(e.Output)
+		class, amount := "fresh", fresh
+		for name, v := range map[string]float64{"cache_write": cw, "cache_read": cr, "output": out} {
+			if v > amount {
+				class, amount = name, v
+			}
+		}
+		evidence := map[string]float64{
+			"fresh":       fresh,
+			"cache_write": cw,
+			"cache_read":  cr,
+			"output":      out,
+			"total":       totals[i],
+			"p95":         p95,
+			"dominant_" + class: 1,
+		}
+		findings = append(findings, Finding{
+			Kind:     KindExpensiveTurn,
+			Turn:     i + 1,
+			At:       e.At,
+			Evidence: evidence,
+			Cause: fmt.Sprintf("turn total %d tokens exceeds session p95 %d, dominated by %s",
+				int64(totals[i]), int64(p95), class),
+			Confidence: 1.0,
+		})
+	}
+	return findings
+}
+
+// turnTotal is one turn's whole token count across every class.
+func turnTotal(e schema.Event) int64 {
+	return e.Input + cacheWriteOf(e) + cacheReadOf(e) + e.Output
+}
+
+func cacheReadOf(e schema.Event) int64 {
+	if e.CacheRead != nil {
+		return *e.CacheRead
+	}
+	return 0
 }
 
 // reprefillCause implements I2's fixed inference order: compaction just

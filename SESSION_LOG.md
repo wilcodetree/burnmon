@@ -2,6 +2,53 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 42B: context runway, expensive turn (I2 part 2)
+
+Two more `internal/insight` rules, both computed fresh per `Analyze` call, no store
+writes. `context-runway`: an ordinary least-squares fit over the last 10 turns' context
+size (fresh + cache write + cache read) against turn index; reports `turns_to_80` and
+`turns_to_90` in `Evidence` and a `Cause` like "about 10 turns to 80% of the window". No
+finding at all (not a finding with an "unknown" cause) when the model's context window
+has no price-book entry, fewer than two turns exist to fit, or the fit's slope is zero or
+negative: `insight.RunwayText(findings)` renders that absence as "runway unknown" for the
+Now card, and a positive-slope finding's own `Cause` otherwise. `expensive-turn`: a turn
+whose total tokens land strictly above the nearest-rank 95th percentile of the session's
+own per-turn totals, with the largest of its four token classes (fresh, cache write,
+cache read, output) flagged `dominant_<class>: 1` in `Evidence` (the map is
+`map[string]float64`, so the class name lives in the key, not a value) and named in
+`Cause`. Open choice resolved with Wilco rather than guessed: the spec's "95th percentile
+of the session's turn cost or tokens" is ambiguous between the two; picked tokens, since
+it needs no `pricing.Config` model-family lookup and matches `re-prefill`'s own
+token-threshold shape, over cost, which is undefined for an unpriced model and would
+couple `insight` to `internal/live`'s cost logic a second time.
+
+Wired the `context-runway` line onto the Now card only (42B's scope; the marker, ticker,
+drawer and Sessions-tab display of every finding kind, `context-runway` and
+`expensive-turn` included, stay 43A): `live.Session` gained a `Runway string` field, set
+from `insight.RunwayText(s.Findings)` right after `Findings` itself in `BuildSnapshot`,
+and `internal/report/template.html`'s `sessionCardHTML` prints it as one more `.small`
+line under the turn/last-turn line.
+
+Five pre-existing `internal/insight` tests (`TestAnalyze_Reprefill_ModelChangedCause`,
+`_GapCause`, `_UnknownCause`, `TestAnalyze_NoFindings`,
+`TestAnalyze_SyntheticToolOnlyEventsIgnored`) used fixtures whose context grows turn over
+turn with a known window, which now legitimately also trips `context-runway`; changed
+their assertions to filter by kind (`reprefillsOnly`, `alertsOnly`) rather than asserting
+on the bare finding count, since the new rule firing alongside them is correct, not a
+regression.
+
+Measured `bmLive`'s per-poll cost with all four I2 rules against Wilco's real local
+store (`store.DefaultPath()`, built this session from his actual Claude Code transcripts
+via `burnmon-cli.exe`): 1,858 sessions, 51,563 events, 6,295 findings total. Best of 3
+full passes: 7.7 microseconds average per session, 2.05 ms worst case (an 11-event
+session, not the largest one; the first, cold pass showed one 9.65 ms outlier on a
+different 95-event session that a warm-up pass and a best-of-3 both erased, read as GC
+scheduling noise rather than a real cost). Comfortably inside the 5 ms-per-session budget
+`TestAnalyze_UnderFiveMillisecondsPerSession` already asserts on a synthetic 2,000-event
+marathon.
+
+`go test ./... -count=1` and `.\build.ps1` both green.
+
 ## 2026-09-22, v0.2 42A: insight package, re-prefill, compaction (I1, I2 part 1)
 
 New package `internal\insight`, no HTML and no store writes per I1: `Analyze(events

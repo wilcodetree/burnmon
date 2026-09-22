@@ -1133,6 +1133,7 @@ function sessionCardHTML(s, isSub){
     + gaugeHtml
     + '<div class="small">'+tok(s.tokens)+' tokens this session &middot; '+money(s.cost||0)+' &middot; cache hit '+Math.round((s.cache_hit_ratio||0)*100)+'%</div>'
     + '<div class="small">turn '+n(s.turn_count||0)+' &middot; last turn '+relTimeFrom(s.last_turn)+'</div>'
+    + '<div class="small">'+esc(s.runway||'runway unknown')+'</div>'
     + subHtml
     + '</div>';
 }
