@@ -1,5 +1,3 @@
-// internal\schema\event.go
-
 // Package schema defines the vendor-agnostic Event, the one shape every
 // adapter (Claude, Codex, ...) parses its own transcripts into before they
 // land in the store.
@@ -8,13 +6,14 @@ package schema
 import "time"
 
 // Event is one API call turn from any supported vendor. RequestID together
-// with Vendor is the store's dedup key: "largest output wins" on upsert.
+// with Vendor and SessionID is the store's dedup key: "largest output wins"
+// on upsert.
 type Event struct {
 	Vendor    string // "anthropic", "openai", "github", "nous"
 	Agent     string // "claude-code", "cowork", "codex", "copilot-cli", "hermes"
 	Surface   string // "cli", "vscode", "desktop", "code_agent", "unknown"
 	SessionID string
-	RequestID string // dedup key together with Vendor; Codex: session id + turn index
+	RequestID string // dedup key together with Vendor and SessionID; Codex: session id + turn index
 	ParentID  string // Claude subagent's parent session id, else ""
 	At        time.Time // UTC
 	Model     string

@@ -47,8 +47,11 @@ func TestSessionsFromEventsAggregatesOneSession(t *testing.T) {
 	if s.Tools["Read"] != 2 {
 		t.Fatalf("Tools[Read] = %d, want 2", s.Tools["Read"])
 	}
-	if s.Start != "2026-09-10T10:00:00Z" && s.Start[:10] != "2026-09-10" {
-		t.Fatalf("Start = %q, want to begin 2026-09-10", s.Start)
+	if s.Start != "2026-09-10T10:00:00.000Z" {
+		t.Fatalf("Start = %q, want 2026-09-10T10:00:00.000Z", s.Start)
+	}
+	if s.End != "2026-09-11T09:00:00.000Z" {
+		t.Fatalf("End = %q, want 2026-09-11T09:00:00.000Z", s.End)
 	}
 }
 

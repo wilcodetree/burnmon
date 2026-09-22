@@ -689,7 +689,7 @@ function monthLabel(k){
   var p = k.split('-'), names = MONTH_NAMES[UI.lang] || MONTH_NAMES.en;
   return names[parseInt(p[1],10)-1] + ' ' + p[0];
 }
-var SHORT = {cowork:'Cowork', code:'Code', code_agent:'Code agent', chat:'Chat'};
+var SHORT = {cli:'Code', code_agent:'Code agent', desktop:'Desktop'};
 function shortSurface(k){ return SHORT[k] || (SL[k]||k).replace('Claude ',''); }
 function topOf(obj, field){
   var best = null, keys = Object.keys(obj||{});

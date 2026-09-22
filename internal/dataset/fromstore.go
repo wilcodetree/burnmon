@@ -1,6 +1,7 @@
 package dataset
 
 import (
+	"math"
 	"sort"
 
 	"burnmon/internal/pricing"
@@ -42,8 +43,7 @@ func SessionsFromEvents(events []schema.Event, cfg *pricing.Config) []*scan.Sess
 }
 
 func round6f(x float64) float64 {
-	const scale = 1e6
-	return float64(int64(x*scale+0.5)) / scale
+	return math.Round(x*1e6) / 1e6
 }
 
 // buildSession is ParseSession's old tail loop

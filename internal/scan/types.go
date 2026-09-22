@@ -1,5 +1,3 @@
-// internal\scan\types.go
-
 package scan
 
 import "strings"

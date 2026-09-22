@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -20,6 +21,15 @@ import (
 type Store struct {
 	db *sql.DB
 }
+
+// SchemaVersion is the current events/cursors schema. Open bumps a
+// mismatched database back to it by dropping and recreating events and
+// cursors (never meta): Step 1's events are cheaply re-derivable from the
+// transcript files on disk, so a rebuild-from-scratch recovery is
+// acceptable and simpler than a real migration.
+const SchemaVersion = "1"
+
+const schemaVersionKey = "schema_version"
 
 const schemaDDL = `
 CREATE TABLE IF NOT EXISTS events (
@@ -78,7 +88,38 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("store: migrate %s: %w", path, err)
 	}
-	return &Store{db: db}, nil
+	s := &Store{db: db}
+	if err := s.ensureSchemaVersion(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("store: schema version %s: %w", path, err)
+	}
+	return s, nil
+}
+
+// ensureSchemaVersion writes SchemaVersion into meta when absent (a fresh
+// database), or, on a mismatch (an older code version's database), drops
+// and recreates events and cursors so they get rebuilt from the transcript
+// files on the next ingest, then records the current version.
+func (s *Store) ensureSchemaVersion() error {
+	v, ok, err := s.Meta(schemaVersionKey)
+	if err != nil {
+		return err
+	}
+	if ok && v == SchemaVersion {
+		return nil
+	}
+	if ok && v != SchemaVersion {
+		if _, err := s.db.Exec(`DROP TABLE IF EXISTS events`); err != nil {
+			return fmt.Errorf("drop events: %w", err)
+		}
+		if _, err := s.db.Exec(`DROP TABLE IF EXISTS cursors`); err != nil {
+			return fmt.Errorf("drop cursors: %w", err)
+		}
+		if _, err := s.db.Exec(schemaDDL); err != nil {
+			return fmt.Errorf("recreate: %w", err)
+		}
+	}
+	return s.SetMeta(schemaVersionKey, SchemaVersion)
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -250,6 +291,71 @@ INSERT INTO cursors (path, offset, mtime, size) VALUES (?, ?, ?, ?)
 ON CONFLICT (path) DO UPDATE SET offset = excluded.offset, mtime = excluded.mtime, size = excluded.size`,
 		path, offset, mtime.UTC().Format(time.RFC3339Nano), size)
 	return err
+}
+
+// DeleteEventsForOtherPaths removes every stored event and cursor whose
+// source transcript is not in keepPaths. burnmon reconstructs SessionID
+// from a transcript's filename, but events carry no source-path column, so
+// pruning by session id here would risk dropping a live session that
+// merely shares an id pattern; instead the caller (dataset.ingest) is
+// expected to pass every currently-resolved file path, and pruning targets
+// cursors, whose path IS the source file, one-for-one with the events that
+// file produced (same SessionID as its filename, per the claude adapter).
+// A transcript that no longer exists (deleted, renamed, moved) therefore
+// has its cursor removed here, and its events removed by SessionID in the
+// same call, so it stops contributing to every future report.
+func (s *Store) DeleteEventsForOtherPaths(keepPaths []string) error {
+	rows, err := s.db.Query(`SELECT path FROM cursors`)
+	if err != nil {
+		return fmt.Errorf("store: list cursor paths: %w", err)
+	}
+	keep := make(map[string]bool, len(keepPaths))
+	for _, p := range keepPaths {
+		keep[p] = true
+	}
+	var stale []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			rows.Close()
+			return fmt.Errorf("store: scan cursor path: %w", err)
+		}
+		if !keep[p] {
+			stale = append(stale, p)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("store: list cursor paths: %w", err)
+	}
+	rows.Close()
+	if len(stale) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, p := range stale {
+		sessionID := sessionIDFromPath(p)
+		if sessionID != "" {
+			if _, err := tx.Exec(`DELETE FROM events WHERE session_id = ?`, sessionID); err != nil {
+				return fmt.Errorf("store: delete events for %s: %w", p, err)
+			}
+		}
+		if _, err := tx.Exec(`DELETE FROM cursors WHERE path = ?`, p); err != nil {
+			return fmt.Errorf("store: delete cursor for %s: %w", p, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// sessionIDFromPath mirrors the claude adapter's own session id derivation
+// (the transcript file's base name, extension stripped).
+func sessionIDFromPath(path string) string {
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 func (s *Store) Meta(key string) (string, bool, error) {

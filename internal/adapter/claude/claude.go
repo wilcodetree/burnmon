@@ -165,13 +165,22 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 	toolCounts := map[string]map[string]int64{}
 
 	offset := from
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	reader := bufio.NewReader(f)
 	rowIdx := 0
-	for scanner.Scan() {
-		lineBytes := scanner.Bytes()
-		lineLen := int64(len(lineBytes)) + 1 // + the newline the scanner stripped
-		line := strings.TrimSpace(string(lineBytes))
+	for {
+		rawLine, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			if readErr == io.EOF {
+				// Either nothing left, or a trailing partial line (the file
+				// is still being written). Either way it was not
+				// newline-terminated, so it is not a complete line: leave it
+				// unprocessed and do not advance offset past it.
+				break
+			}
+			return nil, from, readErr
+		}
+		lineLen := int64(len(rawLine))
+		line := strings.TrimSpace(rawLine)
 		if line == "" {
 			offset += lineLen
 			continue
@@ -269,9 +278,6 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 		} else if t.o >= prev.o {
 			calls[key] = t
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, from, err
 	}
 
 	surface := classifySurface(path, cwd)

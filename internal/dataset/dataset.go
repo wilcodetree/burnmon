@@ -402,10 +402,13 @@ func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool
 			continue // fully read already, nothing new
 		}
 		startOffset := offset
-		if !ok || forceFull || !mtime.Equal(fi.ModTime()) && fi.Size() < size {
+		if !ok || forceFull || (!mtime.Equal(fi.ModTime()) && fi.Size() < size) || offset > fi.Size() {
 			// File shrank or its mtime moved backward relative to what the
-			// cursor recorded: it was rewritten, not appended to. Re-read
-			// from the start rather than trust a now-meaningless offset.
+			// cursor recorded: it was rewritten, not appended to. Or the
+			// stored offset is already past the real file size (a cursor
+			// corrupted by the pre-fix trailing-partial-line bug). Either
+			// way, re-read from the start rather than trust a now-meaningless
+			// offset.
 			startOffset = 0
 		}
 		events, newOffset, err := a.Parse(f, startOffset)
@@ -474,6 +477,12 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 		}
 	}
 	if err := c.ingest(files, trustSlow, opts.ForceFull, progress); err != nil {
+		return Payload{}, err
+	}
+	// A transcript that no longer exists on disk (deleted, renamed, moved)
+	// must not keep contributing its session to every future report; v0.0.1's
+	// gob cache pruned the same way on every save.
+	if err := c.Store.DeleteEventsForOtherPaths(files); err != nil {
 		return Payload{}, err
 	}
 

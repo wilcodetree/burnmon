@@ -176,6 +176,11 @@ func main() {
 	}
 	defer st.Close()
 
+	// Best-effort cleanup of the old gob-based parse cache, replaced by the
+	// SQLite store above; ignore any error, missing is the expected case on
+	// every run after the first.
+	_ = os.Remove(filepath.Join(dataDir, "parsecache.gob"))
+
 	a := &app{
 		cfg:         cfg,
 		seat:        effectiveSeat,

@@ -98,6 +98,11 @@ func run() int {
 	}
 	defer st.Close()
 
+	// Best-effort cleanup of the old gob-based parse cache, replaced by the
+	// SQLite store above; ignore any error, missing is the expected case on
+	// every run after the first.
+	_ = os.Remove(filepath.Join(filepath.Dir(storePath), "parsecache.gob"))
+
 	cache := dataset.Cache{Store: st}
 	progress := func(done, total int) {
 		if *quiet {
