@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -121,21 +120,18 @@ func asInt(v any) int64 {
 	return 0
 }
 
-func round6(x float64) float64 { return math.Round(x*1e6) / 1e6 }
-
-// toolGroup mirrors scan.ToolGroup's Skill re-tagging: a Skill tool call's
-// own name is "Skill" for every skill, the real skill sits in the input. A
-// tool_use block whose name already carries a "skill:" prefix (a
-// pre-tagged trail line) is normalized to the bare skill name, the same
-// shape a "Skill" call's input resolves to.
+// skillTag mirrors scan.ToolGroup's Skill re-tagging: a Skill tool call's
+// own name is "Skill" for every skill, the real skill sits in the input.
+// It re-tags to "skill:"+name, keeping the prefix; scan.ToolGroup strips
+// it later, at report-aggregation time, not here.
 func skillTag(name string, input map[string]any) string {
-	if name == "Skill" {
-		if sk, ok := input["skill"].(string); ok && sk != "" {
-			return sk
-		}
+	if name != "Skill" {
 		return name
 	}
-	return strings.TrimPrefix(name, "skill:")
+	if sk, ok := input["skill"].(string); ok && sk != "" {
+		return "skill:" + sk
+	}
+	return name
 }
 
 // Parse reads path from byte offset from to EOF and returns one Event per
@@ -163,7 +159,6 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 		ts                       string
 		model                    string
 		fresh, cacheW, cacheR, o int64
-		hasCache                 bool
 	}
 	calls := map[string]*turn{}
 	var order []string

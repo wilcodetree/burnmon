@@ -54,8 +54,8 @@ func TestParseBasicFixture(t *testing.T) {
 			if e.CacheRead == nil || *e.CacheRead != 5 {
 				t.Fatalf("req-2 CacheRead = %v, want 5", e.CacheRead)
 			}
-			if e.Tools["graphify"] != 1 {
-				t.Fatalf("req-2 Tools[graphify] = %d, want 1 (skill: prefix stripped)", e.Tools["graphify"])
+			if e.Tools["skill:graphify"] != 1 {
+				t.Fatalf("req-2 Tools[skill:graphify] = %d, want 1 (prefix kept until report-aggregation time)", e.Tools["skill:graphify"])
 			}
 		default:
 			t.Fatalf("unexpected RequestID %q", e.RequestID)
