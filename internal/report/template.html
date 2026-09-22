@@ -468,6 +468,13 @@ var SUB = D.subscription || {};
 
 var SL = D.surface_labels || {};
 var charts = {};
+// nowChart holds drawNowChart's state across polls (F8, SESSION_LOG.md,
+// v0.1.2): the Now chart is one Chart.js instance for the life of the page,
+// so per-session dataset objects, colors and the smoothed axis maxima have
+// to live outside the function to survive from one 2-second poll to the
+// next, unlike every other chart on this page, which is still destroyed
+// and rebuilt on each renderAll().
+var nowChart = {datasetById:{}, colorBySession:{}, nextColorIdx:0, tokenMax:0, costMax:0, costDataset:null};
 
 // ---------- theme ----------
 function chartPalette(){
@@ -1326,15 +1333,26 @@ function sessionChartLabel(s){
 }
 
 // drawNowChart renders the Now page's fixed 30-minute, 10-second-bucket,
-// 180-slot running chart (F3): chart is already dense (every slot present,
-// zero when empty) and in windowStart/bucketSeconds order from the backend,
-// so this only maps it onto Chart.js, it never re-derives slots. One
+// 180-slot running chart: chart is already dense (every slot present, zero
+// when empty) and in windowStart/bucketSeconds order from the backend, and
+// already slides forward on its own every poll (F3), so this only maps it
+// onto Chart.js, it never re-derives slots or moves the window itself. One
 // stacked bar series per session (colored by session, labeled agent ·
-// model · project basename, raw id only in the tooltip), a cost/bucket
-// line on its own right-axis scale, and both axes recomputed to this
-// window's own peak on every call (drawNowChart runs on every 2-second
-// poll and always destroys+rebuilds the Chart.js instance, so "recomputed
-// every poll" falls out of that rather than needing separate machinery).
+// model · project basename, raw id only in the tooltip), a cost/bucket line
+// on its own right-axis scale.
+//
+// F8 (SESSION_LOG.md, v0.1.2): replaces v0.1.1 F3's "destroy and rebuild
+// every poll, axis recomputed from the raw window peak", which produced a
+// visible jump on every 2-second tick. charts.now is now created once and
+// updated in place (nowChart, module scope, carries its state between
+// calls): bar datasets are kept one per session id across polls rather than
+// rebuilt from a fresh array, so a session already on screen animates via
+// Chart.js's own update() transition instead of popping to a new value, and
+// the y/cost axis maxima are smoothed (grow instantly to a new peak, decay
+// 5% per poll once it leaves the window) instead of snapping to this
+// window's raw peak. Known trade-off of no longer destroying the chart
+// every poll: a theme toggle no longer repaints its existing bars/grid
+// until a full page reload, unlike every other chart on this page.
 function drawNowChart(chart, sessions){
   if(typeof Chart === 'undefined'){ chartFallback('ch_now', 'Live burn'); return; }
   chart = chart || [];
@@ -1362,51 +1380,102 @@ function drawNowChart(chart, sessions){
     var costPeak = 0;
     chart.forEach(function(b){ var c = (b.cost||0)*rate(); if(c > costPeak) costPeak = c; });
 
-    var datasets = sessionIds.map(function(id, i){
-      var s = byId[id];
-      return {type:'bar', label: s ? sessionChartLabel(s) : 'recent session', stack:'tokens', yAxisID:'y',
-        sessionId: id,
-        data: chart.map(function(b){
-          var v = (b.by_session||{})[id];
-          return v ? (v.fresh + v.cache_write + v.cache_read + v.output) : 0;
-        }),
-        classBreakdown: chart.map(function(b){ return (b.by_session||{})[id] || null; }),
-        backgroundColor: colors[i % colors.length]};
+    sessionIds.forEach(function(id){
+      if(!(id in nowChart.colorBySession)){
+        nowChart.colorBySession[id] = colors[nowChart.nextColorIdx % colors.length];
+        nowChart.nextColorIdx++;
+      }
     });
-    datasets.push({type:'line', label:'Cost/10s', yAxisID:'cost', sessionId: null,
-      data: chart.map(function(b){ return +((b.cost||0)*rate()).toFixed(4); }),
-      borderColor: P.blue3, backgroundColor:'transparent', tension:0.25, pointRadius:0});
 
-    if(charts.now) charts.now.destroy();
-    charts.now = new Chart(document.getElementById('ch_now'), {
-      data:{labels:labels, datasets:datasets},
-      options:{responsive:true, maintainAspectRatio:false,
-        scales:{
-          x:{stacked:true, grid:{display:false}, ticks:{font:{size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:9}},
-          // Own-peak scaling (F3): a bucket at the window's peak holds the
-          // axis until it slides out of the 30-minute window, then the next
-          // destroy+rebuild recomputes it from whatever is left.
-          y:{stacked:true, beginAtZero:true, max: tokenPeak > 0 ? tokenPeak*1.1 : undefined, grid:{color:P.grid}},
-          cost:{position:'right', beginAtZero:true, max: costPeak > 0 ? costPeak*1.1 : undefined, grid:{display:false}}
-        },
-        plugins:{
-          legend:{position:'bottom', labels:{font:{size:10}, boxWidth:10}},
-          tooltip:{callbacks:{
-            afterLabel: function(ctx){
-              if(ctx.dataset.type !== 'bar') return [];
-              var lines = [];
-              if(ctx.dataset.sessionId) lines.push('id: '+ctx.dataset.sessionId);
-              var cc = ctx.dataset.classBreakdown && ctx.dataset.classBreakdown[ctx.dataIndex];
-              if(cc){
-                // Token class split inside a bar is tooltip-only in v0.1.1
-                // (F3): a per-class toggle on the bars themselves is v0.2.
-                lines.push('fresh '+tok(cc.fresh)+', cache write '+tok(cc.cache_write)
-                  +', cache read '+tok(cc.cache_read)+', output '+tok(cc.output));
-              }
-              return lines;
-            }
-          }}
-        }}});
+    // Decided (grill, question 12): grows instantly to a new peak, decays
+    // 5% per poll once that peak has left the window, so the scale itself
+    // never jumps, only the bars move (by the chart's own animation).
+    // Tokens carry a 10K floor so a near-idle chart does not zoom in on
+    // noise; cost has no such floor, it settles toward zero with no spend.
+    nowChart.tokenMax = Math.max(tokenPeak*1.1, nowChart.tokenMax*0.95, 10000);
+    nowChart.costMax = Math.max(costPeak*1.1, nowChart.costMax*0.95);
+
+    var barDatasets = sessionIds.map(function(id){
+      var s = byId[id];
+      var data = chart.map(function(b){
+        var v = (b.by_session||{})[id];
+        return v ? (v.fresh + v.cache_write + v.cache_read + v.output) : 0;
+      });
+      var classBreakdown = chart.map(function(b){ return (b.by_session||{})[id] || null; });
+      var label = s ? sessionChartLabel(s) : 'recent session';
+      var ds = nowChart.datasetById[id];
+      if(ds){
+        ds.data = data; ds.classBreakdown = classBreakdown; ds.label = label;
+      } else {
+        ds = {type:'bar', label: label, stack:'tokens', yAxisID:'y', sessionId: id,
+          data: data, classBreakdown: classBreakdown, backgroundColor: nowChart.colorBySession[id]};
+        nowChart.datasetById[id] = ds;
+      }
+      return ds;
+    });
+    // A session that fell out of the 30-minute window stops holding a
+    // dataset, so the legend and stack do not accumulate every session
+    // seen since the page loaded.
+    Object.keys(nowChart.datasetById).forEach(function(id){
+      if(sessionIds.indexOf(id) === -1) delete nowChart.datasetById[id];
+    });
+
+    var costData = chart.map(function(b){ return +((b.cost||0)*rate()).toFixed(4); });
+    if(nowChart.costDataset){
+      nowChart.costDataset.data = costData;
+    } else {
+      nowChart.costDataset = {type:'line', label:'Cost/10s', yAxisID:'cost', sessionId: null,
+        data: costData, borderColor: P.blue3, backgroundColor:'transparent', tension:0.25, pointRadius:0};
+    }
+    var datasets = barDatasets.concat([nowChart.costDataset]);
+
+    // One label per 5 minutes, on the round minute, so only the edge label
+    // changes as the window drifts (decided, grill question 12); every
+    // other slot renders blank rather than being auto-skipped, since the
+    // slot positions themselves keep sliding every poll.
+    var tickCallback = function(value, index){
+      var b = chart[index];
+      if(!b) return '';
+      var d = new Date(b.at);
+      if(isNaN(d.getTime())) return '';
+      return (d.getMinutes() % 5 === 0 && d.getSeconds() === 0) ? localHMS(b.at) : '';
+    };
+
+    var afterLabel = function(ctx){
+      if(ctx.dataset.type !== 'bar') return [];
+      var lines = [];
+      if(ctx.dataset.sessionId) lines.push('id: '+ctx.dataset.sessionId);
+      var cc = ctx.dataset.classBreakdown && ctx.dataset.classBreakdown[ctx.dataIndex];
+      if(cc){
+        // Token class split inside a bar is tooltip-only in v0.1.1 (F3): a
+        // per-class toggle on the bars themselves is v0.2.
+        lines.push('fresh '+tok(cc.fresh)+', cache write '+tok(cc.cache_write)
+          +', cache read '+tok(cc.cache_read)+', output '+tok(cc.output));
+      }
+      return lines;
+    };
+
+    if(!charts.now){
+      charts.now = new Chart(document.getElementById('ch_now'), {
+        data:{labels:labels, datasets:datasets},
+        options:{responsive:true, maintainAspectRatio:false,
+          scales:{
+            x:{stacked:true, grid:{display:false}, ticks:{font:{size:10}, maxRotation:0, autoSkip:false, callback: tickCallback}},
+            y:{stacked:true, beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}},
+            cost:{position:'right', beginAtZero:true, max: nowChart.costMax || undefined, grid:{display:false}}
+          },
+          plugins:{
+            legend:{position:'bottom', labels:{font:{size:10}, boxWidth:10}},
+            tooltip:{callbacks:{afterLabel: afterLabel}}
+          }}});
+    } else {
+      charts.now.data.labels = labels;
+      charts.now.data.datasets = datasets;
+      charts.now.options.scales.x.ticks.callback = tickCallback;
+      charts.now.options.scales.y.max = nowChart.tokenMax;
+      charts.now.options.scales.cost.max = nowChart.costMax || undefined;
+      charts.now.update();
+    }
   } catch(e){
     chartFallback('ch_now', 'Live burn');
   }

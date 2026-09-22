@@ -2,6 +2,60 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.1.2 F9 done, F7-F9 gate closed
+
+Version constants to `0.1.2` in both `cmd\burnmon\main.go` and `cmd\burnmon-cli\main.go`
+(`build.ps1` carries no version constant of its own); README's first section rewritten to
+describe v0.1.2 (the Now page, that the rest of the README is still carried over from
+claudecost and marked as such, full README pass moved to v0.2); `STATUS.md` filled in
+(adapters, pages, known gaps, next release, replacing the empty 2026-09-08 stub); `_board`
+rows renamed from claudecost to burnmon in `board.json` and `board.html` (no generator script
+or `siteoffice.json` source found under this project to regenerate from instead, so these
+generated files were hand-edited; a future Siteoffice pass should restore a real source).
+`go build ./...`, `go test ./... -count=1` and `.\build.ps1` all green. F7, F8 and F9 all
+land in this one commit per the spec's order and gate. Stopping before tagging `v0.1.2`, per
+Wilco's instruction.
+
+## 2026-09-22, v0.1.2 F8 fixed: the running chart no longer jumps every poll
+
+Replaced v0.1.1 F3's "destroy and rebuild `charts.now` on every 2-second poll, both axis
+maxima recomputed from the window's raw peak" (`drawNowChart`,
+`internal\report\template.html`) with the decided design (grill, question 12): the Chart.js
+instance is now created once and updated in place via `chart.update()`, bar datasets are kept
+one object per session id across polls (new module-scope `nowChart` state: `datasetById`,
+`colorBySession`, `tokenMax`, `costMax`) so a session already on screen animates instead of
+popping, and both axis maxima are smoothed (`Math.max(peak*1.1, prevMax*0.95, floor)`, tokens
+floored at 10K, cost unfloored). Tick labels now render only on a round 5-minute mark via an
+explicit `ticks.callback` (`autoSkip` alone could not do this, since all 180 slot positions
+themselves slide every poll). `node --check` on the extracted `<script>` blocks passed; `go
+build ./...` and `go test ./... -count=1` both green. Wilco watched the running Now page for
+5 minutes on the rebuilt binary (1 Claude CLI, 4 Codex CLI sessions live) and confirmed no
+visible jump, satisfying the spec's own check.
+
+## 2026-09-22, v0.1.2 F7 fixed: new Codex session missed by the live watcher
+
+Confirmed hypothesis 3 from `02_roadmap\2026-09-22_v0.1.2_patch_spec.md`, with a live
+diagnostic run alongside Wilco's own Codex CLI sessions before touching any code: a rollout
+landing in a day folder that already existed at burnmon startup was ingested correctly and
+immediately (`watch: F7 diag: onChange fired ...` within under a second of the raw fsnotify
+Create), ruling out hypotheses 1 (ingest/adapter resolution) and 2 (Rename filtering). The
+race that matches Wilco's 14:12 report only bites on a day folder that is itself new since
+startup: `TestWatcher_NewNestedDayFolderRace` (`internal\watch\watch_test.go`), which mirrors
+Codex's `MkdirAll` of `YYYY/MM/DD` immediately followed by the rollout file with no pause
+(unlike Claude Code's own folder-then-file timing, which the existing
+`TestWatcher_NativeRootSeesNewSubdirectory` gives 200ms), failed 4 of 5 runs before the fix:
+Windows `ReadDirectoryChanges` is per-directory, not recursive, so the file's own Create event
+fires and is silently dropped while `fsw.Add` on the brand-new leaf directory is still
+in-flight. Fix: `addTree` (`internal\watch\watch.go`) takes a `notifyExisting bool`; the
+startup calls in `New` pass `false` (the initial full backfill already ingests everything
+under the native roots), but `handleFsnotifyEvent`'s call for a freshly-Created directory now
+passes `true`, so any `.jsonl` already inside that brand-new directory is picked up right
+there instead of waiting on an event that already happened. `dataset.Cache.IngestFile` ingests
+by cursor, so re-notifying a file the full rescan or an earlier live event already saw is a
+safe no-op. 10 consecutive runs of the new test all passed after the fix (0 failures), full
+`go test ./...` green. Measured latency: under 1 second from the file landing on disk to
+`onChange` firing, well inside the spec's 2-second bar.
+
 ## 2026-09-22, v0.2 grill and v0.1.2 patch spec (Cowork, Fable)
 
 Wilco reported two things from the 14:12 live run: a new Codex CLI session appeared only

@@ -63,7 +63,11 @@ func New(nativeRoots, wslRoots []string, onChange OnChange) (*Watcher, error) {
 		stop:     make(chan struct{}),
 	}
 	for _, root := range nativeRoots {
-		w.addTree(root)
+		// Startup only: the initial full backfill (cmd/burnmon's
+		// a.rebuild, run right after this) ingests every existing file
+		// under these roots itself, so addTree here only needs to set up
+		// watches, not fire onChange for files it finds along the way.
+		w.addTree(root, false)
 	}
 	return w, nil
 }
@@ -73,12 +77,31 @@ func New(nativeRoots, wslRoots []string, onChange OnChange) (*Watcher, error) {
 // otherwise ignored: a folder that cannot be watched simply falls back to
 // being caught by the 15-minute full rescan, same as before this package
 // existed.
-func (w *Watcher) addTree(root string) {
+//
+// notifyExisting, when true, also calls onChange for every .jsonl file
+// already present under root (root's own watch is skipped if already
+// registered, but each subdirectory found is walked and watched exactly as
+// during startup). This closes the race behind F7 (SESSION_LOG.md, v0.1.2,
+// confirmed by TestWatcher_NewNestedDayFolderRace): a rollout writer that
+// creates a whole new nested folder (Codex's YYYY/MM/DD) and its first file
+// back to back can have the file's own Create event fire, and be silently
+// dropped by Windows ReadDirectoryChanges, before fsw.Add on the brand-new
+// leaf directory has run. Re-listing the directory right after the watch is
+// added catches any file that raced past that window; onChange is safe to
+// call again for a file the live watcher (or the full rescan) already saw,
+// since dataset.Cache.IngestFile ingests by cursor and a repeat call is a
+// no-op. handleFsnotifyEvent always passes true: every directory it sees is
+// one fsnotify just told it about, i.e. new since startup, so nothing here
+// duplicates the initial backfill.
+func (w *Watcher) addTree(root string, notifyExisting bool) {
 	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 		if !d.IsDir() {
+			if notifyExisting && strings.HasSuffix(strings.ToLower(p), ".jsonl") {
+				w.onChange(p)
+			}
 			return nil
 		}
 		w.watchedMu.Lock()
@@ -190,8 +213,12 @@ func (w *Watcher) handleFsnotifyEvent(ev fsnotify.Event) {
 	if fi.IsDir() {
 		if ev.Op&fsnotify.Create != 0 {
 			// A new project or session folder: watch it (and anything under
-			// it) too, so files written inside it are seen from here on.
-			w.addTree(ev.Name)
+			// it) too, so files written inside it are seen from here on. Pass
+			// notifyExisting=true (F7 fix): this directory is new since
+			// startup, so any .jsonl already inside it raced its own Create
+			// event past the watch not existing yet and must be picked up
+			// here instead.
+			w.addTree(ev.Name, true)
 		}
 		return
 	}

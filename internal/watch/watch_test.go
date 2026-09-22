@@ -81,6 +81,36 @@ func TestWatcher_NativeRootSeesNewSubdirectory(t *testing.T) {
 	c.waitFor(t, path, 3*time.Second)
 }
 
+// TestWatcher_NewNestedDayFolderRace reproduces F7 hypothesis 3
+// (SESSION_LOG.md, v0.1.2): Codex creates its whole YYYY/MM/DD path with one
+// MkdirAll, then writes the rollout file immediately after, with no pause
+// between mkdir and file create the way TestWatcher_NativeRootSeesNewSubdirectory
+// gets (200ms, modelled on Claude Code's own folder-then-file timing). If the
+// fsnotify watch on the brand-new leaf directory is not yet registered when
+// the file's own Create event fires, that Create is never delivered at all
+// (Windows ReadDirectoryChanges is per-directory, not recursive), and the
+// session is invisible until the next full rescan.
+func TestWatcher_NewNestedDayFolderRace(t *testing.T) {
+	dir := t.TempDir()
+	c := &changeCollector{}
+	w, err := New([]string{dir}, nil, c.onChange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Start()
+	defer w.Stop()
+
+	day := filepath.Join(dir, "2026", "09", "22")
+	if err := os.MkdirAll(day, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(day, "rollout-2026-09-22T15-00-00-test.jsonl")
+	if err := os.WriteFile(path, []byte(`{"a":1}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(t, path, 2*time.Second)
+}
+
 func TestWatcher_PollsWSLRootOnAppend(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "rollout.jsonl")

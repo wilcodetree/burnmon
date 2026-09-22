@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	version        = "0.8.1"
+	version        = "0.1.2"
 	windowTitle    = "BurnMon"
 	mutexName      = `Local\burnmon-app`
 	minInterval    = 5 * time.Minute
