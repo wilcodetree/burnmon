@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"claudecost/internal/pricing"
+	"burnmon/internal/pricing"
 )
 
 // LongSessionCalls marks a session whose per-call cost has clearly entered

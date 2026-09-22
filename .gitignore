@@ -1,5 +1,5 @@
-claudecost.exe
-claudecost-cli.exe
+burnmon.exe
+burnmon-cli.exe
 *.syso
 reports/
 usage_data.json

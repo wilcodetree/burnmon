@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"claudecost/internal/scan"
+	"burnmon/internal/scan"
 )
 
 type SurfaceAgg struct {

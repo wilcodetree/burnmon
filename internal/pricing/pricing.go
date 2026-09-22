@@ -1,6 +1,6 @@
 // Package pricing holds the price list, the subscription calibration, and the
 // two cost models ported from claude_usage_extract.py. Defaults are compiled
-// in; a claudecost.json next to the exe overrides any subset of them, so a
+// in; a burnmon.json next to the exe overrides any subset of them, so a
 // quarterly recalibration means distributing one small file, not a rebuild.
 package pricing
 
@@ -40,7 +40,7 @@ type Subscription struct {
 	// YourSeat is the default "Your seat" tier, a key into SeatPriceUSD
 	// (e.g. "Standard" or "Premium"). Empty means no override: both binaries
 	// fall back to their -seat flag default ("Standard"). Set this when
-	// everyone who will run this claudecost.json shares one seat tier, so
+	// everyone who will run this burnmon.json shares one seat tier, so
 	// they never have to touch Settings or pass -seat themselves. The -seat
 	// flag, when explicitly passed, still wins over this.
 	YourSeat string `json:"your_seat,omitempty"`
@@ -92,7 +92,7 @@ func Defaults() Config {
 		},
 		Subscription: Subscription{
 			// Illustrative example calibration, not a real invoice. Drop a
-			// claudecost.json next to the exe with your own numbers; see
+			// burnmon.json next to the exe with your own numbers; see
 			// claudecost.example.json and the README section on calibration.
 			MonthlySubscriptionEUR:    2000.00,
 			MonthlySubscriptionUSD:    2160.00,

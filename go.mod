@@ -1,4 +1,4 @@
-module claudecost
+module burnmon
 
 go 1.25.0
 

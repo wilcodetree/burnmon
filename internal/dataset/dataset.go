@@ -1,5 +1,5 @@
-// Package dataset builds the usage payload shared by the claudecost CLI and
-// the claudecost-app window: source resolution, JSONL parsing with an
+// Package dataset builds the usage payload shared by the burnmon CLI and
+// the burnmon window: source resolution, JSONL parsing with an
 // mtime/size cache, aggregation, and the JSON schema injected into the
 // dashboard template.
 package dataset
@@ -22,12 +22,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"claudecost/internal/agg"
-	"claudecost/internal/pricing"
-	"claudecost/internal/scan"
+	"burnmon/internal/agg"
+	"burnmon/internal/pricing"
+	"burnmon/internal/scan"
 )
 
-// CoverageNote explains what claudecost can and cannot see. Unchanged from
+// CoverageNote explains what burnmon can and cannot see. Unchanged from
 // v0.1.0.
 const CoverageNote = "Local Cowork and Claude Code sessions only, from this machine. Cowork " +
 	"sessions that run in Anthropic's cloud, claude.ai browser chats and mobile chats keep " +

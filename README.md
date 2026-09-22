@@ -1,4 +1,16 @@
-# claudecost
+# BurnMon
+
+BurnMon is the successor of [claudecost](https://github.com/wilcodetree/claudecost): a
+vendor-agnostic token and cost monitor, starting from a straight fork. This is v0.0: the
+same tool under a new name, binaries `burnmon.exe` (app) and `burnmon-cli.exe` (CLI). See
+the plan at `C:\ZND\10_holding\02_roadmap\2026-09-22_burnmon_plan.md` for where it goes
+from here.
+
+The rest of this README is carried over from claudecost unchanged; it still says
+"claudecost" and `claudecost.json` in places, since only the code and build were renamed
+this week. A documentation pass is scoped for a later week.
+
+## claudecost
 
 Your own Claude usage and cost dashboard, as a portable Windows app or a
 single-file CLI. It reads the session transcripts Cowork and Claude Code

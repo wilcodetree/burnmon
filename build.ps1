@@ -1,8 +1,8 @@
-# Builds claudecost-cli.exe (console CLI) and claudecost.exe (windowed app).
-# Naming convention flipped 2026-08-31: claudecost.exe is now the app. Both
-# binaries check for claudecost.json next to the exe first, then fall back
-# to %LOCALAPPDATA%\claudecost\claudecost.json (see cmd/claudecost-app/main.go
-# appDataDir), so dropping the exe and claudecost.json in one portable
+# Builds burnmon-cli.exe (console CLI) and burnmon.exe (windowed app).
+# Naming convention flipped 2026-08-31: burnmon.exe is now the app. Both
+# binaries check for burnmon.json next to the exe first, then fall back
+# to %LOCALAPPDATA%\burnmon\burnmon.json (see cmd/burnmon/main.go
+# appDataDir), so dropping the exe and burnmon.json in one portable
 # folder works for either. Run from the project root in PowerShell:
 # .\build.ps1
 # First run needs internet access (go mod tidy + go-winres download).
@@ -24,18 +24,18 @@ if (-not (Get-Command go-winres -ErrorAction SilentlyContinue)) {
     }
     $goWinres = $gopathBin
 }
-& $goWinres make --in winres\cli.json --out cmd\claudecost\rsrc
+& $goWinres make --in winres\cli.json --out cmd\burnmon-cli\rsrc
 if ($LASTEXITCODE -ne 0) { Write-Host "go-winres failed for CLI; building without icon." }
-& $goWinres make --in winres\app.json --out cmd\claudecost-app\rsrc
+& $goWinres make --in winres\app.json --out cmd\burnmon\rsrc
 if ($LASTEXITCODE -ne 0) { Write-Host "go-winres failed for app; building without icon." }
 go mod tidy
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
-go build -trimpath -ldflags "-s -w" -o claudecost-cli.exe .\cmd\claudecost
+go build -trimpath -ldflags "-s -w" -o burnmon-cli.exe .\cmd\burnmon-cli
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-go build -trimpath -ldflags "-s -w -H windowsgui" -o claudecost.exe .\cmd\claudecost-app
+go build -trimpath -ldflags "-s -w -H windowsgui" -o burnmon.exe .\cmd\burnmon
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-Write-Host "Built claudecost-cli.exe (CLI) and claudecost.exe (app)"
+Write-Host "Built burnmon-cli.exe (CLI) and burnmon.exe (app)"
 $localHook = Join-Path $PSScriptRoot "build.local.ps1"
 if (Test-Path $localHook) {
     & $localHook

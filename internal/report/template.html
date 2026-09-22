@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Claude Cost (User)</title>
+<title>BurnMon</title>
 <script>
 /* Chart.js v4.5.0, vendored inline on purpose: a persisted Cowork artifact could not
    reliably reach either cdn.jsdelivr.net or cdnjs.cloudflare.com on a scheduled refresh,
@@ -152,7 +152,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 <header><div class="inner">
   <div>
     <div class="mast"><span class="masttile"><span class="mz">0</span>N</span><span class="mastword">ZeroNonsense<span class="mastdev">.dev</span></span></div>
-    <h1>Claude Cost (User)</h1>
+    <h1>BurnMon</h1>
     <p id="subtitle">Your own usage and what it costs</p>
   </div>
   <div class="topright">
@@ -426,7 +426,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   <div class="card plain" id="how">
     <p style="margin-top:0">This page holds a snapshot. It cannot poll anything by itself: no network access, no way to read your files.</p>
     <p id="how_task" class="hidden" style="margin-bottom:0"><b>You have automatic refresh set up.</b> It runs on a schedule and republishes this page. You can also press <b>Run now</b> on that task in the Scheduled sidebar, or type <b>/usage-dashboard</b> in Cowork, to rebuild it on demand.</p>
-    <p id="how_notask" style="margin-bottom:0"><b>This page is rebuilt every time you run the claudecost CLI again.</b> It reads your session transcripts live at each run, so refreshing is simply running it again: a new report is written and opened for you.</p>
+    <p id="how_notask" style="margin-bottom:0"><b>This page is rebuilt every time you run the burnmon CLI again.</b> It reads your session transcripts live at each run, so refreshing is simply running it again: a new report is written and opened for you.</p>
   </div>
 </section>
 </div>
@@ -567,7 +567,7 @@ en:{
   refresh_started_msg_html:'Started your refresh job. It re-reads your sessions and republishes this page. Give it a minute, then reload.',
   btn_refresh_started:'Refresh started',
   btn_refresh_now:'Refresh now',
-  refresh_error:function(v){ return 'Could not start the refresh job: ' + v.err + '. Run claudecost.exe again instead.'; },
+  refresh_error:function(v){ return 'Could not start the refresh job: ' + v.err + '. Run burnmon.exe again instead.'; },
   render_error:function(v){ return 'Something went wrong rendering: '+v.msg; }
 },
 nl:{
@@ -657,7 +657,7 @@ nl:{
   refresh_started_msg_html:'Je vernieuwingsopdracht is gestart. Deze leest je sessies opnieuw in en publiceert deze pagina opnieuw. Geef het een minuutje en herlaad dan.',
   btn_refresh_started:'Vernieuwing gestart',
   btn_refresh_now:'Nu vernieuwen',
-  refresh_error:function(v){ return 'Kon de vernieuwingsopdracht niet starten: ' + v.err + '. Voer claudecost.exe opnieuw uit.'; },
+  refresh_error:function(v){ return 'Kon de vernieuwingsopdracht niet starten: ' + v.err + '. Voer burnmon.exe opnieuw uit.'; },
   render_error:function(v){ return 'Er ging iets mis bij het renderen: '+v.msg; }
 }
 };

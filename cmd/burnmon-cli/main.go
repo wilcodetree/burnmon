@@ -1,4 +1,4 @@
-// claudecost builds your own Claude usage and cost dashboard from the session
+// burnmon-cli builds your own Claude usage and cost dashboard from the session
 // transcripts Cowork and Claude Code already write on this machine.
 //
 // Standalone port of claude_usage_extract.py (schema 1) plus the dashboard
@@ -23,9 +23,9 @@ import (
 	"strings"
 	"time"
 
-	"claudecost/internal/dataset"
-	"claudecost/internal/pricing"
-	"claudecost/internal/report"
+	"burnmon/internal/dataset"
+	"burnmon/internal/pricing"
+	"burnmon/internal/report"
 )
 
 const version = "0.8.1"
@@ -47,7 +47,7 @@ func run() int {
 	flag.Var(&sources, "source", "extra folder to scan; repeatable, overrides auto-detect")
 	outDir := flag.String("out", "", "report folder (default: reports next to the exe)")
 	jsonOut := flag.String("json", "", "also write the raw dataset to this JSON path")
-	cfgPath := flag.String("config", "", "config file (default: claudecost.json next to the exe, if present)")
+	cfgPath := flag.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
 	noOpen := flag.Bool("no-open", false, "do not open the report in the browser")
 	quiet := flag.Bool("quiet", false, "suppress progress output")
 	noCache := flag.Bool("no-cache", false, "skip the parse cache entirely: always re-parse "+
@@ -56,7 +56,7 @@ func run() int {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Println("claudecost " + version)
+		fmt.Println("burnmon-cli " + version)
 		return 0
 	}
 
@@ -66,7 +66,7 @@ func run() int {
 		return 1
 	}
 
-	// An explicit -seat wins; otherwise a your_seat set in claudecost.json
+	// An explicit -seat wins; otherwise a your_seat set in burnmon.json
 	// wins over the flag's own "Standard" default, so a shared config for a
 	// team that is all on one tier (see the Groundwork Kit) never needs
 	// -seat passed by hand. flag.Visit is the only way to tell "passed at
@@ -173,7 +173,7 @@ func run() int {
 		fmt.Fprintln(os.Stderr, "cannot create report folder", dir, ":", err)
 		return 1
 	}
-	htmlPath := filepath.Join(dir, "claudecost-report-"+time.Now().Format("20060102-150405")+".html")
+	htmlPath := filepath.Join(dir, "burnmon-report-"+time.Now().Format("20060102-150405")+".html")
 	if err := report.Write(htmlPath, blob); err != nil {
 		fmt.Fprintln(os.Stderr, "could not write report:", err)
 		return 1
@@ -191,15 +191,15 @@ func loadConfig(explicit string, quiet bool) (pricing.Config, error) {
 	path := explicit
 	if path == "" {
 		if exe, err := os.Executable(); err == nil {
-			cand := filepath.Join(filepath.Dir(exe), "claudecost.json")
+			cand := filepath.Join(filepath.Dir(exe), "burnmon.json")
 			if _, err := os.Stat(cand); err == nil {
 				path = cand
 			}
 		}
 	}
 	if path == "" {
-		if _, err := os.Stat("claudecost.json"); err == nil {
-			path = "claudecost.json"
+		if _, err := os.Stat("burnmon.json"); err == nil {
+			path = "burnmon.json"
 		}
 	}
 	cfg, err := pricing.Load(path)
@@ -209,15 +209,15 @@ func loadConfig(explicit string, quiet bool) (pricing.Config, error) {
 	return cfg, err
 }
 
-// cacheDir is the same %LOCALAPPDATA%\claudecost folder the app binary uses
+// cacheDir is the same %LOCALAPPDATA%\burnmon folder the app binary uses
 // for its own data, cache and log, so the CLI and the app share one parse
 // cache instead of each keeping a separate copy.
 func cacheDir() string {
 	if lad := os.Getenv("LOCALAPPDATA"); lad != "" {
-		return filepath.Join(lad, "claudecost")
+		return filepath.Join(lad, "burnmon")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claudecost")
+	return filepath.Join(home, ".burnmon")
 }
 
 func defaultReportDir() string {
@@ -233,10 +233,10 @@ func defaultReportDir() string {
 		}
 	}
 	if lad := os.Getenv("LOCALAPPDATA"); lad != "" {
-		return filepath.Join(lad, "claudecost", "reports")
+		return filepath.Join(lad, "burnmon", "reports")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claudecost", "reports")
+	return filepath.Join(home, ".burnmon", "reports")
 }
 
 func openBrowser(path string) {

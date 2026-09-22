@@ -1,6 +1,6 @@
 //go:build windows
 
-// Command claudecost-app is the single-window desktop face of claudecost: a
+// Command burnmon is the single-window desktop face of burnmon: a
 // WebView2 window that collects your Claude usage on startup, on an
 // interval, and on demand, and shows the same dashboard template as the CLI,
 // live, in place. No server, no open port, no tray, no browser tab.
@@ -27,16 +27,16 @@ import (
 	webview2 "github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
 
-	"claudecost/internal/dataset"
-	"claudecost/internal/pricing"
-	"claudecost/internal/report"
-	"claudecost/internal/scan"
+	"burnmon/internal/dataset"
+	"burnmon/internal/pricing"
+	"burnmon/internal/report"
+	"burnmon/internal/scan"
 )
 
 const (
 	version        = "0.8.1"
-	windowTitle    = "Claude Cost"
-	mutexName      = `Local\claudecost-app`
+	windowTitle    = "BurnMon"
+	mutexName      = `Local\burnmon-app`
 	minInterval    = 5 * time.Minute
 	minWSLInterval = 15 * time.Minute
 )
@@ -60,7 +60,7 @@ func main() {
 	wslInterval := flag.Duration("wsl-interval", 4*time.Hour, "how often to re-read WSL transcripts while the window is open (native transcripts stay on -interval)")
 	monthsN := flag.Int("months", 2, "how many months to include, counting the current one")
 	seat := flag.String("seat", "Standard", "your own seat tier (Standard or Premium)")
-	cfgPath := flag.String("config", "", "config file overriding the compiled-in prices and subscription (default: claudecost.json in the app's data folder, if present)")
+	cfgPath := flag.String("config", "", "config file overriding the compiled-in prices and subscription (default: burnmon.json in the app's data folder, if present)")
 	var sources multiFlag
 	flag.Var(&sources, "source", "extra folder to scan; repeatable, overrides auto-detect")
 	flag.Parse()
@@ -74,7 +74,7 @@ func main() {
 	// knowable via flag.Visit, since flag.Duration itself cannot tell "not
 	// set" from "set to the default". Same trick for -seat against
 	// your_seat: an explicit -seat always wins, otherwise a your_seat in
-	// claudecost.json beats the flag's own "Standard" default, so a shared
+	// burnmon.json beats the flag's own "Standard" default, so a shared
 	// config for a team on one tier (see the Groundwork Kit) never needs
 	// anyone to open Settings on first run.
 	wslIntervalFlagSet := false
@@ -95,30 +95,30 @@ func main() {
 		return
 	}
 	setupLog(dataDir)
-	log.Printf("claudecost-app %s starting", version)
+	log.Printf("burnmon %s starting", version)
 
-	// Two-tier lookup, exe-adjacent first: this makes claudecost.exe plus
-	// claudecost.json droppable together into one portable folder (the
+	// Two-tier lookup, exe-adjacent first: this makes burnmon.exe plus
+	// burnmon.json droppable together into one portable folder (the
 	// ZeroNonsense.dev Groundwork Kit ships exactly this pair), the same
 	// "drop one file next to the exe" pattern the CLI already used and that
-	// claudecost.json's own bundled _comment describes. Falls back to
-	// %LOCALAPPDATA%\claudecost\claudecost.json, so a fixed install that
+	// burnmon.json's own bundled _comment describes. Falls back to
+	// %LOCALAPPDATA%\burnmon\burnmon.json, so a fixed install that
 	// must run from a read-only share (nothing written or read next to the
 	// exe in that case) keeps working exactly as before: place
-	// claudecost.json in %LOCALAPPDATA%\claudecost\ and restart the app.
+	// burnmon.json in %LOCALAPPDATA%\burnmon\ and restart the app.
 	// Whichever file loads is also where Settings saves land afterward
 	// (cfgSavePath below), so a Groundwork Kit user editing Settings keeps
 	// writing to their own portable folder, not %LOCALAPPDATA%.
 	cfgFile := *cfgPath
 	if cfgFile == "" {
 		if exe, err := os.Executable(); err == nil {
-			if cand := filepath.Join(filepath.Dir(exe), "claudecost.json"); fileExists(cand) {
+			if cand := filepath.Join(filepath.Dir(exe), "burnmon.json"); fileExists(cand) {
 				cfgFile = cand
 			}
 		}
 	}
 	if cfgFile == "" {
-		if cand := filepath.Join(dataDir, "claudecost.json"); fileExists(cand) {
+		if cand := filepath.Join(dataDir, "burnmon.json"); fileExists(cand) {
 			cfgFile = cand
 		}
 	}
@@ -154,7 +154,7 @@ func main() {
 	// very first save from the window creates it rather than erroring.
 	cfgSavePath := cfgFile
 	if cfgSavePath == "" {
-		cfgSavePath = filepath.Join(dataDir, "claudecost.json")
+		cfgSavePath = filepath.Join(dataDir, "burnmon.json")
 	}
 
 	if alreadyRunning() {
@@ -469,7 +469,7 @@ func logSourceScan(sources, files []string) {
 
 // ---------------------------------------------------------------------------
 // Settings: the Subscription block of the pricing config, editable from the
-// window itself instead of by hand-editing claudecost.json.
+// window itself instead of by hand-editing burnmon.json.
 // ---------------------------------------------------------------------------
 
 // settingsPayload is the shape ccSaveSettings receives from the settings
@@ -493,7 +493,7 @@ type settingsPayload struct {
 	Window                    string  `json:"window"`
 }
 
-// applySettings writes p to claudecost.json (preserving any other keys
+// applySettings writes p to burnmon.json (preserving any other keys
 // already in that file, such as an unusual Prices override or the wsl_scan
 // / extra_sources fields), then updates the running config and seat in
 // memory. It resets the parse cache outright rather than just bumping the
@@ -580,7 +580,7 @@ func escapeAttr(s string) string {
 // The embedded template.html itself is never touched.
 // ---------------------------------------------------------------------------
 
-const warmingPageTemplate = `<!doctype html><title>Claude Cost</title><body style="font-family:sans-serif;background:#1f2733;
+const warmingPageTemplate = `<!doctype html><title>BurnMon</title><body style="font-family:sans-serif;background:#1f2733;
 color:#eee;display:grid;place-items:center;height:100vh;margin:0;overflow:hidden">
 <div style="text-align:center;min-width:320px">
  <div>Reading your session transcripts&hellip;</div>
@@ -588,7 +588,7 @@ color:#eee;display:grid;place-items:center;height:100vh;margin:0;overflow:hidden
   <div id="cc_warm_fill" style="width:0%;height:100%;background:#FFDD32;transition:width .2s"></div>
  </div>
  <div id="cc_warm_text" style="margin-top:8px;font-size:13px;color:#9fb4bd">Starting&hellip;</div>
- <div style="margin-top:22px;font-size:11px;color:#5b6b74">Claude Cost vAPP_VERSION</div>
+ <div style="margin-top:22px;font-size:11px;color:#5b6b74">BurnMon vAPP_VERSION</div>
 </div>
 <script>
 function ccProgress(done,total,eta){
@@ -612,7 +612,7 @@ func warmingPageHTML() string {
 	return strings.Replace(warmingPageTemplate, "APP_VERSION", version, 1)
 }
 
-const cliRebuildNotice = `<b>This page is rebuilt every time you run the claudecost CLI again.</b> It reads your session transcripts live at each run, so refreshing is simply running it again: a new report is written and opened for you.`
+const cliRebuildNotice = `<b>This page is rebuilt every time you run the burnmon CLI again.</b> It reads your session transcripts live at each run, so refreshing is simply running it again: a new report is written and opened for you.`
 
 // appRebuildNotice produces the app window's "how this stays current" text.
 // With no WSL distros found, it reproduces today's single-cadence wording
@@ -755,7 +755,7 @@ func (a *app) applyAppChrome(html string) string {
 // currently loaded subscription numbers and seat, so opening it always
 // shows what the dashboard is actually using right now, not stale form
 // defaults. Saving posts to ccSaveSettings (bound in main), which writes
-// claudecost.json, resets the parse cache, and rebuilds in the background.
+// burnmon.json, resets the parse cache, and rebuilds in the background.
 func (a *app) settingsModalHTML() string {
 	sub := a.cfg.Subscription
 	std := sub.Seats["Standard"]
@@ -882,11 +882,11 @@ func toFileURL(path string) string {
 
 func appDataDir() string {
 	if lad := os.Getenv("LOCALAPPDATA"); lad != "" {
-		return filepath.Join(lad, "claudecost")
+		return filepath.Join(lad, "burnmon")
 	}
 	// Very unlikely on a managed Windows machine; fall back rather than
 	// write next to a possibly read-only exe.
-	return filepath.Join(os.TempDir(), "claudecost")
+	return filepath.Join(os.TempDir(), "burnmon")
 }
 
 // setupLog opens the app's log file in append mode, rotating it out of the
@@ -896,7 +896,7 @@ func appDataDir() string {
 // logging anything else: exactly the log a "my dashboard is stuck / shows no
 // data" report needs to diagnose from app.log alone.
 func setupLog(dataDir string) {
-	path := filepath.Join(dataDir, "claudecost-app.log")
+	path := filepath.Join(dataDir, "burnmon-app.log")
 	if fi, err := os.Stat(path); err == nil && fi.Size() > 512*1024 {
 		_ = os.Rename(path, path+".1")
 	}
