@@ -66,7 +66,8 @@ recomputes both axis maxima every poll. Both go into `02_roadmap\2026-09-22_v0.1
 "recompute per poll" rule, F9 version strings 0.8.1 to 0.1.2, README, STATUS, board). Then a
 thirteen-question grill scoped v0.2 as one release on 2026-11-14 at two sessions a week:
 `02_roadmap\2026-09-22_v0.2_spec.md`. Dev and business switch and per-vendor cost moved to
-v0.3. No code touched this session.
+v0.3. Then `02_roadmap\2026-09-22_v0.2_session_prompts.md`: fourteen Sonnet session prompts
+(39A to 46B) with a checklist and Wilco's fixture steps. No code touched this session.
 
 ## v0.1.1 F4-F6: Cowork agent label, never-clamp context gauge, header copy
 
