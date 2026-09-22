@@ -36,8 +36,10 @@ type Watcher struct {
 	watchedMu sync.Mutex
 	watched   map[string]bool // directories already added to fsw
 
-	wslRoots []string
-	wslMtime map[string]time.Time // path -> last seen mtime, for the poll loop
+	wslMu      sync.Mutex
+	wslRoots   []string
+	wslMtime   map[string]time.Time // path -> last seen mtime, for the poll loop
+	wslStarted bool
 
 	stop chan struct{}
 	wg   sync.WaitGroup
@@ -107,7 +109,13 @@ func (w *Watcher) Start() {
 		defer w.wg.Done()
 		w.runFsnotify()
 	}()
-	if len(w.wslRoots) > 0 {
+	w.wslMu.Lock()
+	hasWSLRoots := len(w.wslRoots) > 0
+	if hasWSLRoots {
+		w.wslStarted = true
+	}
+	w.wslMu.Unlock()
+	if hasWSLRoots {
 		w.wg.Add(1)
 		go func() {
 			defer w.wg.Done()
@@ -122,6 +130,36 @@ func (w *Watcher) Stop() {
 	close(w.stop)
 	w.fsw.Close()
 	w.wg.Wait()
+}
+
+// AddWSLRoots extends an already-Started watcher with more WSL roots,
+// starting the 5-second poll goroutine now if it was not already running
+// (New was given no WSL roots, e.g. because they were not known yet). For
+// cmd\burnmon: v0.1.1 F2 starts the live watcher with native roots only,
+// ahead of the initial full backfill, so a Codex or Claude turn is never
+// stuck waiting behind that backfill; once the backfill resolves the WSL
+// roots (which does require the full pass, since probing a WSL distro is
+// the slow operation the two-cadence design exists to gate), this adds
+// them without tearing down or restarting the native side. A no-op for an
+// empty roots.
+func (w *Watcher) AddWSLRoots(roots []string) {
+	if len(roots) == 0 {
+		return
+	}
+	w.wslMu.Lock()
+	w.wslRoots = append(w.wslRoots, roots...)
+	startNeeded := !w.wslStarted
+	if startNeeded {
+		w.wslStarted = true
+	}
+	w.wslMu.Unlock()
+	if startNeeded {
+		w.wg.Add(1)
+		go func() {
+			defer w.wg.Done()
+			w.runWSLPoll()
+		}()
+	}
 }
 
 func (w *Watcher) runFsnotify() {
@@ -181,7 +219,10 @@ func (w *Watcher) runWSLPoll() {
 }
 
 func (w *Watcher) pollWSLOnce() {
-	for _, root := range w.wslRoots {
+	w.wslMu.Lock()
+	roots := append([]string(nil), w.wslRoots...)
+	w.wslMu.Unlock()
+	for _, root := range roots {
 		_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() || !strings.HasSuffix(strings.ToLower(p), ".jsonl") {
 				return nil

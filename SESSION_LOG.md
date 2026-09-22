@@ -2,6 +2,76 @@
 
 One paragraph per work session, newest on top.
 
+## v0.1.1 F4-F6: Cowork agent label, never-clamp context gauge, header copy
+
+F4: `internal\adapter\claude\claude.go`'s two event-construction sites (`Parse`, around the
+old lines 292 and 326) hardcoded `Agent: "claude-code"` for every transcript; only `Surface`
+told Cowork apart. Added `agentFor(surface)` (desktop/cowork to "cowork", everything else
+unchanged), called from both sites, so the Cowork card now reads "COWORK · DESKTOP" and the
+CLI card still reads "CLAUDE-CODE · CLI". `internal\agg`'s "By surface" table groups by
+`BySurface` alone (`internal\agg\agg.go:47/70`), never touches `Agent`, confirmed unaffected
+by reading it, not assumed. New tests in `internal\adapter\claude\claude_test.go`:
+`TestAgentFor` (table test over desktop/cowork/cli/code_agent/unknown) and
+`TestParseDesktopSurfaceGetsCoworkAgent` (a real trail file under a temp
+`local-agent-mode-sessions` folder, asserts `Agent == "cowork"` end to end through `Parse`),
+plus one added assertion on `TestParseBasicFixture`'s existing `cli` fixture (`Agent ==
+"claude-code"`).
+
+F5: the context-window table and `pricing.ContextWindowBookDate` ("2026-09-22", sourced from
+platform.claude.com/docs/en/about-claude/models and developers.openai.com/codex) were already
+in place from Step 3; the actual bug was the Now-page gauge in
+`internal\report\template.html`'s `sessionCardHTML`, which computed `Math.min(100,
+context/context_window*100)`, silently clamping an over-window session (Wilco's real
+`claude-fable-5-1` card: 285,000 of a 200,000-token book value) to a false "100%". Fixed to
+never clamp: when `context > context_window`, the gauge now renders a full grey bar
+(`var(--muted)`) and the text "<tokens> tokens, window in book: <window>, exceeded, check
+book date" instead of a percentage; the normal (non-exceeded) and unknown-window cases are
+unchanged. Verified by extracting and evaluating the template's own JS in Node (no Node
+runtime ships with the app, verification only, same as Step 3's precedent): a 285K/200K
+fixture renders "285,000 tokens, window in book: 200K, exceeded, check book date" and a
+100%-wide grey bar, not "(100%)"; a normal 50K/200K fixture still renders "(25%)" unaffected.
+
+F6: subtitle copy in `internal\report\template.html` (`#subtitle`'s static fallback text, and
+both `subtitle_sub`/`subtitle_list` i18n strings, EN and NL, which the two pricing-basis
+toggle states previously worded differently around "what we pay"/"list prices") is now the
+one fixed line "What your coding agents burn, live and by month" ("Wat je coding agents
+verbruiken, live en per maand" in Dutch) in every state, matching the spec's single given
+copy rather than continuing to vary by basis. The Now page's lede changed from "Running
+Claude Code and Codex sessions, live." to "Running Claude Code, Cowork and Codex sessions,
+live." README was left untouched, per spec's explicit scope cut.
+
+Gate: `go test ./...` and `.\build.ps1` both green after F4-F6, template JS re-verified with
+Node syntax + behavioural checks as above.
+
+## v0.1.1: SessionTotals vendor-qualified (Wilco's decision on the open choice)
+
+F1's `store.SessionTotals` originally keyed its `SELECT ... WHERE session_id IN (...)` by bare
+`session_id`, which would double-count if two different vendors ever minted the same session
+id. Wilco's call: key by (vendor, session_id) pairs, not session_id alone. `store.go` gained
+`SessionKey{Vendor, SessionID}` and `SessionTotals` now takes `[]SessionKey`, building a
+dynamic `(vendor = ? AND session_id = ?) OR ...` clause instead of a single `session_id IN`
+list. `live.go`'s `Session` gained a `Vendor` field (set from `turns[0].Vendor` in
+`BuildSnapshot`); `ApplySessionTotals` and the renamed `sessionKeys` (was `sessionIDs`) now
+match and aggregate by `vendor+"|"+session_id`, not bare `session_id`. Existing
+`TestSessionTotals` updated to the new signature; new `TestSessionTotalsVendorQualified`
+(`internal\store\store_test.go`) proves the fix directly: two vendors sharing the literal
+session id "shared" each keep their own totals when queried by their own vendor-qualified key
+(anthropic: input=100/output=10, unaffected by openai's 5000/500 sharing the same id).
+
+While rerunning the full suite for this change, found and fixed one unrelated pre-existing bug
+blocking green: `live.go`'s chart `windowStart` was computed as `now.Add(-ChartWindow).Truncate(10s)`,
+which always rounds down, so the window's right edge (`windowStart+ChartWindow`) trailed
+`now` by 0-10 seconds depending on wall-clock alignment; any event in that gap (idx computed
+>= chartSlots) was silently dropped from every chart bucket, including the very turn a live
+poll just picked up. This made `TestSnapshotChangesOnAppend` fail deterministically about half
+the time (confirmed via a throwaway debug test: `windowStart=...T11:07:00Z`, appended turn at
+`...T11:37:03`, i.e. 3 seconds past the window's last bucket boundary, dropped). Fixed by
+anchoring the window's right edge (`windowEnd`) at or after `now` (`now.Truncate(10s)`, rounded
+up one bucket if that truncated down) and computing `windowStart` from that, so the dense chart
+always covers up to `now`. Confirmed with 4 repeated `-count=1` runs after the fix, all green.
+
+Gate: `go test ./...` and `.\build.ps1` both green.
+
 ## 2026-09-22, v0.1 Step 3: the Now page
 
 Landed the Now page minimum from `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
@@ -144,3 +214,101 @@ improvement but an unremarked semantics change). Tag command below, not run.
 ```
 git tag -a v0.1.0-alpha.1 -m "Step 1: schema, store, Claude adapter"
 ```
+
+## v0.1.1 F1: bmLive no longer loads the whole store on every poll
+
+`cmd\burnmon\main.go`'s `bmLive` binding called `st.AllEvents()` on every 2-second poll,
+so `live.BuildSnapshot` re-grouped the whole events table in memory each tick: the cause
+of the reported "burnmon.exe 1886 MB, 17158 hard faults/s at 96% RAM" thrash. Added
+`store.EventsSince(from time.Time)` (new `idx_events_at` index) and
+`store.SessionTotals(sessionIDs)` (a `GROUP BY vendor, session_id, model` SQL sum of
+tokens, excluding the claude adapter's synthetic tool-only rows), exported
+`live.ChartWindow` (30 min, safely wider than `pricing.DefaultRunningWindow`'s 10 min so
+no running session's last turn ever falls outside it), and a new `live.ApplySessionTotals`
+that overwrites each running session's Start/TurnCount/Tokens/Cost from the small SQL
+aggregate so a session older than 30 minutes still reports its true lifetime numbers.
+`bmLive` now calls `EventsSince(now-ChartWindow)` plus `ApplySessionTotals` instead of
+`AllEvents()`, and logs `HeapAlloc` every 30 polls (`debug: bmLive poll N, HeapAlloc=...`
+in `burnmon-app.log`). Also batched `dataset.ingest`'s `UpsertEvents` call into 1,000-row
+transactions per file rather than one transaction per file's whole event slice (Parse
+itself already streams via the byte-offset cursor; this only bounds the commit size).
+Measured against a copy of Wilco's real store (`%LOCALAPPDATA%\burnmon\burnmon.db`,
+31,604,736 bytes on disk, 2026-09-22) with a throwaway harness that ran 300 simulated
+2-second polls (10 minutes) of `EventsSince` + `BuildSnapshot` + `ApplySessionTotals`:
+`HeapAlloc` oscillated between roughly 0.9 MB and 3.8 MB across GC cycles and settled
+back to +20,136 bytes (0.02 MB) over baseline after a final `debug.FreeOSMemory()`, well
+under the 50 MB budget. This was a real-store measurement (Wilco's actual database, not
+synthetic), not a live 10-minute run of the running app itself. `go test ./...` and
+`.\build.ps1` both green.
+
+## v0.1.1 F2: Codex latency (root cause, not a guess) and the two label bugs
+
+Diagnostic (code-reading against `cmd\burnmon\main.go` and Wilco's real
+`%USERPROFILE%\.codex\sessions` tree, not a live-reproduced timing run, per the spec's own
+allowance to reason from the code path when a live turn cannot be re-triggered on demand):
+(1) the Codex root was already on the fsnotify path, not the 5-second poll path
+(`startLiveWatch` appended `codex.NativeSources()` into `nativeRoots` before calling
+`watch.New`); (2) `watch.go`'s `addTree` does recursively re-watch a newly `Create`d day
+folder and then fire `Create` for the rollout file inside it, so a brand new file was
+never the problem; (3) confirmed the real cause: `startLiveWatch()` was called only after
+`a.rebuild(true, ...)` (the initial full backfill) returned, in the same startup
+goroutine, so the watcher did not exist at all for however long that first pass took.
+Wilco's real Codex tree is 207 files, 142 MB, including one 29.8 MB and two ~11 MB
+rollouts; a live turn landing during that backfill had nothing to catch it until the
+watcher started afterward, exactly matching "no card at 12:29 and 12:42, appeared at
+12:44." Fixed per the spec's "two goroutines, live watcher ahead of backfill": `main()`
+now calls `dataset.Cache.SeedNativeRoots` (new, cheap `os.Stat`-only) and
+`startLiveWatch` synchronously before the backfill goroutine even starts, and
+`a.rebuild()` no longer holds `a.mu` for the whole `Collect` call (it copies `a.cfg`
+first), so a live `IngestFile` from the watcher is never blocked behind an in-flight
+backfill or scheduled rebuild the way it was when both shared one lock for their entire
+duration. `dataset.Cache` gained its own `rootsMu` to guard `RootsByAdapter` now that it
+is genuinely read (via `IngestFile`) and written (via `Collect`) concurrently. WSL roots
+are added to the running watcher afterward via the new `watch.Watcher.AddWSLRoots`, once
+the backfill has resolved them. Proven by `TestLiveWatchCodexTurnWithinTwoSeconds`
+(`cmd\burnmon\main_test.go`): appends one `token_count` line to a temp rollout already
+under watch and asserts the snapshot shows it inside 2 seconds; passed in 0.16s.
+
+Labels: (a) `classifySurface` already handled the real originator values seen live today
+("codex-tui", "codex_vscode"); the actual UNKNOWN-surface bug was that `surface` was a
+`Parse`-local variable reset to "unknown" on every call, and `session_meta` (the only
+line carrying `originator`) is written once, at the top of the file: a live watcher's
+incremental `Parse(path, from>0)` never saw it again after the first read. Fixed with
+`scanHeaderMeta`, a bounded (64 KB) re-read of the file's start on every incremental
+call, confirmed against a real fixture in `TestParseIncrementalReadKeepsSurface`. Also
+added `logUnknownOriginatorOnce` for a genuinely new originator, per spec. (b) Confirmed
+on Wilco's real rollout `rollout-2026-09-22T12-41-36-...-986f3f57cd49.jsonl`
+(`session_meta.payload.thread_source` = `"guardian_review"`, `source.subagent.other` =
+`"guardian"`, `parent_thread_id` pointing at the `gpt-5.6-sol` session) that
+`turn_context.payload.model` there is literally the string `"codex-auto-review"`, a
+sub-run's own name, not a model id. `readSessionMeta` now flags any session_meta with a
+`thread_source` other than `"user"` as a sub-run; its `turn_context.model` value is
+carried as `Title` and `Model` stays empty (`TestParseSubRunModelBecomesTitle`).
+`go test ./...` and `.\build.ps1` both green.
+
+## v0.1.1 F3: the Now page chart is a dense, local-time, own-peak running chart
+
+Rebuilt per the spec's "history, newest right, fixed width, own-peak scale" model.
+Backend (`internal\live\live.go`): `MinuteBucket` (one entry per minute that actually had
+a turn, sparse) is replaced by `Bucket`, always exactly `chartSlots` (180) entries at
+`BucketSeconds` (10) width covering a fixed 30-minute window, every slot present and
+zero-valued when empty; `Snapshot` gained `WindowStart` and `BucketSeconds` so the
+frontend can place every slot without ever deriving one from sparse data itself, per the
+spec. `TestBuildSnapshot_ChartIsDense` asserts the slot count and that exactly one slot
+carries the one turn inside the window. Frontend (`internal\report\template.html`,
+`drawNowChart`): the x axis now renders each `Bucket.At` (UTC) in the viewer's own local
+time via `localHMS` (`new Date(iso)` plus local `getHours/getMinutes/getSeconds`), fixing
+the reported UTC-label bug (axis said 10:38 at 12:29 local, `live.go:245`'s old
+`e.At.UTC()` formatting). Each bar series is now labelled "agent · model · project
+basename" (`sessionChartLabel`, built from the matching `Session` in `snap.sessions` via
+a new `flattenSessions` that walks subagents too) instead of the raw session id; the id
+now only appears in the tooltip. Cost per bucket is still its own line on the right axis.
+Both axes are given an explicit `max` computed from the current window's own peak
+(tokens: tallest single-bucket stacked total; cost: tallest single bucket's cost) on every
+call; since `drawNowChart` destroys and rebuilds the whole Chart.js instance on every
+2-second poll already, "recomputed every poll, holds the scale until the spike leaves the
+window" falls out of that directly rather than needing separate machinery. Token class
+split (fresh/cache write/cache read/output) moved into the tooltip only (`afterLabel`),
+per the spec's explicit "no per-class toggle in v0.1.1, that is v0.2 scope." `go test
+./...` and `.\build.ps1` both green; the JS was also syntax-checked with `node --check`
+(no Node runtime is part of the shipped app, this was verification only).

@@ -224,6 +224,20 @@ func main() {
 		w.SetHtml(warmingPageHTML())
 	}
 
+	// F2: seed native roots and start the live watcher now, ahead of the
+	// initial full backfill below, instead of only after it returns. Before
+	// this fix, startLiveWatch ran after a.rebuild(true, ...) completed, so
+	// on a laptop with a large existing Codex history (many large
+	// rollouts), the watcher plus RootsByAdapter (needed to classify a
+	// Codex path instead of falling back to the claude adapter) did not
+	// exist yet for however long that first full pass took; a live turn
+	// landing during that window queued behind it instead of appearing
+	// within 2 seconds. See SESSION_LOG.md, v0.1.1 F2.
+	nativeClaudeRoots := scan.DefaultSourcesWithOptions(false)
+	nativeCodexRoots := codex.NativeSources()
+	a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)
+	a.startLiveWatch(nativeClaudeRoots, nativeCodexRoots)
+
 	// First collection happens off the UI goroutine so the page already on
 	// screen (warming or the stale dashboard) can paint immediately. With a
 	// warm store this finishes in seconds, well before anyone digs
@@ -239,7 +253,9 @@ func main() {
 			}
 			return
 		}
-		a.startLiveWatch()
+		// The backfill above has now resolved the WSL roots (if any); add
+		// them to the watcher already running on native roots.
+		a.extendLiveWatchWSL(nativeClaudeRoots, nativeCodexRoots)
 		if hadDashboard {
 			w.Dispatch(func() { w.Eval("window.ccReload ? ccReload() : location.reload()") })
 			return
@@ -282,15 +298,32 @@ func main() {
 		log.Println("could not bind ccRefresh:", err)
 	}
 
+	var bmLivePolls atomic.Uint64
 	if err := w.Bind("bmLive", func() (live.Snapshot, error) {
 		a.mu.Lock()
 		cfg := a.cfg
 		a.mu.Unlock()
-		events, err := st.AllEvents()
+		now := time.Now()
+		// F1: bmLive is polled every 2 seconds by the Now page. It used to
+		// call st.AllEvents() and re-group the whole table on every tick
+		// (measured at 1,886 MB, memory thrashing); EventsSince bounds the
+		// read to live.ChartWindow, and ApplySessionTotals below fills in
+		// each running session's true lifetime totals from a small SQL
+		// aggregate instead of the full history.
+		events, err := st.EventsSince(now.Add(-live.ChartWindow))
 		if err != nil {
 			return live.Snapshot{}, err
 		}
-		return live.BuildSnapshot(events, &cfg, time.Now()), nil
+		snap := live.BuildSnapshot(events, &cfg, now)
+		if err := live.ApplySessionTotals(snap.Sessions, st, &cfg); err != nil {
+			log.Println("bmLive: session totals:", err)
+		}
+		if n := bmLivePolls.Add(1); n%30 == 0 {
+			var mem runtime.MemStats
+			runtime.ReadMemStats(&mem)
+			log.Printf("debug: bmLive poll %d, HeapAlloc=%d bytes", n, mem.HeapAlloc)
+		}
+		return snap, nil
 	}); err != nil {
 		log.Println("could not bind bmLive:", err)
 	}
@@ -418,27 +451,24 @@ type app struct {
 	liveWatcher *watch.Watcher
 }
 
-// startLiveWatch starts the Now page's file watcher: fsnotify on every
-// native adapter root, a 5-second poll on every WSL root (see
-// internal/watch's package doc for why WSL cannot use fsnotify at all on
-// this laptop). Must run after at least one full rebuild, so
-// a.cache.RootsByAdapter is populated; called once, from the startup
-// goroutine, right after the first successful rebuild.
-func (a *app) startLiveWatch() {
+// startLiveWatch starts the Now page's file watcher on nativeClaudeRoots and
+// nativeCodexRoots: fsnotify, recursively, no WSL yet (see extendLiveWatchWSL).
+// Called once, synchronously, from main() before the first backfill even
+// starts (v0.1.1 F2: previously this ran only after the first full rebuild
+// completed, so a live turn arriving during that backfill, which can take
+// minutes over a large existing history, had no watcher to catch it at
+// all). onChange calls IngestFile directly, without a.mu: dataset.Cache
+// guards its own shared state (rootsMu) and the store serialises through
+// its single connection, so a live ingest is never blocked behind a
+// concurrently-running Collect the way it would be if this held a.mu for
+// that call, as rebuild() itself no longer does either.
+func (a *app) startLiveWatch(nativeClaudeRoots, nativeCodexRoots []string) {
 	if a.liveWatcher != nil {
 		return
 	}
-	nativeRoots := append(append([]string{}, scan.DefaultSourcesWithOptions(false)...), codex.NativeSources()...)
-	a.mu.Lock()
-	fullRoots := append(append([]string{}, a.cache.RootsByAdapter["claude"]...), a.cache.RootsByAdapter["codex"]...)
-	a.mu.Unlock()
-	wslRoots := diffRootsCaseInsensitive(fullRoots, nativeRoots)
-
-	wt, err := watch.New(nativeRoots, wslRoots, func(path string) {
-		a.mu.Lock()
-		err := a.cache.IngestFile(path)
-		a.mu.Unlock()
-		if err != nil {
+	nativeRoots := append(append([]string{}, nativeClaudeRoots...), nativeCodexRoots...)
+	wt, err := watch.New(nativeRoots, nil, func(path string) {
+		if err := a.cache.IngestFile(path); err != nil {
 			log.Println("live watch: ingest", path, ":", err)
 		}
 	})
@@ -448,6 +478,20 @@ func (a *app) startLiveWatch() {
 	}
 	wt.Start()
 	a.liveWatcher = wt
+}
+
+// extendLiveWatchWSL adds whatever WSL roots the first full backfill
+// resolved (a.cache.RootsByAdapter, now populated) to the already-running
+// live watcher, once, right after that backfill completes. A no-op when
+// wsl_scan is off, no distro was found, or the watcher never started.
+func (a *app) extendLiveWatchWSL(nativeClaudeRoots, nativeCodexRoots []string) {
+	if a.liveWatcher == nil {
+		return
+	}
+	full := a.cache.RootsSnapshot()
+	fullRoots := append(append([]string{}, full["claude"]...), full["codex"]...)
+	nativeRoots := append(append([]string{}, nativeClaudeRoots...), nativeCodexRoots...)
+	a.liveWatcher.AddWSLRoots(diffRootsCaseInsensitive(fullRoots, nativeRoots))
 }
 
 // diffRootsCaseInsensitive returns the entries of all not present in remove,
@@ -486,23 +530,35 @@ func (a *app) rebuild(refreshSlow bool, progress func(done, total int)) (time.Ti
 	}
 	defer a.building.Store(false)
 
+	// F2: copy the config and take everything else Collect needs under a
+	// brief lock, then run Collect (the long part: it lists, reads and
+	// ingests every source file) without holding a.mu for the whole call.
+	// Before this fix, a.mu was held for rebuild's entire body, so the live
+	// watcher's IngestFile calls (also gated on a.mu) queued behind
+	// whichever rebuild was in flight, including the multi-minute initial
+	// backfill, matching the reported "Codex card minutes late" symptom
+	// exactly. dataset.Cache now guards its own shared state internally
+	// (rootsMu), so this is safe; Collect gets its own cfg snapshot rather
+	// than a live pointer into a.cfg, so a concurrent Settings save cannot
+	// race it (that save triggers its own follow-up rebuild regardless).
 	a.mu.Lock()
-	defer a.mu.Unlock()
-
+	cfg := a.cfg
 	opts := dataset.CollectOpts{
 		Seat:        a.seat,
 		MonthsN:     a.monthsN,
 		Sources:     a.sources,
 		RefreshSlow: refreshSlow,
 	}
-	payload, err := a.cache.Collect(&a.cfg, opts, progress)
+	a.mu.Unlock()
+
+	payload, err := a.cache.Collect(&cfg, opts, progress)
 	if err != nil {
 		return time.Time{}, err
 	}
 	// Reflects whatever the most recent WSL probe (if any ran this pass, or
 	// the last pass that did) actually found; empty when WSL is off, not
 	// installed, or found nothing.
-	a.wslDistros = scan.WSLDistroNames()
+	wslDistros := scan.WSLDistroNames()
 	logSourceScan(a.cache.Sources, a.cache.Files)
 	blob, err := json.Marshal(payload)
 	if err != nil {
@@ -513,8 +569,12 @@ func (a *app) rebuild(refreshSlow bool, progress func(done, total int)) (time.Ti
 		return time.Time{}, err
 	}
 
+	a.mu.Lock()
+	a.wslDistros = wslDistros
 	built := time.Now()
 	html = a.applyAppChrome(html)
+	a.mu.Unlock()
+
 	if err := os.WriteFile(a.htmlPath, []byte(html), 0o600); err != nil {
 		return time.Time{}, err
 	}

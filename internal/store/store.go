@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS events (
 	PRIMARY KEY (vendor, session_id, request_id)
 );
 CREATE INDEX IF NOT EXISTS idx_events_session ON events (vendor, session_id);
+CREATE INDEX IF NOT EXISTS idx_events_at ON events (at);
 CREATE TABLE IF NOT EXISTS cursors (
 	path   TEXT PRIMARY KEY,
 	offset INTEGER NOT NULL,
@@ -197,21 +198,16 @@ func nullFloat(p *float64) any {
 	return *p
 }
 
-// AllEvents returns every stored event, oldest first by At. v0.1 scale
-// (a developer's own machine, at most a few hundred thousand turns) makes
-// loading the whole table fine; a windowed query can be added later if it
-// ever needs to be.
-func (s *Store) AllEvents() ([]schema.Event, error) {
-	rows, err := s.db.Query(`
-SELECT vendor, agent, surface, session_id, request_id, parent_id, at, model,
+const eventColumns = `vendor, agent, surface, session_id, request_id, parent_id, at, model,
 	project, title, input, cache_write, cache_read, output, reasoning,
-	vendor_cost, window_used, window_reset, tools
-FROM events ORDER BY at ASC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	vendor_cost, window_used, window_reset, tools`
 
+// scanEvents reads every row of rows (already SELECTed with eventColumns'
+// exact column list and order) into Events. Shared by AllEvents and
+// EventsSince so the two queries' row-decoding logic (nullable columns,
+// the tools JSON blob, RFC3339Nano timestamps) is written once.
+func scanEvents(rows *sql.Rows) ([]schema.Event, error) {
+	defer rows.Close()
 	var out []schema.Event
 	for rows.Next() {
 		var e schema.Event
@@ -226,6 +222,7 @@ FROM events ORDER BY at ASC`)
 			&windowReset, &toolsJSON); err != nil {
 			return nil, err
 		}
+		var err error
 		e.At, err = time.Parse(time.RFC3339Nano, atStr)
 		if err != nil {
 			return nil, fmt.Errorf("store: parse at %q: %w", atStr, err)
@@ -262,6 +259,119 @@ FROM events ORDER BY at ASC`)
 			}
 		}
 		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// AllEvents returns every stored event, oldest first by At. v0.1 scale
+// (a developer's own machine, at most a few hundred thousand turns) makes
+// loading the whole table fine for the CLI's one-shot report; the Now
+// page's live poll uses EventsSince instead (see F1, SESSION_LOG.md), since
+// polling AllEvents every 2 seconds re-groups the whole table in memory on
+// every tick.
+func (s *Store) AllEvents() ([]schema.Event, error) {
+	rows, err := s.db.Query(`SELECT ` + eventColumns + ` FROM events ORDER BY at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	return scanEvents(rows)
+}
+
+// EventsSince returns every stored event whose At is at or after from,
+// oldest first, using the idx_events_at index. The Now page's live poll
+// (bmLive) uses this with from = now - live.ChartWindow instead of
+// AllEvents, so a 2-second poll only ever groups the chart window's worth
+// of rows, not the whole history (F1: burnmon.exe was measured at 1,886 MB
+// and thrashing before this fix).
+func (s *Store) EventsSince(from time.Time) ([]schema.Event, error) {
+	rows, err := s.db.Query(`SELECT `+eventColumns+` FROM events WHERE at >= ? ORDER BY at ASC`,
+		from.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, err
+	}
+	return scanEvents(rows)
+}
+
+// SessionModelTotal is one (vendor, session_id, model) group's SQL-summed
+// token counts, turn count and time span. A running session can switch
+// model mid-session, so SessionTotals groups by model too rather than
+// collapsing straight to one row per session; ApplySessionTotals (internal/live)
+// sums cost per group (both cost formulas are linear in token counts, so
+// this is exact, not an approximation) then adds the groups together.
+type SessionModelTotal struct {
+	Vendor     string
+	SessionID  string
+	Model      string
+	Input      int64
+	CacheWrite int64
+	CacheRead  int64
+	Output     int64
+	Reasoning  int64
+	Count      int64
+	MinAt      time.Time
+	MaxAt      time.Time
+}
+
+// SessionKey identifies one running session by (Vendor, SessionID): a bare
+// session_id is not unique across vendors (two adapters can in principle
+// mint the same id), so SessionTotals is looked up by the vendor-qualified
+// pair rather than session_id alone.
+type SessionKey struct {
+	Vendor    string
+	SessionID string
+}
+
+// SessionTotals returns one row per (vendor, session_id, model) group for
+// every (vendor, session_id) pair in keys, SQL-summed across the whole
+// events table (not windowed), so a session's lifetime Tokens/Cost/Start
+// stay correct even though the Now page's live poll only re-reads the last
+// ChartWindow of events for everything else (F1). The claude adapter's
+// synthetic tool-only events (model="" and input=output=0) are excluded,
+// matching internal/live's own isTurn filter. Returns nil, nil for an empty
+// keys.
+func (s *Store) SessionTotals(keys []SessionKey) ([]SessionModelTotal, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	clauses := make([]string, len(keys))
+	args := make([]any, 0, len(keys)*2)
+	for i, k := range keys {
+		clauses[i] = "(vendor = ? AND session_id = ?)"
+		args = append(args, k.Vendor, k.SessionID)
+	}
+	query := `
+SELECT vendor, session_id, model,
+	SUM(input) AS input, SUM(COALESCE(cache_write,0)) AS cache_write,
+	SUM(COALESCE(cache_read,0)) AS cache_read, SUM(output) AS output,
+	SUM(COALESCE(reasoning,0)) AS reasoning, COUNT(*) AS cnt,
+	MIN(at) AS min_at, MAX(at) AS max_at
+FROM events
+WHERE (` + strings.Join(clauses, " OR ") + `)
+	AND NOT (model = '' AND input = 0 AND output = 0)
+GROUP BY vendor, session_id, model`
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SessionModelTotal
+	for rows.Next() {
+		var t SessionModelTotal
+		var minAtStr, maxAtStr string
+		if err := rows.Scan(&t.Vendor, &t.SessionID, &t.Model, &t.Input, &t.CacheWrite,
+			&t.CacheRead, &t.Output, &t.Reasoning, &t.Count, &minAtStr, &maxAtStr); err != nil {
+			return nil, err
+		}
+		t.MinAt, err = time.Parse(time.RFC3339Nano, minAtStr)
+		if err != nil {
+			return nil, fmt.Errorf("store: parse min_at %q: %w", minAtStr, err)
+		}
+		t.MaxAt, err = time.Parse(time.RFC3339Nano, maxAtStr)
+		if err != nil {
+			return nil, fmt.Errorf("store: parse max_at %q: %w", maxAtStr, err)
+		}
+		out = append(out, t)
 	}
 	return out, rows.Err()
 }

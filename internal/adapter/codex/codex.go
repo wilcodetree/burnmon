@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"burnmon/internal/scan"
@@ -95,9 +96,11 @@ func asFloat(v any) (float64, bool) {
 
 // classifySurface maps a session_meta originator to the report's surface
 // vocabulary. Values actually seen on Wilco's laptop (SESSION_LOG.md, v0.1
-// Step 2): "codex-tui", "Codex Desktop", "codex_work_desktop"; the spec's
-// guessed "codex_cli_rs" / "codex_vscode" were not found on disk, so this
-// matches by substring rather than an exact enum.
+// Step 2, and the v0.1.1 originator values "codex-tui" / "codex_vscode"
+// confirmed live on 2026-09-22): "codex-tui", "codex_vscode", "Codex
+// Desktop", "codex_work_desktop"; the spec's guessed "codex_cli_rs" also
+// matches the "cli" case by substring. Logs (once per distinct value) any
+// originator this substring match does not recognise, per F2.
 func classifySurface(originator string) string {
 	o := strings.ToLower(originator)
 	switch {
@@ -108,8 +111,29 @@ func classifySurface(originator string) string {
 	case strings.Contains(o, "tui") || strings.Contains(o, "cli"):
 		return "cli"
 	default:
+		logUnknownOriginatorOnce(originator)
 		return "unknown"
 	}
+}
+
+var (
+	unknownOriginatorsMu sync.Mutex
+	unknownOriginators   = map[string]bool{}
+)
+
+// logUnknownOriginatorOnce logs originator the first time classifySurface
+// fails to recognise it, and stays silent on every later occurrence of the
+// same value (a live-watched session re-parses its own session_meta line
+// via scanHeaderMeta on every incremental read, so without dedup this would
+// otherwise log once per poll for the life of the session).
+func logUnknownOriginatorOnce(originator string) {
+	unknownOriginatorsMu.Lock()
+	defer unknownOriginatorsMu.Unlock()
+	if unknownOriginators[originator] {
+		return
+	}
+	unknownOriginators[originator] = true
+	log.Printf("codex: unrecognized session_meta originator %q, surface set to unknown", originator)
 }
 
 // rateLimitWindow picks the rate_limits window closest to Codex's 5-hour
@@ -141,17 +165,84 @@ func rateLimitWindow(rl map[string]any) map[string]any {
 	}
 }
 
+// headerScanLimit bounds scanHeaderMeta's re-read of a rollout's own start:
+// session_meta is always the first line in every rollout observed on
+// Wilco's laptop, so this is normally one line, but the cap keeps a resumed
+// read on a multi-gigabyte rollout cheap even if a build ever moves it.
+const headerScanLimit = 64 * 1024
+
+// scanHeaderMeta re-reads path's session_meta line (always near the top of
+// the file, written once) so an incremental Parse call that starts at a
+// later offset can still recover cwd, surface and whether the thread is a
+// sub-run: without this, a live-watched Codex session's every turn after
+// the first read reported surface "unknown" (F2, SESSION_LOG.md), because
+// surface was a Parse-local variable that reset to "unknown" on every call
+// and session_meta, the only line carrying originator, never appears again
+// after the first read consumes it. Leaves f positioned wherever the
+// bounded read stopped; the caller seeks to its own offset afterward.
+func scanHeaderMeta(f *os.File) (cwd, surface string, subRun bool) {
+	surface = "unknown"
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return cwd, surface, subRun
+	}
+	reader := bufio.NewReader(io.LimitReader(f, headerScanLimit))
+	for {
+		rawLine, readErr := reader.ReadString('\n')
+		line := strings.TrimSpace(rawLine)
+		if line != "" {
+			var obj map[string]any
+			if json.Unmarshal([]byte(line), &obj) == nil {
+				if typ, _ := obj["type"].(string); typ == "session_meta" {
+					if payload, ok := obj["payload"].(map[string]any); ok && payload != nil {
+						cwd, surface, subRun = readSessionMeta(payload)
+					}
+					break
+				}
+			}
+		}
+		if readErr != nil {
+			break
+		}
+	}
+	return cwd, surface, subRun
+}
+
+// readSessionMeta extracts cwd, surface and whether payload describes a
+// sub-run thread (a reviewer or other internal sub-agent, not the user's
+// own conversation) from one session_meta line's payload. Confirmed on a
+// live rollout (SESSION_LOG.md, v0.1.1 F2): a normal session's session_meta
+// carries "thread_source":"user"; a Codex-internal sub-run (observed:
+// "codex-auto-review", thread_source "guardian_review", source.subagent
+// set) carries a non-"user" thread_source and its turn_context.model is not
+// a real model id, it is the sub-run's own name.
+func readSessionMeta(payload map[string]any) (cwd, surface string, subRun bool) {
+	surface = "unknown"
+	if c, ok := payload["cwd"].(string); ok {
+		cwd = c
+	}
+	if o, ok := payload["originator"].(string); ok {
+		surface = classifySurface(o)
+	}
+	if ts, ok := payload["thread_source"].(string); ok && ts != "" && ts != "user" {
+		subRun = true
+	}
+	return cwd, surface, subRun
+}
+
 // Parse reads path from byte offset from to EOF and returns one Event per
 // token_count line found, plus the byte offset right after the last
 // complete line consumed. A trailing partial line (the file still being
 // written) is left for the next call, same contract as the claude adapter.
 //
 // Model is the most recent turn_context.model seen since from: a session
-// that switches model mid-file (rare, but real: see codex-auto-review and
-// the model changes across Wilco's own trail) is picked up correctly within
-// one read, but a token_count line appearing in a chunk that starts after
-// its turn_context (a read resumed mid-turn) carries no model, matching the
-// claude adapter's own precedent of only tracking state within one read.
+// that switches model mid-file (rare, but real) is picked up correctly
+// within one read, but a token_count line appearing in a chunk that starts
+// after its turn_context (a read resumed mid-turn) carries no model,
+// matching the claude adapter's own precedent of only tracking state
+// within one read. A sub-run thread (see readSessionMeta) never gets a
+// Model at all: its turn_context.model is a sub-run name, not a model id
+// (observed: "codex-auto-review"), so it is carried as Title instead and
+// Model stays empty, "context window unknown" rather than a fabricated one.
 func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -159,18 +250,21 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 	}
 	defer f.Close()
 
-	if from > 0 {
-		if _, err := f.Seek(from, io.SeekStart); err != nil {
-			return nil, from, err
-		}
-	}
-
 	base := filepath.Base(path)
 	sessionID := strings.TrimSuffix(base, filepath.Ext(base))
 
 	cwd := ""
 	model := ""
 	surface := "unknown"
+	title := ""
+	subRun := false
+
+	if from > 0 {
+		cwd, surface, subRun = scanHeaderMeta(f)
+	}
+	if _, err := f.Seek(from, io.SeekStart); err != nil {
+		return nil, from, err
+	}
 
 	var events []schema.Event
 	offset := from
@@ -202,12 +296,12 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 		switch typ {
 		case "session_meta":
 			if payload != nil {
-				if c, ok := payload["cwd"].(string); ok && cwd == "" {
+				c, s, sr := readSessionMeta(payload)
+				if cwd == "" {
 					cwd = c
 				}
-				if o, ok := payload["originator"].(string); ok {
-					surface = classifySurface(o)
-				}
+				surface = s
+				subRun = sr
 			}
 			continue
 		case "turn_context":
@@ -216,7 +310,15 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 					cwd = c
 				}
 				if m, ok := payload["model"].(string); ok && m != "" {
-					model = m
+					if subRun {
+						// A sub-run thread's turn_context.model is not a real
+						// model id, it is the sub-run's own name (observed:
+						// "codex-auto-review"); show it as the session title
+						// instead of a fabricated model.
+						title = m
+					} else {
+						model = m
+					}
 				}
 			}
 			continue
@@ -248,6 +350,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 			RequestID: sessionID + ":" + strconv.FormatInt(int64(ordinal), 10),
 			Project:   cwd,
 			Model:     model,
+			Title:     title,
 		}
 
 		inputTokens := asInt(last["input_tokens"])

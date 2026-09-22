@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"burnmon/internal/adapter"
@@ -210,7 +211,38 @@ type Cache struct {
 	// RootsByAdapter is resolveSources's per-adapter root list from the last
 	// full pass, cached across fast-tier passes exactly like SlowFiles, so
 	// ingest can classify a reused WSL file's adapter without re-probing WSL.
+	// Written by Collect and SeedNativeRoots, read by ingest (via IngestFile,
+	// the live watcher's path) and RootsSnapshot; rootsMu guards it because,
+	// since v0.1.1 F2, the live watcher's IngestFile calls run concurrently
+	// with a full Collect backfill rather than being serialised behind it
+	// (see cmd/burnmon's app.rebuild and startLiveWatch, SESSION_LOG.md).
 	RootsByAdapter map[string][]string
+	rootsMu        sync.RWMutex
+}
+
+// SeedNativeRoots sets RootsByAdapter's native (non-WSL) entries before any
+// Collect has run, so IngestFile classifies a live Claude or Codex file
+// correctly from the moment the app's live watcher starts, rather than
+// falling back to the claude adapter (adapterForPath's zero-roots default)
+// for every Codex file until the first full backfill finishes. A later
+// Collect's own RootsByAdapter write (native plus any WSL roots) simply
+// replaces this.
+func (c *Cache) SeedNativeRoots(claudeRoots, codexRoots []string) {
+	c.rootsMu.Lock()
+	defer c.rootsMu.Unlock()
+	c.RootsByAdapter = map[string][]string{"claude": claudeRoots, "codex": codexRoots}
+}
+
+// RootsSnapshot returns a copy of the current RootsByAdapter, safe to read
+// while a Collect may be writing it concurrently.
+func (c *Cache) RootsSnapshot() map[string][]string {
+	c.rootsMu.RLock()
+	defer c.rootsMu.RUnlock()
+	out := make(map[string][]string, len(c.RootsByAdapter))
+	for k, v := range c.RootsByAdapter {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
 }
 
 // dedupSessions removes the same conversation when it was recorded under
@@ -415,8 +447,11 @@ func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool
 	if progress != nil {
 		progress(0, total)
 	}
+	// Snapshot once, not per file: RootsByAdapter does not change mid-pass,
+	// and files can number in the thousands.
+	roots := c.RootsSnapshot()
 	for i, f := range files {
-		a := adapterForPath(f, c.RootsByAdapter)
+		a := adapterForPath(f, roots)
 		if a == nil {
 			if progress != nil {
 				progress(i+1, total)
@@ -466,8 +501,17 @@ func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool
 			}
 			continue
 		}
-		if len(events) > 0 {
-			if err := c.Store.UpsertEvents(events); err != nil {
+		// F1: commit in batches of 1,000 rather than one transaction for the
+		// whole file, so a first pass over a large existing rollout (a
+		// Codex session can grow past a gigabyte) doesn't hold one huge
+		// transaction (and its rollback log) open for the whole read.
+		const upsertBatch = 1000
+		for start := 0; start < len(events); start += upsertBatch {
+			end := start + upsertBatch
+			if end > len(events) {
+				end = len(events)
+			}
+			if err := c.Store.UpsertEvents(events[start:end]); err != nil {
 				return fmt.Errorf("dataset: upsert events for %s: %w", f, err)
 			}
 		}
@@ -486,10 +530,14 @@ func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool
 // payload. For internal/watch's live watcher: a file-change notification
 // names one path, and re-running the whole Collect pipeline for it would
 // mean re-listing every source on every keystroke of every open session.
-// Requires a prior full Collect to have populated c.RootsByAdapter, so path
-// classifies to the right adapter; falls back to the claude adapter
-// otherwise, same as ingest does for any other path before the first full
-// pass.
+// Requires RootsByAdapter to already be populated, by a prior full Collect
+// or by SeedNativeRoots (cmd/burnmon calls the latter before the first
+// Collect so the live watcher classifies Codex paths correctly from
+// startup, v0.1.1 F2), so path classifies to the right adapter; falls back
+// to the claude adapter otherwise, same as ingest does for any other path
+// before either has run. Safe to call concurrently with a Collect on the
+// same Cache: both go through the store's single-connection pool, and
+// RootsByAdapter reads/writes are guarded by rootsMu.
 func (c *Cache) IngestFile(path string) error {
 	return c.ingest([]string{path}, nil, false, nil)
 }
@@ -516,7 +564,9 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 		return Payload{}, ErrNoSources
 	}
 	if roots != nil {
+		c.rootsMu.Lock()
 		c.RootsByAdapter = roots
+		c.rootsMu.Unlock()
 	}
 
 	var files []string

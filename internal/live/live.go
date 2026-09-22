@@ -10,6 +10,7 @@ import (
 
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
+	"burnmon/internal/store"
 )
 
 // ClassCounts is one session's token classes inside one minute bucket.
@@ -20,15 +21,20 @@ type ClassCounts struct {
 	Output     int64 `json:"output"`
 }
 
-// MinuteBucket is one minute of the live chart's 30-minute window.
-type MinuteBucket struct {
-	Minute    string                 `json:"minute"` // RFC3339, truncated to the minute, UTC
-	BySession map[string]ClassCounts `json:"by_session"`
+// Bucket is one fixed 10-second slot of the Now page's 30-minute sliding
+// chart (F3): always present in Snapshot.Chart, zero-valued when no turn
+// landed in it, so the frontend never has to derive a dense timeline from a
+// sparse one. At is UTC; the frontend renders it in the viewer's local time
+// (F3's fix for the axis showing UTC while local read differently).
+type Bucket struct {
+	At        string                 `json:"at"`
+	BySession map[string]ClassCounts `json:"by_session,omitempty"`
 	Cost      float64                `json:"cost"`
 }
 
 // Session is one running session (or subagent) on the Now page.
 type Session struct {
+	Vendor        string     `json:"vendor"`
 	SessionID     string     `json:"session_id"`
 	Agent         string     `json:"agent"`
 	Surface       string     `json:"surface"`
@@ -61,14 +67,33 @@ type Forecast struct {
 
 // Snapshot is what bmLive() and `burnmon-cli.exe live --json` both return.
 type Snapshot struct {
-	GeneratedAt          string         `json:"generated_at"`
-	RunningWindowSeconds float64        `json:"running_window_seconds"`
-	Sessions             []*Session     `json:"sessions"`
-	Chart                []MinuteBucket `json:"chart"`
-	Forecast             Forecast       `json:"forecast"`
+	GeneratedAt          string     `json:"generated_at"`
+	RunningWindowSeconds float64    `json:"running_window_seconds"`
+	Sessions             []*Session `json:"sessions"`
+	// WindowStart is the chart's oldest (leftmost) slot, RFC3339 UTC.
+	// BucketSeconds is each Chart slot's width (F3: 10). The frontend must
+	// derive every slot's position from these two plus len(Chart), never
+	// from the events themselves: Chart is already dense.
+	WindowStart   string   `json:"window_start"`
+	BucketSeconds int      `json:"bucket_seconds"`
+	Chart         []Bucket `json:"chart"`
+	Forecast      Forecast `json:"forecast"`
 }
 
-const chartWindow = 30 * time.Minute
+// ChartWindow is how far back both the chart and BuildSnapshot's own
+// "running" detection look. Exported so main.go's bmLive binding can pull
+// exactly this much history via store.EventsSince instead of the whole
+// table (F1): safe because pricing.Config.RunningWindowSeconds defaults to
+// 10 minutes, well inside this 30-minute window, so no running session's
+// last turn ever falls outside what EventsSince(now-ChartWindow) returns.
+const ChartWindow = 30 * time.Minute
+
+// BucketSeconds is the width of one Now-page chart slot (F3): a fixed
+// 30-minute, 10-second-bucket, 180-slot running chart.
+const BucketSeconds = 10
+
+// chartSlots is ChartWindow's slot count at BucketSeconds width (180).
+const chartSlots = int(ChartWindow / (BucketSeconds * time.Second))
 
 // turnCost returns one event's subscription-share cost, the same model
 // buildSession uses: output-driven for Claude, list-price for OpenAI (no
@@ -178,6 +203,7 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 		window, _ := cfg.ContextWindow(last.Model)
 
 		s := &Session{
+			Vendor:        turns[0].Vendor,
 			SessionID:     g.id,
 			Agent:         turns[0].Agent,
 			Surface:       last.Surface,
@@ -211,11 +237,24 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 		top = append(top, s)
 	}
 
+	// windowEnd anchors the chart's right edge at or after now (never
+	// before): truncating windowStart itself down from now-ChartWindow, as
+	// an earlier version did, always left a 0-10s gap between the last
+	// bucket and now, and silently dropped any event landing in that gap
+	// (idx computed >= chartSlots) from every bucket, including the very
+	// turn a live poll just picked up.
+	windowEnd := now.Truncate(BucketSeconds * time.Second)
+	if windowEnd.Before(now) {
+		windowEnd = windowEnd.Add(BucketSeconds * time.Second)
+	}
+	windowStart := windowEnd.Add(-ChartWindow)
 	return Snapshot{
 		GeneratedAt:          now.UTC().Format(time.RFC3339),
 		RunningWindowSeconds: cfg.RunningWindowSeconds(),
 		Sessions:             top,
-		Chart:                buildChart(events, cfg, now),
+		WindowStart:          windowStart.UTC().Format(time.RFC3339),
+		BucketSeconds:        BucketSeconds,
+		Chart:                buildChart(events, cfg, windowStart, now),
 		Forecast:             buildForecast(events, cfg, now),
 	}
 }
@@ -229,23 +268,30 @@ func firstNonEmptyProject(events []schema.Event) string {
 	return ""
 }
 
-// buildChart buckets every real turn in the last 30 minutes by minute and by
-// session, running or not: a session that just fell out of the running
-// window a moment ago still belongs on the chart's tail.
-func buildChart(events []schema.Event, cfg *pricing.Config, now time.Time) []MinuteBucket {
-	from := now.Add(-chartWindow)
-	buckets := map[string]*MinuteBucket{}
-	var order []string
+// buildChart returns chartSlots (180) dense 10-second buckets covering
+// [windowStart, windowStart+ChartWindow), every slot present and
+// zero-valued when no turn landed in it (F3): the frontend must never
+// derive a dense timeline from a sparse one, so this does that work once,
+// here, rather than emitting only the minutes that had a turn. Buckets
+// every real turn in the window by slot and by session, running or not: a
+// session that just fell out of the running window a moment ago still
+// belongs on the chart's tail.
+func buildChart(events []schema.Event, cfg *pricing.Config, windowStart, now time.Time) []Bucket {
+	slots := make([]Bucket, chartSlots)
+	for i := range slots {
+		slots[i].At = windowStart.Add(time.Duration(i) * BucketSeconds * time.Second).UTC().Format(time.RFC3339)
+	}
 	for _, e := range events {
-		if !isTurn(e) || e.At.IsZero() || e.At.Before(from) || e.At.After(now) {
+		if !isTurn(e) || e.At.IsZero() || e.At.Before(windowStart) || e.At.After(now) {
 			continue
 		}
-		minute := e.At.UTC().Truncate(time.Minute).Format(time.RFC3339)
-		b := buckets[minute]
-		if b == nil {
-			b = &MinuteBucket{Minute: minute, BySession: map[string]ClassCounts{}}
-			buckets[minute] = b
-			order = append(order, minute)
+		idx := int(e.At.Sub(windowStart) / (BucketSeconds * time.Second))
+		if idx < 0 || idx >= chartSlots {
+			continue
+		}
+		b := &slots[idx]
+		if b.BySession == nil {
+			b.BySession = map[string]ClassCounts{}
 		}
 		cc := b.BySession[e.SessionID]
 		cc.Fresh += e.Input
@@ -259,12 +305,7 @@ func buildChart(events []schema.Event, cfg *pricing.Config, now time.Time) []Min
 		b.BySession[e.SessionID] = cc
 		b.Cost += turnCost(e, cfg)
 	}
-	sort.Strings(order)
-	out := make([]MinuteBucket, 0, len(order))
-	for _, m := range order {
-		out = append(out, *buckets[m])
-	}
-	return out
+	return slots
 }
 
 // buildForecast sums every real turn's tokens and cost per UTC calendar day
@@ -308,4 +349,80 @@ func buildForecast(events []schema.Event, cfg *pricing.Config, now time.Time) Fo
 		Message: "Needs one scored week before a forecast line; showing the last 7 days of history.",
 		Days:    out,
 	}
+}
+
+// ApplySessionTotals overwrites each running session's Start, TurnCount,
+// Tokens and Cost with the store's SQL-aggregated lifetime totals (F1):
+// BuildSnapshot itself only ever sees EventsSince(now-ChartWindow), so a
+// session that has been running longer than ChartWindow would otherwise
+// under-report its own tokens and cost. Recurses into Subagents. A session
+// with no matching rows (should not happen for one BuildSnapshot just
+// found running, but store access can race a session's very first turn) is
+// left as BuildSnapshot computed it.
+func ApplySessionTotals(sessions []*Session, st *store.Store, cfg *pricing.Config) error {
+	keys := sessionKeys(sessions)
+	if len(keys) == 0 {
+		return nil
+	}
+	rows, err := st.SessionTotals(keys)
+	if err != nil {
+		return err
+	}
+	byID := map[string][]store.SessionModelTotal{}
+	for _, r := range rows {
+		k := r.Vendor + "|" + r.SessionID
+		byID[k] = append(byID[k], r)
+	}
+	var apply func(s *Session)
+	apply = func(s *Session) {
+		if grp, ok := byID[s.Vendor+"|"+s.SessionID]; ok {
+			var tokens, turns int64
+			var cost float64
+			var start time.Time
+			for _, r := range grp {
+				tokens += r.Input + r.CacheWrite + r.CacheRead + r.Output
+				turns += r.Count
+				if start.IsZero() || r.MinAt.Before(start) {
+					start = r.MinAt
+				}
+				if r.Vendor == "openai" {
+					c, _ := cfg.OpenAICallCostUSD(r.Model, r.Input, r.CacheRead, r.Output)
+					cost += c
+				} else {
+					cost += cfg.CallCostSubUSD(cfg.ModelFamily(r.Model), r.Input, r.Output)
+				}
+			}
+			s.Tokens = tokens
+			s.Cost = cost
+			s.TurnCount = int(turns)
+			if !start.IsZero() {
+				s.Start = start.UTC().Format(time.RFC3339)
+			}
+		}
+		for _, sub := range s.Subagents {
+			apply(sub)
+		}
+	}
+	for _, s := range sessions {
+		apply(s)
+	}
+	return nil
+}
+
+// sessionKeys collects every (vendor, session_id) pair in sessions,
+// including subagents. A bare session_id is not unique across vendors, so
+// SessionTotals is looked up by this vendor-qualified pair.
+func sessionKeys(sessions []*Session) []store.SessionKey {
+	var out []store.SessionKey
+	var walk func(s *Session)
+	walk = func(s *Session) {
+		out = append(out, store.SessionKey{Vendor: s.Vendor, SessionID: s.SessionID})
+		for _, sub := range s.Subagents {
+			walk(sub)
+		}
+	}
+	for _, s := range sessions {
+		walk(s)
+	}
+	return out
 }

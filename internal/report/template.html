@@ -157,7 +157,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   <div>
     <div class="mast"><span class="masttile"><span class="mz">0</span>N</span><span class="mastword">ZeroNonsense<span class="mastdev">.dev</span></span></div>
     <h1>BurnMon</h1>
-    <p id="subtitle">Your own usage and what it costs</p>
+    <p id="subtitle">What your coding agents burn, live and by month</p>
   </div>
   <div class="topright">
     <div class="topctrls">
@@ -184,7 +184,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 <div class="wrap">
 
 <section id="now" class="hidden">
-  <p class="lede">Running Claude Code and Codex sessions, live. Polls every 2 seconds while this window is open; a saved report has nothing to poll.</p>
+  <p class="lede">Running Claude Code, Cowork and Codex sessions, live. Polls every 2 seconds while this window is open; a saved report has nothing to poll.</p>
   <div id="now_empty" class="note hidden"></div>
   <div class="grid now-cards" id="now_cards"></div>
 
@@ -577,8 +577,8 @@ en:{
           + 'outside the invoice, so heavy usage costs a little more than shown here.'
         : '');
   },
-  subtitle_sub:'Your share of what we actually pay for Claude',
-  subtitle_list:'Your usage at Anthropic\'s published API list prices',
+  subtitle_sub:'What your coding agents burn, live and by month',
+  subtitle_list:'What your coding agents burn, live and by month',
   th_price_model:'Model', th_price_input:'Input', th_price_output:'Output', th_price_cw:'Cache write', th_price_cr:'Cache read',
   btn_refreshing:'Refreshing…',
   refresh_started_msg_html:'Started your refresh job. It re-reads your sessions and republishes this page. Give it a minute, then reload.',
@@ -667,8 +667,8 @@ nl:{
           + 'werkelijkheid iets meer dan hier getoond.'
         : '');
   },
-  subtitle_sub:'Jouw aandeel in wat we daadwerkelijk voor Claude betalen',
-  subtitle_list:'Jouw gebruik tegen Anthropic\'s gepubliceerde API-listprijzen',
+  subtitle_sub:'Wat je coding agents verbruiken, live en per maand',
+  subtitle_list:'Wat je coding agents verbruiken, live en per maand',
   th_price_model:'Model', th_price_input:'Input', th_price_output:'Output', th_price_cw:'Cache-schrijven', th_price_cr:'Cache-lezen',
   btn_refreshing:'Vernieuwen…',
   refresh_started_msg_html:'Je vernieuwingsopdracht is gestart. Deze leest je sessies opnieuw in en publiceert deze pagina opnieuw. Geef het een minuutje en herlaad dan.',
@@ -1253,11 +1253,22 @@ function gaugeColor(pct){
 }
 
 function sessionCardHTML(s, isSub){
-  var pct = (s.context_window && s.context_window > 0) ? Math.min(100, s.context/s.context_window*100) : null;
-  var gaugeHtml = pct == null
-    ? '<div class="small">'+tok(s.context)+' tokens (context window unknown)</div>'
-    : '<div class="gauge"><i style="width:'+pct.toFixed(0)+'%;background:'+gaugeColor(pct)+'"></i></div>'
+  // F5: never clamp. A known window with actual context past it means the
+  // book is stale or wrong for this model, and that must stay visible, not
+  // be hidden behind a false 100%.
+  var known = s.context_window && s.context_window > 0;
+  var exceeded = known && s.context > s.context_window;
+  var gaugeHtml;
+  if(!known){
+    gaugeHtml = '<div class="small">'+tok(s.context)+' tokens (context window unknown)</div>';
+  } else if(exceeded){
+    gaugeHtml = '<div class="gauge"><i style="width:100%;background:var(--muted)"></i></div>'
+      + '<div class="small">'+tok(s.context)+' tokens, window in book: '+tok(s.context_window)+', exceeded, check book date</div>';
+  } else {
+    var pct = s.context/s.context_window*100;
+    gaugeHtml = '<div class="gauge"><i style="width:'+pct.toFixed(0)+'%;background:'+gaugeColor(pct)+'"></i></div>'
       + '<div class="small">'+tok(s.context)+' / '+tok(s.context_window)+' tokens ('+pct.toFixed(0)+'%)</div>';
+  }
   var subHtml = '';
   if(s.subagents && s.subagents.length){
     subHtml = '<div class="sub-cards">' + s.subagents.map(function(sub){ return sessionCardHTML(sub, true); }).join('') + '</div>';
@@ -1287,38 +1298,115 @@ function renderNowForecast(f){
     + '<table><thead><tr><th class="nosort">Day</th><th>Cost</th><th>Tokens</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
-function drawNowChart(buckets){
+// localHMS renders an RFC3339 (UTC) timestamp as HH:MM:SS in the viewer's
+// own local time zone (F3: the axis previously showed e.At.UTC(), which read
+// wrong against a local clock, e.g. "10:38" at 12:29 local).
+function localHMS(iso){
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  function pad(n){ return (n<10?'0':'')+n; }
+  return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+}
+
+// flattenSessions walks sessions plus every nested subagent, for building a
+// session_id -> Session lookup the chart uses for legend labels.
+function flattenSessions(list){
+  var out = [];
+  (list||[]).forEach(function(s){
+    out.push(s);
+    if(s.subagents && s.subagents.length) out = out.concat(flattenSessions(s.subagents));
+  });
+  return out;
+}
+
+// sessionChartLabel is "agent · model · project basename", never the raw
+// session id (F3): the id itself only ever appears in the tooltip.
+function sessionChartLabel(s){
+  return esc(s.agent||'') + ' · ' + esc(s.model || '(model unknown)') + ' · ' + esc(baseName(s.project));
+}
+
+// drawNowChart renders the Now page's fixed 30-minute, 10-second-bucket,
+// 180-slot running chart (F3): chart is already dense (every slot present,
+// zero when empty) and in windowStart/bucketSeconds order from the backend,
+// so this only maps it onto Chart.js, it never re-derives slots. One
+// stacked bar series per session (colored by session, labeled agent ·
+// model · project basename, raw id only in the tooltip), a cost/bucket
+// line on its own right-axis scale, and both axes recomputed to this
+// window's own peak on every call (drawNowChart runs on every 2-second
+// poll and always destroys+rebuilds the Chart.js instance, so "recomputed
+// every poll" falls out of that rather than needing separate machinery).
+function drawNowChart(chart, sessions){
   if(typeof Chart === 'undefined'){ chartFallback('ch_now', 'Live burn'); return; }
-  buckets = buckets || [];
+  chart = chart || [];
   try {
-    var labels = buckets.map(function(b){ return (b.minute||'').slice(11,16); });
+    var byId = {};
+    flattenSessions(sessions).forEach(function(s){ byId[s.session_id] = s; });
+
+    var labels = chart.map(function(b){ return localHMS(b.at); });
     var sessionIds = [];
-    buckets.forEach(function(b){
+    chart.forEach(function(b){
       Object.keys(b.by_session||{}).forEach(function(id){ if(sessionIds.indexOf(id)===-1) sessionIds.push(id); });
     });
     var P = chartPalette();
-    var colors = [P.accent, P.blue2, P.blue3, P.muted];
+    var colors = [P.accent, P.blue2, P.blue3, P.muted, '#C77DFF', '#FFB84D'];
+
+    var tokenPeak = 0;
+    chart.forEach(function(b){
+      var total = 0;
+      Object.keys(b.by_session||{}).forEach(function(id){
+        var v = b.by_session[id];
+        total += v.fresh + v.cache_write + v.cache_read + v.output;
+      });
+      if(total > tokenPeak) tokenPeak = total;
+    });
+    var costPeak = 0;
+    chart.forEach(function(b){ var c = (b.cost||0)*rate(); if(c > costPeak) costPeak = c; });
+
     var datasets = sessionIds.map(function(id, i){
-      return {type:'bar', label: id, stack:'tokens', yAxisID:'y',
-        data: buckets.map(function(b){
+      var s = byId[id];
+      return {type:'bar', label: s ? sessionChartLabel(s) : 'recent session', stack:'tokens', yAxisID:'y',
+        sessionId: id,
+        data: chart.map(function(b){
           var v = (b.by_session||{})[id];
           return v ? (v.fresh + v.cache_write + v.cache_read + v.output) : 0;
         }),
+        classBreakdown: chart.map(function(b){ return (b.by_session||{})[id] || null; }),
         backgroundColor: colors[i % colors.length]};
     });
-    datasets.push({type:'line', label:'Cost/min', yAxisID:'cost',
-      data: buckets.map(function(b){ return +((b.cost||0)*rate()).toFixed(4); }),
-      borderColor: P.blue3, backgroundColor:'transparent', tension:0.25});
+    datasets.push({type:'line', label:'Cost/10s', yAxisID:'cost', sessionId: null,
+      data: chart.map(function(b){ return +((b.cost||0)*rate()).toFixed(4); }),
+      borderColor: P.blue3, backgroundColor:'transparent', tension:0.25, pointRadius:0});
+
     if(charts.now) charts.now.destroy();
     charts.now = new Chart(document.getElementById('ch_now'), {
       data:{labels:labels, datasets:datasets},
       options:{responsive:true, maintainAspectRatio:false,
         scales:{
-          x:{stacked:true, grid:{display:false}, ticks:{font:{size:10}}},
-          y:{stacked:true, beginAtZero:true, grid:{color:P.grid}},
-          cost:{position:'right', beginAtZero:true, grid:{display:false}}
+          x:{stacked:true, grid:{display:false}, ticks:{font:{size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:9}},
+          // Own-peak scaling (F3): a bucket at the window's peak holds the
+          // axis until it slides out of the 30-minute window, then the next
+          // destroy+rebuild recomputes it from whatever is left.
+          y:{stacked:true, beginAtZero:true, max: tokenPeak > 0 ? tokenPeak*1.1 : undefined, grid:{color:P.grid}},
+          cost:{position:'right', beginAtZero:true, max: costPeak > 0 ? costPeak*1.1 : undefined, grid:{display:false}}
         },
-        plugins:{legend:{position:'bottom', labels:{font:{size:10}, boxWidth:10}}}}});
+        plugins:{
+          legend:{position:'bottom', labels:{font:{size:10}, boxWidth:10}},
+          tooltip:{callbacks:{
+            afterLabel: function(ctx){
+              if(ctx.dataset.type !== 'bar') return [];
+              var lines = [];
+              if(ctx.dataset.sessionId) lines.push('id: '+ctx.dataset.sessionId);
+              var cc = ctx.dataset.classBreakdown && ctx.dataset.classBreakdown[ctx.dataIndex];
+              if(cc){
+                // Token class split inside a bar is tooltip-only in v0.1.1
+                // (F3): a per-class toggle on the bars themselves is v0.2.
+                lines.push('fresh '+tok(cc.fresh)+', cache write '+tok(cc.cache_write)
+                  +', cache read '+tok(cc.cache_read)+', output '+tok(cc.output));
+              }
+              return lines;
+            }
+          }}
+        }}});
   } catch(e){
     chartFallback('ch_now', 'Live burn');
   }
@@ -1336,7 +1424,7 @@ function renderNow(snap){
     empty.classList.add('hidden');
     cards.innerHTML = snap.sessions.map(function(s){ return sessionCardHTML(s, false); }).join('');
   }
-  if(currentTab() === 'now') drawNowChart(snap && snap.chart);
+  if(currentTab() === 'now') drawNowChart(snap && snap.chart, snap && snap.sessions);
   renderNowForecast(snap && snap.forecast);
 }
 

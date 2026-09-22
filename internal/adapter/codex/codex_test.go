@@ -3,6 +3,7 @@ package codex
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -135,6 +136,95 @@ func TestParseResumesFromOffset(t *testing.T) {
 	}
 	if off2 != off1 {
 		t.Fatalf("offset moved on an empty read: %d != %d", off2, off1)
+	}
+}
+
+// TestParseIncrementalReadKeepsSurface guards F2's fix: session_meta (the
+// only line carrying originator) is written once, near the top of a
+// rollout. Before scanHeaderMeta, an incremental Parse call starting after
+// that line (exactly what the live watcher does on every turn after the
+// first) reported surface "unknown" for every subsequent turn, the "surface
+// UNKNOWN" bug from the v0.1.1 fix spec.
+func TestParseIncrementalReadKeepsSurface(t *testing.T) {
+	a := Adapter{}
+	src := filepath.Join("..", "..", "..", "testdata", "codex", "three-turns.jsonl")
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "live.jsonl")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Consume the whole fixture first, as the initial full backfill would.
+	_, off1, err := a.Parse(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate one more live turn appended to the file: a fsnotify Write
+	// event fires and the watcher calls Parse from the cursor it already
+	// has, never seeing session_meta again.
+	nextTurn := `{"timestamp":"2026-09-16T20:23:00.000Z","ordinal":7,"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":50,"reasoning_output_tokens":0,"total_tokens":1050},"model_context_window":272000}}}` + "\n"
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(nextTurn); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	events, _, err := a.Parse(path, off1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events on the incremental read, want 1", len(events))
+	}
+	if events[0].Surface != "cli" {
+		t.Fatalf("Surface = %q, want cli (session_meta re-read via scanHeaderMeta)", events[0].Surface)
+	}
+	if events[0].Project != `C:\ZND\projects\burnmon` {
+		t.Fatalf("Project = %q, want the session cwd re-read via scanHeaderMeta", events[0].Project)
+	}
+}
+
+// TestParseSubRunModelBecomesTitle guards F2's second label fix: a Codex
+// sub-run thread (observed live: an auto-review guardian sub-agent) writes
+// its own name, not a real model id, into turn_context.payload.model. Its
+// session_meta carries a non-"user" thread_source; that name must land in
+// Title, and Model must stay empty rather than showing a fabricated model
+// like "codex-auto-review".
+func TestParseSubRunModelBecomesTitle(t *testing.T) {
+	a := Adapter{}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "subrun.jsonl")
+	lines := []string{
+		`{"timestamp":"2026-09-22T10:41:36.550Z","ordinal":0,"type":"session_meta","payload":{"session_id":"01a0c8b4","id":"01a0c8b4","cwd":"C:\\dev\\Work","originator":"codex-tui","cli_version":"0.154.0","source":"cli","thread_source":"guardian_review","model_provider":"openai"}}`,
+		`{"timestamp":"2026-09-22T10:41:37.529Z","type":"turn_context","payload":{"turn_id":"t1","cwd":"C:\\dev\\Work","model":"codex-auto-review"}}`,
+		`{"timestamp":"2026-09-22T10:41:40.000Z","ordinal":2,"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":500,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":520}}}}`,
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	events, _, err := a.Parse(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	e := events[0]
+	if e.Model != "" {
+		t.Fatalf("Model = %q, want empty (sub-run name is not a model)", e.Model)
+	}
+	if e.Title != "codex-auto-review" {
+		t.Fatalf("Title = %q, want codex-auto-review", e.Title)
 	}
 }
 

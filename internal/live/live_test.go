@@ -96,17 +96,42 @@ func TestBuildSnapshot_SubagentNestsUnderRunningParent(t *testing.T) {
 	}
 }
 
-func TestBuildSnapshot_ChartBucketsLast30Minutes(t *testing.T) {
+// TestBuildSnapshot_ChartIsDense guards F3: the chart is always 180 slots
+// (30 minutes at 10-second buckets), every slot present whether or not a
+// turn landed in it, rather than only the minutes that had a turn.
+func TestBuildSnapshot_ChartIsDense(t *testing.T) {
 	now := time.Now().UTC()
 	events := []schema.Event{
 		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s", RequestID: "r1",
 			Model: "claude-sonnet-5", At: now.Add(-2 * time.Minute), Input: 10, Output: 5},
 		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s", RequestID: "r2",
-			Model: "claude-sonnet-5", At: now.Add(-40 * time.Minute), Input: 10, Output: 5},
+			Model: "claude-sonnet-5", At: now.Add(-40 * time.Minute), Input: 10, Output: 5}, // outside the window
 	}
 	snap := BuildSnapshot(events, testConfig(), now)
-	if len(snap.Chart) != 1 {
-		t.Fatalf("want 1 bucket (only the turn inside the last 30 minutes), got %d", len(snap.Chart))
+	if len(snap.Chart) != chartSlots {
+		t.Fatalf("want %d dense slots, got %d", chartSlots, len(snap.Chart))
+	}
+	if snap.BucketSeconds != BucketSeconds {
+		t.Fatalf("BucketSeconds = %d, want %d", snap.BucketSeconds, BucketSeconds)
+	}
+	if snap.WindowStart == "" {
+		t.Fatal("WindowStart must be set")
+	}
+
+	var withTurn, occupiedSlots int
+	for _, b := range snap.Chart {
+		if len(b.BySession) > 0 {
+			occupiedSlots++
+			if cc, ok := b.BySession["s"]; ok && cc.Fresh == 10 {
+				withTurn++
+			}
+		}
+	}
+	if occupiedSlots != 1 {
+		t.Fatalf("want exactly 1 occupied slot (only the -2min turn is inside the window), got %d", occupiedSlots)
+	}
+	if withTurn != 1 {
+		t.Fatalf("want the -2min turn's tokens in exactly 1 slot, got %d", withTurn)
 	}
 }
 
@@ -162,7 +187,13 @@ func TestSnapshotChangesOnAppend(t *testing.T) {
 	if after.Sessions[0].Tokens == 0 {
 		t.Fatal("want the running session's tokens to reflect the appended turn")
 	}
-	if len(after.Chart) == 0 {
+	var occupied int
+	for _, b := range after.Chart {
+		if len(b.BySession) > 0 {
+			occupied++
+		}
+	}
+	if occupied == 0 {
 		t.Fatal("want the appended turn to land in a chart bucket")
 	}
 }
