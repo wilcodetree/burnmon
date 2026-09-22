@@ -31,6 +31,7 @@ import (
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
 	"burnmon/internal/scan"
+	"burnmon/internal/store"
 )
 
 const (
@@ -146,12 +147,9 @@ func main() {
 	}
 	wslEnabled := cfg.WSLScan != "off"
 
-	cachePath := filepath.Join(dataDir, "parsecache.gob")
-	fingerprint := dataset.Fingerprint(version, &cfg)
-
 	// Where Settings saves land: the file that was actually loaded, or the
-	// default location next to the parse cache if none existed yet, so the
-	// very first save from the window creates it rather than erroring.
+	// default location next to the store if none existed yet, so the very
+	// first save from the window creates it rather than erroring.
 	cfgSavePath := cfgFile
 	if cfgSavePath == "" {
 		cfgSavePath = filepath.Join(dataDir, "burnmon.json")
@@ -166,6 +164,18 @@ func main() {
 	wv2Dir := filepath.Join(dataDir, "wv2")
 	_ = os.MkdirAll(wv2Dir, 0o755)
 
+	storePath, err := store.DefaultPath()
+	if err != nil {
+		log.Println("could not resolve the store path:", err)
+		return
+	}
+	st, err := store.Open(storePath)
+	if err != nil {
+		log.Println("could not open the local store at", storePath, ":", err)
+		return
+	}
+	defer st.Close()
+
 	a := &app{
 		cfg:         cfg,
 		seat:        effectiveSeat,
@@ -174,11 +184,9 @@ func main() {
 		htmlPath:    filepath.Join(dataDir, "dashboard.html"),
 		interval:    *interval,
 		wslInterval: effectiveWSLInterval,
-		cachePath:   cachePath,
-		fingerprint: fingerprint,
 		cfgPath:     cfgSavePath,
 	}
-	a.cache.Load(a.cachePath, a.fingerprint)
+	a.cache.Store = st
 
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath: wv2Dir,
@@ -210,7 +218,7 @@ func main() {
 
 	// First collection happens off the UI goroutine so the page already on
 	// screen (warming or the stale dashboard) can paint immediately. With a
-	// warm parse cache this finishes in seconds, well before anyone digs
+	// warm store this finishes in seconds, well before anyone digs
 	// into a tab. Startup always does a full pass, WSL included: see "Two
 	// refresh cadences" in docs/2026-08-17_wsl-source-detection-design.md.
 	go func() {
@@ -378,8 +386,6 @@ type app struct {
 	htmlPath    string
 	interval    time.Duration
 	wslInterval time.Duration
-	cachePath   string
-	fingerprint string
 	cfgPath     string
 
 	cache      dataset.Cache
@@ -438,13 +444,6 @@ func (a *app) rebuild(refreshSlow bool, progress func(done, total int)) (time.Ti
 	if err := os.WriteFile(a.htmlPath, []byte(html), 0o600); err != nil {
 		return time.Time{}, err
 	}
-	// Persisted for every trigger (startup, both tickers, Refresh now,
-	// Settings save) since they all share this one rebuild path. A save
-	// failure never fails the rebuild itself: the dashboard already wrote
-	// fine, and the next run just falls back to a full re-parse.
-	if err := a.cache.Save(a.cachePath, a.fingerprint); err != nil {
-		log.Println("could not save parse cache:", err)
-	}
 	return built, nil
 }
 
@@ -496,12 +495,9 @@ type settingsPayload struct {
 // applySettings writes p to burnmon.json (preserving any other keys
 // already in that file, such as an unusual Prices override or the wsl_scan
 // / extra_sources fields), then updates the running config and seat in
-// memory. It resets the parse cache outright rather than just bumping the
-// fingerprint: every already-cached session carries costs computed with the
-// old Subscription, and there is no cheap way to tell which ones actually
-// changed, so the honest fix is to treat this exactly like a version or
-// config-file change and re-parse everything. The caller triggers the
-// actual rebuild afterward.
+// memory. Cost is computed fresh from the config at Collect time, so
+// nothing needs invalidating here; the caller triggers the actual rebuild
+// afterward.
 func (a *app) applySettings(p settingsPayload) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -529,8 +525,6 @@ func (a *app) applySettings(p settingsPayload) error {
 	if p.YourSeat == "Standard" || p.YourSeat == "Premium" {
 		a.seat = p.YourSeat
 	}
-	a.fingerprint = dataset.Fingerprint(version, &a.cfg)
-	a.cache = dataset.Cache{}
 	return nil
 }
 
@@ -539,8 +533,7 @@ func (a *app) applySettings(p settingsPayload) error {
 // wsl_scan, extra_sources) exactly as they were. A missing or unreadable
 // existing file is treated as empty, not an error: this is very likely the
 // first time anyone has saved settings from the window. Written via a .tmp
-// file plus os.Rename, same pattern as the parse cache, so a crash
-// mid-write never corrupts the real file.
+// file plus os.Rename, so a crash mid-write never corrupts the real file.
 func writeSubscriptionConfig(path string, sub pricing.Subscription) error {
 	raw := map[string]json.RawMessage{}
 	if b, err := os.ReadFile(path); err == nil {
@@ -755,7 +748,7 @@ func (a *app) applyAppChrome(html string) string {
 // currently loaded subscription numbers and seat, so opening it always
 // shows what the dashboard is actually using right now, not stale form
 // defaults. Saving posts to ccSaveSettings (bound in main), which writes
-// burnmon.json, resets the parse cache, and rebuilds in the background.
+// burnmon.json and rebuilds in the background.
 func (a *app) settingsModalHTML() string {
 	sub := a.cfg.Subscription
 	std := sub.Seats["Standard"]
@@ -775,7 +768,7 @@ func (a *app) settingsModalHTML() string {
 <div id="cc_settings_overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center;font-family:'Inter','Segoe UI',sans-serif">
  <div style="background:#1f2733;color:#eee;border-radius:10px;padding:22px 26px;width:480px;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.5)">
   <h3 style="margin:0 0 4px;font-size:16px">Subscription settings</h3>
-  <p style="margin:0 0 16px;color:#9fb4bd;font-size:12px">Saved to ` + escapeAttr(a.cfgPath) + `. Saving triggers a full re-read: cached sessions carry costs computed with the old numbers.</p>
+  <p style="margin:0 0 16px;color:#9fb4bd;font-size:12px">Saved to ` + escapeAttr(a.cfgPath) + `.</p>
   <div id="cc_settings_error" style="display:none;margin-bottom:12px;color:#ff8a65;font-size:12px"></div>
   <style>
    #cc_settings_overlay label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#c8d4d9}
