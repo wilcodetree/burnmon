@@ -2,6 +2,32 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, correction: A3 (VS Code Copilot OTel) is yes, not no
+
+The 43B entry below (committed `876c37e`) answered A3 "no" from a CLI-only test that
+never produced a real chat exchange. Wilco reloaded the VS Code window with the same
+four `github.copilot.chat.otel.*` settings still in place and sent one real message
+through the Copilot Chat panel; `%LOCALAPPDATA%\Temp\copilot-otel.jsonl` (the `outfile`
+from that session) grew to 476KB of real spans within minutes: `service.name":
+"copilot-chat"`, `service.version":"0.66.0"`, `event.name":"copilot_chat.session.start"`,
+and a `gen_ai.client.inference.operation.details` span carrying
+`gen_ai.request.model`, `gen_ai.usage.input_tokens`/`gen_ai.usage.output_tokens` and
+`gen_ai.response.finish_reasons`, GenAI semantic conventions exactly as the facts file
+described. The missing piece the first attempt lacked was not the settings, the
+extension, or a real chat turn (all three were already in place, per the 43B entry) but
+an extension host reload afterward, `code chat` alone from the CLI never triggers one.
+Corrected answer for the spec's yes/no: **yes**, GitHub Copilot in VS Code can emit
+OpenTelemetry to a local file on this laptop, unbounded growth while the setting stays
+on is worth flagging (476KB in one short test session) but out of scope for this
+correction. Per the spec's own consequence ("yes means Copilot VS Code enters v0.3"),
+this is a scope decision for Wilco to make when v0.3 is planned, not applied here. While
+checking this, also confirmed no bug in "Copilot keeps restarting": `main.log` for the
+long-running window shows 7 extension host exits across the whole day, 6 clustered in
+the 20 minutes around the settings/reload testing, every one a clean exit (`code: 0,
+signal: unknown`) immediately followed by a successful Copilot Chat login and a real
+completed request; nothing since. Reads as normal reload churn from testing, not a
+crash loop. No product code changed for either finding.
+
 ## 2026-09-22, v0.2 43B: Copilot CLI adapter, OTel check (A2, A3)
 
 A2 killed the plan's assumption on Wilco's live install (COPILOT_HOME `~/.copilot`,
