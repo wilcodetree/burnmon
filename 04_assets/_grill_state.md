@@ -55,3 +55,23 @@ Still open: domain registration (VERIFY), Valona team-lead approval (A1).
 | A2 | Every listed agent leaves a local, readable usage trail | CONFIRMED (Claude, Codex, Hermes HELD; Copilot layout unstable, VERIFY current install) | Phase 2 research |
 | A3 | Copilot CLI current build stores tokens in `data.db` | VERIFY | Inspect one Valona laptop with a current Copilot CLI |
 | A4 | Subscription pricing figures (Claude Pro/Max) | VERIFY | Read claude.com/pricing |
+
+## v0.2 grill, 2026-09-22 (release scoping, one question at a time, Fable)
+
+Input: Wilco's asks (Now default, vendor tokens day/week/month, merge Months/Weeks/Days,
+English only, smooth chart, Codex card only after Refresh), roadmap v0.2 items, the
+"explain the burn" proposals. Thirteen questions, all answered the same day:
+1 keep everything in one v0.2 release on 2026-11-14; 2 v0.1.2 patch first; 3 tabs Now,
+History, Sessions, Tools, About; 4 vendor strip under the cards, tokens only; 5 dev and
+business switch to v0.3 complete; 6 forecast stays with a visible gate; 7 Wilco records
+Hermes and Copilot CLI fixtures locally (Microsoft Copilot out of scope, no local trail);
+8 Copilot CLI only, one-hour OTel check for VS Code Copilot; 9 `internal/insight`,
+computed on the fly, marker + ticker + drawer + Sessions tab; 10 versioned additive
+migrations first; 11 two sessions a week, no slip order; 12 fixed 30-minute chart,
+time axis sliding 2 s per poll, damped Y max; 13 owner split (Valona / ZND / personal by
+path rule, empty by default) into v0.2 as the light client map, with the wall rule for
+anything published.
+New goal recorded: BurnMon plus modelwatch to understand Valona and ZND token usage,
+learn from it, possibly a LinkedIn post; content work once both have weeks of data.
+Files: `..\02_roadmap\2026-09-22_v0.1.2_patch_spec.md`, `..\02_roadmap\2026-09-22_v0.2_spec.md`,
+roadmap and DEADLINES updated, hub roadmap allocation, decisions.md, DEADLINES rows.

@@ -2,6 +2,18 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 grill and v0.1.2 patch spec (Cowork, Fable)
+
+Wilco reported two things from the 14:12 live run: a new Codex CLI session appeared only
+after pressing Refresh now (the live watcher missed the new rollout; the full rescan found
+it), and the running chart jumps because `drawNowChart` rebuilds the Chart.js instance and
+recomputes both axis maxima every poll. Both go into `02_roadmap\2026-09-22_v0.1.2_patch_spec.md`
+(F7 with three ordered hypotheses to confirm on disk, F8 smoothing that replaces the F3
+"recompute per poll" rule, F9 version strings 0.8.1 to 0.1.2, README, STATUS, board). Then a
+thirteen-question grill scoped v0.2 as one release on 2026-11-14 at two sessions a week:
+`02_roadmap\2026-09-22_v0.2_spec.md`. Dev and business switch and per-vendor cost moved to
+v0.3. No code touched this session.
+
 ## v0.1.1 F4-F6: Cowork agent label, never-clamp context gauge, header copy
 
 F4: `internal\adapter\claude\claude.go`'s two event-construction sites (`Parse`, around the
