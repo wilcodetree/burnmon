@@ -113,6 +113,18 @@ func classifySurface(path, cwd string) string {
 	return "cli"
 }
 
+// agentFor returns the report's Agent label for a classified surface (F4):
+// "cowork" for the Claude Desktop/Cowork surfaces, "claude-code" otherwise
+// (cli, code_agent). Every transcript previously got Agent: "claude-code"
+// regardless of surface, so the Cowork card wrongly read "CLAUDE-CODE ·
+// DESKTOP" instead of "COWORK · DESKTOP".
+func agentFor(surface string) string {
+	if surface == "desktop" || surface == "cowork" {
+		return "cowork"
+	}
+	return "claude-code"
+}
+
 func asInt(v any) int64 {
 	if f, ok := v.(float64); ok {
 		return int64(f)
@@ -289,7 +301,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 	for _, k := range order {
 		t := calls[k]
 		e := schema.Event{
-			Vendor: "anthropic", Agent: "claude-code", Surface: surface,
+			Vendor: "anthropic", Agent: agentFor(surface), Surface: surface,
 			SessionID: sessionID, RequestID: k, Project: cwd, Title: title,
 			Model: t.model, Input: t.fresh, Output: t.o,
 		}
@@ -323,7 +335,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 			continue
 		}
 		events = append(events, schema.Event{
-			Vendor: "anthropic", Agent: "claude-code", Surface: surface,
+			Vendor: "anthropic", Agent: agentFor(surface), Surface: surface,
 			SessionID: sessionID, RequestID: k, Project: cwd, Title: title,
 			Tools: tools,
 		})

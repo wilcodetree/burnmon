@@ -41,6 +41,9 @@ func TestParseBasicFixture(t *testing.T) {
 			if e.Surface != "cli" {
 				t.Fatalf("req-1 Surface = %q, want cli", e.Surface)
 			}
+			if e.Agent != "claude-code" {
+				t.Fatalf("req-1 Agent = %q, want claude-code (F4: cli surface)", e.Agent)
+			}
 			if e.Project != `C:\proj\demo` {
 				t.Fatalf("req-1 Project = %q, want the cwd", e.Project)
 			}
@@ -63,6 +66,62 @@ func TestParseBasicFixture(t *testing.T) {
 	}
 	_ = req1
 	_ = req2
+}
+
+// TestAgentFor guards F4: every transcript previously got Agent:
+// "claude-code" regardless of surface, so the Cowork card wrongly read
+// "CLAUDE-CODE · DESKTOP" instead of "COWORK · DESKTOP". agentFor must map
+// the desktop/cowork surfaces to "cowork" and leave every other surface
+// (cli, code_agent) as "claude-code".
+func TestAgentFor(t *testing.T) {
+	cases := []struct {
+		surface string
+		want    string
+	}{
+		{"desktop", "cowork"},
+		{"cowork", "cowork"},
+		{"cli", "claude-code"},
+		{"code_agent", "claude-code"},
+		{"unknown", "claude-code"},
+	}
+	for _, c := range cases {
+		if got := agentFor(c.surface); got != c.want {
+			t.Errorf("agentFor(%q) = %q, want %q", c.surface, got, c.want)
+		}
+	}
+}
+
+// TestParseDesktopSurfaceGetsCoworkAgent guards F4 end to end through
+// Parse: a trail file whose path lands under local-agent-mode-sessions (the
+// Cowork/Desktop trail location, see classifySurface) must produce events
+// with Agent "cowork", not "claude-code".
+func TestParseDesktopSurfaceGetsCoworkAgent(t *testing.T) {
+	dir := t.TempDir()
+	desktopDir := filepath.Join(dir, "local-agent-mode-sessions")
+	if err := os.MkdirAll(desktopDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(desktopDir, "desktop-session.jsonl")
+	line := `{"type":"assistant","cwd":"/home/dev/proj","message":{"model":"claude-fable-5-1","usage":{` +
+		`"input_tokens":10,"output_tokens":5}},"timestamp":"2026-09-22T10:00:00Z","requestId":"r1"}` + "\n"
+	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := Adapter{}
+	events, _, err := a.Parse(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	if events[0].Surface != "desktop" {
+		t.Fatalf("Surface = %q, want desktop", events[0].Surface)
+	}
+	if events[0].Agent != "cowork" {
+		t.Fatalf("Agent = %q, want cowork (F4)", events[0].Agent)
+	}
 }
 
 func TestParseResumesFromOffset(t *testing.T) {
