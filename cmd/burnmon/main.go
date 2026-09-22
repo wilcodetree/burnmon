@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"burnmon/internal/adapter/codex"
+	"burnmon/internal/adapter/hermes"
 	"burnmon/internal/dataset"
 	"burnmon/internal/history"
 	"burnmon/internal/live"
@@ -35,6 +36,7 @@ import (
 	"burnmon/internal/report"
 	"burnmon/internal/scan"
 	"burnmon/internal/store"
+	"burnmon/internal/vendorstrip"
 	"burnmon/internal/watch"
 )
 
@@ -238,6 +240,7 @@ func main() {
 	nativeCodexRoots := codex.NativeSources()
 	a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)
 	a.startLiveWatch(nativeClaudeRoots, nativeCodexRoots)
+	startHermesPoll(a, st)
 
 	// First collection happens off the UI goroutine so the page already on
 	// screen (warming or the stale dashboard) can paint immediately. With a
@@ -343,6 +346,16 @@ func main() {
 		return history.Build(events, &cfg, f), nil
 	}); err != nil {
 		log.Println("could not bind bmHistory:", err)
+	}
+
+	// bmVendorStrip (P3): the Now page's vendor strip calls this from its
+	// own 1-minute timer, not bmLive's 2-second poll, so it runs one SQL
+	// aggregate against the whole events table rather than bmLive's
+	// windowed read.
+	if err := w.Bind("bmVendorStrip", func() (vendorstrip.Payload, error) {
+		return vendorstrip.Build(st, time.Now())
+	}); err != nil {
+		log.Println("could not bind bmVendorStrip:", err)
 	}
 
 	if err := w.Bind("ccSaveSettings", func(p settingsPayload) error {
@@ -532,6 +545,44 @@ func diffRootsCaseInsensitive(all, remove []string) []string {
 		}
 	}
 	return out
+}
+
+// startHermesPoll starts A1's 5-second Hermes poll, a no-op if no Hermes
+// install is found (DefaultDBPath returns ""). No fsnotify watch, unlike
+// startLiveWatch's Claude/Codex trails: a SQLite WAL file's own writes do
+// not fit watch.Watcher's file-offset, .jsonl-only design (see
+// internal/adapter/hermes's package doc). Hermes needs no cursor either:
+// PollOnce returns every session's current running totals on every call,
+// and UpsertEvents' own "largest output wins" upsert (RequestID fixed to
+// the session id) already skips a no-op write when a session has not grown.
+func startHermesPoll(a *app, st *store.Store) {
+	dbPath := hermes.DefaultDBPath()
+	if dbPath == "" {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			events, err := hermes.PollOnce(dbPath)
+			if err != nil {
+				log.Println("hermes poll:", err)
+				continue
+			}
+			if len(events) == 0 {
+				continue
+			}
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			for i := range events {
+				events[i].Owner = cfg.OwnerFor(events[i].Project)
+			}
+			if err := st.UpsertEvents(events); err != nil {
+				log.Println("hermes poll: upsert:", err)
+			}
+		}
+	}()
 }
 
 var errRebuildBusy = errors.New("a collection is already running")

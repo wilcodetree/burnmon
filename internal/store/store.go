@@ -250,6 +250,57 @@ ORDER BY calls DESC`, since.UTC().Format(time.RFC3339Nano))
 	return out, rows.Err()
 }
 
+// VendorStripTotal is one agent's token totals for the Now page's vendor
+// strip (v0.2 P3): today, this week and this month, all as of the caller's
+// day/week/month boundaries.
+type VendorStripTotal struct {
+	Agent string
+	Today int64
+	Week  int64
+	Month int64
+}
+
+// VendorStripTotals runs one SQL query, grouped by agent, summing each
+// event's token count (input + cache_write + cache_read + output) into
+// today/week/month buckets via CASE, rather than loading events into Go and
+// summing there (P3: refreshed once a minute, from its own timer, not
+// bmLive's 2-second poll). from bounds the scan to the earliest of the three
+// boundaries the caller passes (the current ISO week can start before the
+// current calendar month, so it is not always monthStart).
+func (s *Store) VendorStripTotals(day, week, month time.Time) ([]VendorStripTotal, error) {
+	from := day
+	if week.Before(from) {
+		from = week
+	}
+	if month.Before(from) {
+		from = month
+	}
+	rows, err := s.db.Query(`
+SELECT agent,
+	SUM(CASE WHEN at >= ? THEN input + COALESCE(cache_write,0) + COALESCE(cache_read,0) + output ELSE 0 END) AS today,
+	SUM(CASE WHEN at >= ? THEN input + COALESCE(cache_write,0) + COALESCE(cache_read,0) + output ELSE 0 END) AS week,
+	SUM(CASE WHEN at >= ? THEN input + COALESCE(cache_write,0) + COALESCE(cache_read,0) + output ELSE 0 END) AS month
+FROM events
+WHERE at >= ?
+GROUP BY agent`,
+		day.UTC().Format(time.RFC3339Nano), week.UTC().Format(time.RFC3339Nano),
+		month.UTC().Format(time.RFC3339Nano), from.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []VendorStripTotal
+	for rows.Next() {
+		var t VendorStripTotal
+		if err := rows.Scan(&t.Agent, &t.Today, &t.Week, &t.Month); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 func nullInt(p *int64) any {
 	if p == nil {
 		return nil

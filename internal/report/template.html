@@ -183,6 +183,12 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   <div id="now_empty" class="note hidden"></div>
   <div class="grid now-cards" id="now_cards"></div>
 
+  <h2>Vendor strip</h2>
+  <div id="vs_empty" class="note hidden"></div>
+  <div class="scroll"><table id="t_vendorstrip"><thead><tr>
+    <th class="nosort">Vendor</th><th>Today</th><th>This week</th><th>This month</th>
+  </tr></thead><tbody></tbody></table></div>
+
   <h2>Live burn, last 30 minutes</h2>
   <div class="chartbox"><canvas id="ch_now"></canvas></div>
 
@@ -1361,6 +1367,82 @@ function startNowPolling(){
   if(nowTimer) clearInterval(nowTimer);
   nowTimer = setInterval(pollNow, 2000);
 }
+
+// ---------- Vendor strip (v0.2 P3): polled via window.bmVendorStrip, once a
+// minute on its own timer, never on pollNow's 2-second cadence, since the
+// backing query sums the whole events table rather than a 30-minute window.
+var vsTimer = null;
+
+// vsHistoryHash builds the History hash a vendor-strip cell links to: period
+// and vendor set, range picked to match that period's own default width in
+// the History filter's own dropdown (day:7, week:30, month:90).
+function vsHistoryHash(agent, period){
+  var range = period === 'day' ? '7' : (period === 'week' ? '30' : '90');
+  var parts = ['period='+encodeURIComponent(period), 'range='+encodeURIComponent(range)];
+  if(agent) parts.push('vendor='+encodeURIComponent(agent));
+  return '#history?'+parts.join('&');
+}
+
+// openVendorStripCell navigates to History with UI_HIST set from the clicked
+// cell, mirroring goToTab('history') but pre-seeding the filter rather than
+// leaving it at whatever History last showed.
+function openVendorStripCell(agent, period){
+  UI_HIST.period = period;
+  UI_HIST.range = period === 'day' ? '7' : (period === 'week' ? '30' : '90');
+  UI_HIST.vendor = agent || '';
+  goToTab('history');
+}
+
+function vsCell(tok_, agent, period){
+  return '<td><a href="'+vsHistoryHash(agent, period)+'" onclick="openVendorStripCell(\''
+    +String(agent).replace(/'/g,"\\'")+'\',\''+period+'\');return false;">'+tok(tok_)+'</a></td>';
+}
+
+function renderVendorStrip(payload){
+  var empty = document.getElementById('vs_empty');
+  var tb = document.querySelector('#t_vendorstrip tbody');
+  if(!empty || !tb) return;
+  var rows = (payload && payload.rows) || [];
+  if(!rows.length){
+    empty.classList.remove('hidden');
+    empty.textContent = 'No vendor activity recorded yet.';
+    tb.innerHTML = '';
+    return;
+  }
+  empty.classList.add('hidden');
+  var body = rows.map(function(r){
+    return '<tr><td>'+esc(r.agent_label||r.agent||'')+'</td>'
+      + vsCell(r.today, r.agent, 'day') + vsCell(r.week, r.agent, 'week') + vsCell(r.month, r.agent, 'month')
+      + '</tr>';
+  }).join('');
+  var total = payload.total || {};
+  body += '<tr class="total"><td>'+esc(total.agent_label||'Total')+'</td>'
+    + vsCell(total.today, '', 'day') + vsCell(total.week, '', 'week') + vsCell(total.month, '', 'month')
+    + '</tr>';
+  tb.innerHTML = body;
+}
+
+function pollVendorStrip(){
+  var empty = document.getElementById('vs_empty');
+  if(typeof window.bmVendorStrip !== 'function'){
+    if(empty){
+      empty.classList.remove('hidden');
+      empty.textContent = 'Vendor strip is only available in the BurnMon app window, not in a saved report.';
+    }
+    document.querySelector('#t_vendorstrip tbody').innerHTML = '';
+    return;
+  }
+  Promise.resolve(window.bmVendorStrip()).then(renderVendorStrip).catch(function(e){
+    if(empty){
+      empty.classList.remove('hidden');
+      empty.textContent = 'Could not read the vendor strip: ' + (e && e.message ? e.message : String(e));
+    }
+  });
+}
+
+pollVendorStrip();
+if(vsTimer) clearInterval(vsTimer);
+vsTimer = setInterval(pollVendorStrip, 60000);
 
 // ---------- History (v0.2 P2): filters -> bmHistory(filter) -> totals, chart, table ----------
 // Vendor-agnostic replacement for the old Months/Weeks/Days tabs (41A):

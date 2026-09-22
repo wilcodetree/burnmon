@@ -2,6 +2,83 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 41B: vendor strip (P3), Hermes adapter (A1)
+
+P3: new package `internal\vendorstrip`, `Row{Agent,AgentLabel,Today,Week,Month}` and
+`Payload{Rows,Total}`, built by `Build(st, now)` from one new store method,
+`Store.VendorStripTotals(day, week, month)`: a single SQL query grouped by `agent`,
+summing `input + cache_write + cache_read + output` into today/week/month buckets via
+`CASE WHEN at >= ?`, bounded by the earliest of the three boundaries (the current ISO
+week can start before the current calendar month, so that is not always `monthStart`).
+Day/week/month boundaries are UTC calendar (week starts Monday, matching `internal/agg`'s
+`weekKey` and History's own "week" period), computed in Go, not SQL. Bound as
+`bmVendorStrip` in `cmd\burnmon\main.go`, on its own 60-second `setInterval` in
+`template.html` (`pollVendorStrip`/`vsTimer`), independent of `pollNow`'s 2-second poll,
+per the spec's "refreshed once a minute... not on the 2-second poll". Rendered as a table
+under the session cards (`#t_vendorstrip`), one row per vendor plus a Total row last,
+tokens only, no cost (P3 does not ask for one). Every cell links to History with period
+and vendor set (`openVendorStripCell`, reusing `UI_HIST` and `goToTab`): the today column
+opens `period=day`, week opens `period=week`, month opens `period=month`, range picked to
+match History's own default width per period (7/30/90). Test:
+`internal\vendorstrip\vendorstrip_test.go`, a real store fixture (two vendors, events
+today/earlier-this-week/earlier-this-month/before-the-month-started) checked against
+hand-computed totals, confirming the before-the-month event never counts.
+
+A1: before writing anything, read Hermes's live `state.db`
+(`%LOCALAPPDATA%\Hermes\state.db`, confirmed on this laptop, WAL mode, `schema_version`
+19) read-only. Table `sessions` has one row per session with running-total columns
+(`input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`,
+`reasoning_tokens`, `message_count`) that grow in place; table `messages` exists but its
+own `token_count` column was null on every row checked, 24/24, across every role (user,
+assistant, tool), both on the one stale session found at the start of this session and on
+two fresh ones Wilco recorded live when asked, so this is not a fluke of an old build. No
+context-window column exists anywhere in either table. This directly contradicts the v0.2
+spec's "per-message token count" assumption: there is no per-message breakdown available
+at all, only the session-level running total. `testdata\hermes\` also did not exist yet
+(the spec's own prerequisite, "Wilco records one short Hermes session," had not happened).
+Both facts were put to Wilco directly rather than guessed past: he chose to record two
+real sessions on the spot rather than defer A1, and, given the schema finding, chose "one
+Event per session, growing" over "one Event per message with the running total as delta"
+for the adapter's shape.
+
+Built accordingly. `internal\adapter\hermes\hermes.go`: `PollOnce(dbPath)` opens the
+database read-only and returns one `schema.Event` per session with `message_count > 0`,
+carrying its *current* running totals; `RequestID` is fixed to the session id, so the
+store's existing "largest output wins" upsert (`UpsertEvents`, `WHERE excluded.output >
+events.output`) is what keeps only the latest state and skips a no-op write when a session
+has not grown, meaning `PollOnce` needs no cursor of its own, unlike every `.jsonl`-reading
+adapter. `Vendor` is `"nous"`, `Agent` is `"hermes"`, per `schema.Event`'s existing doc
+comment. `Surface` maps the one observed `sessions.source` value, `"tui"`, to `"cli"`;
+anything else is `"unknown"`. `At` is `time.Now()` while the session is still open
+(`ended_at` unset), so a growing session keeps landing inside `internal/live`'s running
+window, and falls back to `ended_at` once Hermes has recorded one; neither is a real
+per-turn timestamp. Documented, not solved, in the package doc: because
+Input/CacheWrite/CacheRead/Output are lifetime totals here rather than one turn's
+consumption, `internal/live`'s context gauge (which sums exactly those fields as "last
+turn's context fill") would read as ever-growing lifetime usage for a long Hermes session,
+not current context fill; accepted for v0.2 since Hermes carries no context-window entry
+either, so the gauge already falls back to "context window unknown" in practice. Hermes
+writes nothing to `tool_calls` in v0.2, per spec. Wired into `cmd\burnmon\main.go` as
+`startHermesPoll`: its own 5-second `time.Ticker` goroutine, started next to
+`startLiveWatch`, calling `PollOnce`, applying `cfg.OwnerFor` (the same call
+`dataset.go`'s own ingest path makes) and `st.UpsertEvents` directly; deliberately not
+routed through `watch.Watcher` or `dataset.Cache.IngestFile`, both built around a
+file-offset, `.jsonl`-only contract that a SQLite WAL file does not fit, matching the
+spec's own "5-second poll, no fsnotify". A no-op when `hermes.DefaultDBPath()` finds no
+install.
+
+Fixture: `testdata\hermes\hermes_fixture.db`, built from the two sessions Wilco recorded
+live during this session, `sessions`-table columns only (metadata and running totals),
+no `messages` row and no `content` column at all, so there is no personal content to
+strip in the first place, by construction. Test: `internal\adapter\hermes\hermes_test.go`,
+`PollOnce` against the fixture returns both sessions with the exact recorded token counts,
+`Surface` mapped correctly, and a second poll of the still-open fixture returns the same
+count (repeat-safety belongs to the caller's `UpsertEvents`, not to `PollOnce` itself,
+this only checks the read is stable). `go test ./... -count=1` and `.\build.ps1` both
+green; `node --check` on the extracted inline script passed. Copilot CLI (A2) and the OTel
+check (A3) are next week's session per the build order, untouched here. Not committed;
+see the end of this session's chat for the commit and tag commands.
+
 ## 2026-09-22, v0.2 41A: History, one page (P2)
 
 New package `internal\history`: `Filter{Period,From,To,Vendor,Owner}` in, `Payload{Filter,
