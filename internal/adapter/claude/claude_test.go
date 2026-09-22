@@ -10,7 +10,7 @@ func TestParseBasicFixture(t *testing.T) {
 	a := Adapter{}
 	path := filepath.Join("testdata", "basic.jsonl")
 
-	events, offset, err := a.Parse(path, 0)
+	events, _, offset, err := a.Parse(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestParseDesktopSurfaceGetsCoworkAgent(t *testing.T) {
 	}
 
 	a := Adapter{}
-	events, _, err := a.Parse(path, 0)
+	events, _, _, err := a.Parse(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,14 +128,14 @@ func TestParseResumesFromOffset(t *testing.T) {
 	a := Adapter{}
 	path := filepath.Join("testdata", "basic.jsonl")
 
-	first, off1, err := a.Parse(path, 0)
+	first, _, off1, err := a.Parse(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(first) != 2 {
 		t.Fatalf("first pass: got %d events, want 2", len(first))
 	}
-	second, off2, err := a.Parse(path, off1)
+	second, _, off2, err := a.Parse(path, off1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +144,56 @@ func TestParseResumesFromOffset(t *testing.T) {
 	}
 	if off2 != off1 {
 		t.Fatalf("offset moved on an empty read: %d != %d", off2, off1)
+	}
+}
+
+// TestParseToolCalls guards S2's tool_calls extraction: two tool_use blocks,
+// each with its own id and a matching tool_result on the next "user" line,
+// must become two ToolCalls with input and result bytes filled in.
+func TestParseToolCalls(t *testing.T) {
+	a := Adapter{}
+	path := filepath.Join("testdata", "toolcalls.jsonl")
+
+	_, toolCalls, _, err := a.Parse(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(toolCalls) != 2 {
+		t.Fatalf("got %d tool calls, want 2", len(toolCalls))
+	}
+
+	byID := map[string]struct {
+		tool       string
+		turn       string
+		inputBytes int64
+		resultLen  int64
+	}{
+		"toolu_1": {"Read", "req-1", int64(len(`{"file_path":"a.go"}`)), int64(len("package a\n"))},
+		"toolu_2": {"Bash", "req-2", int64(len(`{"command":"go build ./..."}`)), int64(len("ok\n"))},
+	}
+	for _, tc := range toolCalls {
+		want, ok := byID[tc.CallID]
+		if !ok {
+			t.Fatalf("unexpected CallID %q", tc.CallID)
+		}
+		if tc.Tool != want.tool {
+			t.Fatalf("%s Tool = %q, want %q", tc.CallID, tc.Tool, want.tool)
+		}
+		if tc.Turn != want.turn {
+			t.Fatalf("%s Turn = %q, want %q", tc.CallID, tc.Turn, want.turn)
+		}
+		if tc.Vendor != "anthropic" || tc.Agent != "claude-code" {
+			t.Fatalf("%s Vendor/Agent = %q/%q, want anthropic/claude-code", tc.CallID, tc.Vendor, tc.Agent)
+		}
+		if tc.At.IsZero() {
+			t.Fatalf("%s At is zero, want the tool_use line's timestamp", tc.CallID)
+		}
+		if tc.InputBytes != want.inputBytes {
+			t.Fatalf("%s InputBytes = %d, want %d", tc.CallID, tc.InputBytes, want.inputBytes)
+		}
+		if tc.ResultBytes == nil || *tc.ResultBytes != want.resultLen {
+			t.Fatalf("%s ResultBytes = %v, want %d", tc.CallID, tc.ResultBytes, want.resultLen)
+		}
 	}
 }
 

@@ -19,6 +19,7 @@ type Migration struct {
 var All = []Migration{
 	{1, "baseline v0.1 schema (events, cursors, meta)", migration1},
 	{2, "owner column on events (P6 owner split)", migration2},
+	{3, "tool_calls table (S2)", migration3},
 }
 
 // migration1 records the v0.1 schema as version 1 without changing it: the
@@ -70,5 +71,30 @@ CREATE TABLE IF NOT EXISTS meta (
 // rules configured carries owner = '' on every row.
 func migration2(tx *sql.Tx) error {
 	_, err := tx.Exec(`ALTER TABLE events ADD COLUMN owner TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+// migration3 adds S2's tool_calls table: one row per tool invocation, keyed
+// by the vendor's own call id so a call and its later-arriving result can be
+// upserted onto the same row. result_bytes is nullable: a call whose result
+// was never seen in the same read (see schema.ToolCall) keeps it nil rather
+// than 0, so "no result yet" stays distinguishable from "an empty result".
+func migration3(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS tool_calls (
+	vendor       TEXT NOT NULL,
+	agent        TEXT NOT NULL,
+	session_id   TEXT NOT NULL,
+	call_id      TEXT NOT NULL,
+	turn         TEXT NOT NULL,
+	tool         TEXT NOT NULL,
+	at           TEXT NOT NULL,
+	input_bytes  INTEGER NOT NULL,
+	result_bytes INTEGER,
+	PRIMARY KEY (vendor, session_id, call_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_at ON tool_calls (at);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls (tool);
+`)
 	return err
 }

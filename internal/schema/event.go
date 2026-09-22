@@ -41,3 +41,24 @@ type Event struct {
 	WindowReset *time.Time
 	Tools       map[string]int64 // tool calls in this turn, Claude only for now
 }
+
+// ToolCall is one tool invocation (a Claude tool_use block, a Codex
+// function_call or custom_tool_call payload), stored alongside Events so S2's
+// `tool_calls` table and a later "tool calls that turn" drawer don't need to
+// re-parse a session's transcript.
+type ToolCall struct {
+	Vendor    string
+	Agent     string
+	SessionID string
+	CallID    string // the vendor's own tool_use id / call_id; dedup key together with Vendor and SessionID
+	Turn      string // the turn this call belongs to: Claude's Event.RequestID key, Codex's rollout turn_id
+	Tool      string
+	At        time.Time
+
+	InputBytes int64
+	// ResultBytes is nil until the matching tool_result/*_output is seen in
+	// the same Parse read; a call and its result almost always land in the
+	// same incremental read in practice (they are adjacent lines), so this
+	// is not backfilled across separate reads.
+	ResultBytes *int64
+}

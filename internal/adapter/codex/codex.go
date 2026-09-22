@@ -229,8 +229,43 @@ func readSessionMeta(payload map[string]any) (cwd, surface string, subRun bool) 
 	return cwd, surface, subRun
 }
 
+// pendingToolCall is one function_call/custom_tool_call payload awaiting its
+// matching *_output payload, tracked by call_id (the field both payload types
+// share with their output).
+type pendingToolCall struct {
+	turn        string
+	tool        string
+	at          string
+	inputBytes  int64
+	resultBytes *int64
+}
+
+// toolCallOutputBytes approximates a *_output payload's byte size: a plain
+// output string (function_call_output) is its own length; a block list
+// (custom_tool_call_output) sums its "text" fields' lengths.
+func toolCallOutputBytes(output any) int64 {
+	switch v := output.(type) {
+	case string:
+		return int64(len(v))
+	case []any:
+		var n int64
+		for _, item := range v {
+			if b, ok := item.(map[string]any); ok {
+				if t, ok := b["text"].(string); ok {
+					n += int64(len(t))
+				}
+			}
+		}
+		return n
+	}
+	return 0
+}
+
 // Parse reads path from byte offset from to EOF and returns one Event per
-// token_count line found, plus the byte offset right after the last
+// token_count line found, one ToolCall per function_call/custom_tool_call
+// payload (S2: both families, not just "function_call" as the spec's prose
+// names, since custom_tool_call is where real Codex shell/exec activity
+// lives, see SESSION_LOG.md), plus the byte offset right after the last
 // complete line consumed. A trailing partial line (the file still being
 // written) is left for the next call, same contract as the claude adapter.
 //
@@ -243,10 +278,10 @@ func readSessionMeta(payload map[string]any) (cwd, surface string, subRun bool) 
 // Model at all: its turn_context.model is a sub-run name, not a model id
 // (observed: "codex-auto-review"), so it is carried as Title instead and
 // Model stays empty, "context window unknown" rather than a fabricated one.
-func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
+func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, from, err
+		return nil, nil, from, err
 	}
 	defer f.Close()
 
@@ -263,10 +298,12 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 		cwd, surface, subRun = scanHeaderMeta(f)
 	}
 	if _, err := f.Seek(from, io.SeekStart); err != nil {
-		return nil, from, err
+		return nil, nil, from, err
 	}
 
 	var events []schema.Event
+	pendingCalls := map[string]*pendingToolCall{}
+	var toolCallOrder []string
 	offset := from
 	reader := bufio.NewReader(f)
 	for {
@@ -275,7 +312,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 			if readErr == io.EOF {
 				break // trailing partial line, or nothing left; leave unconsumed
 			}
-			return nil, from, readErr
+			return nil, nil, from, readErr
 		}
 		lineLen := int64(len(rawLine))
 		line := strings.TrimSpace(rawLine)
@@ -322,6 +359,44 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 				}
 			}
 			continue
+		}
+
+		// S2's tool_calls: these arrive as top-level "response_item" lines,
+		// their own family carried in payload["type"] rather than in typ
+		// (unlike session_meta/turn_context/token_count above), paired by
+		// call_id with their *_output line. Two distinct payload families
+		// carry real tool calls (SESSION_LOG.md): "function_call" (rare, e.g.
+		// request_user_input_async) and "custom_tool_call" (the actual
+		// shell/exec activity Codex sessions mostly consist of).
+		if typ == "response_item" && payload != nil {
+			switch pt, _ := payload["type"].(string); pt {
+			case "function_call", "custom_tool_call":
+				name, _ := payload["name"].(string)
+				var raw string
+				if pt == "function_call" {
+					raw, _ = payload["arguments"].(string)
+				} else {
+					raw, _ = payload["input"].(string)
+				}
+				callID, _ := payload["call_id"].(string)
+				if callID != "" && name != "" {
+					turn := ""
+					if meta, ok := payload["internal_chat_message_metadata_passthrough"].(map[string]any); ok {
+						turn, _ = meta["turn_id"].(string)
+					}
+					ts, _ := obj["timestamp"].(string)
+					pendingCalls[callID] = &pendingToolCall{turn: turn, tool: name, at: ts, inputBytes: int64(len(raw))}
+					toolCallOrder = append(toolCallOrder, callID)
+				}
+				continue
+			case "function_call_output", "custom_tool_call_output":
+				callID, _ := payload["call_id"].(string)
+				if pc, ok := pendingCalls[callID]; ok {
+					n := toolCallOutputBytes(payload["output"])
+					pc.resultBytes = &n
+				}
+				continue
+			}
 		}
 
 		if typ != "event_msg" || payload == nil || payload["type"] != "token_count" {
@@ -386,5 +461,21 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 		events = append(events, e)
 	}
 
-	return events, offset, nil
+	var toolCalls []schema.ToolCall
+	for _, callID := range toolCallOrder {
+		pc := pendingCalls[callID]
+		var at time.Time
+		if pc.at != "" {
+			if parsed, err := time.Parse(time.RFC3339Nano, pc.at); err == nil {
+				at = parsed.UTC()
+			}
+		}
+		toolCalls = append(toolCalls, schema.ToolCall{
+			Vendor: "openai", Agent: "codex", SessionID: sessionID,
+			CallID: callID, Turn: pc.turn, Tool: pc.tool, At: at,
+			InputBytes: pc.inputBytes, ResultBytes: pc.resultBytes,
+		})
+	}
+
+	return events, toolCalls, offset, nil
 }

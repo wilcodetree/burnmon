@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,6 +52,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "reown" {
 		os.Exit(runReown(os.Args[2:]))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "tools" {
+		os.Exit(runTools(os.Args[2:]))
 		return
 	}
 	os.Exit(run())
@@ -100,12 +105,19 @@ func runLive(args []string) int {
 		// running now".
 	}
 
-	events, err := st.AllEvents()
+	// S3: the same windowed query and SessionTotals path the app uses (F1),
+	// not AllEvents, which re-groups the whole store on every call.
+	now := time.Now()
+	events, err := st.EventsSince(now.Add(-live.ChartWindow))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "internal error:", err)
 		return 1
 	}
-	snap := live.BuildSnapshot(events, &cfg, time.Now())
+	snap := live.BuildSnapshot(events, &cfg, now)
+	if err := live.ApplySessionTotals(snap.Sessions, st, &cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
 
 	if !*jsonOut {
 		fmt.Fprintln(os.Stderr, "live currently only supports -json")
@@ -154,6 +166,91 @@ func runReown(args []string) int {
 		return 1
 	}
 	fmt.Printf("reowned %d event(s)\n", n)
+	return 0
+}
+
+// parseSinceDuration parses `tools`'s -since flag: a bare integer with a "d"
+// suffix (30d) alongside anything time.ParseDuration already accepts, since
+// Go's own duration parser has no day unit.
+func parseSinceDuration(s string) (time.Duration, error) {
+	if strings.HasSuffix(s, "d") {
+		n, err := strconv.Atoi(strings.TrimSuffix(s, "d"))
+		if err != nil {
+			return 0, fmt.Errorf("bad day count in %q: %w", s, err)
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	return time.ParseDuration(s)
+}
+
+// runTools prints S2's tool_calls totals since the given lookback window:
+// tool name, calls, sessions, and input/result bytes, the same
+// store.ToolCallTotals query a later Tools tab will read. Does a full
+// Collect pass first (same as live and price-check) so the store is as
+// current as a one-shot process can make it.
+func runTools(args []string) int {
+	fs := flag.NewFlagSet("tools", flag.ExitOnError)
+	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
+	since := fs.String("since", "30d", "lookback window, e.g. 30d, 7d, 24h")
+	jsonOut := fs.Bool("json", false, "print as JSON instead of a table")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	dur, err := parseSinceDuration(*since)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "invalid -since:", err)
+		return 1
+	}
+
+	cfg, err := loadConfig(*cfgPath, true)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config error:", err)
+		return 1
+	}
+
+	storePath, err := store.DefaultPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	st, err := store.Open(storePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not open the local store at", storePath, ":", err)
+		return 1
+	}
+	defer st.Close()
+
+	cache := dataset.Cache{Store: st}
+	opts := dataset.CollectOpts{Seat: "Standard", MonthsN: 1, RefreshSlow: true}
+	if _, err := cache.Collect(&cfg, opts, nil); err != nil {
+		var seatErr *dataset.SeatError
+		if !errors.As(err, &seatErr) && !errors.Is(err, dataset.ErrNoSessions) {
+			fmt.Fprintln(os.Stderr, "could not collect:", err)
+			return 1
+		}
+	}
+
+	rows, err := st.ToolCallTotals(time.Now().Add(-dur))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+
+	if *jsonOut {
+		b, err := json.MarshalIndent(rows, "", " ")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "internal error:", err)
+			return 1
+		}
+		fmt.Println(string(b))
+		return 0
+	}
+
+	fmt.Printf("%-28s %8s %8s %14s %14s\n", "tool", "calls", "sessions", "input bytes", "result bytes")
+	for _, r := range rows {
+		fmt.Printf("%-28s %8d %8d %14d %14d\n", r.Tool, r.Calls, r.Sessions, r.InputBytes, r.ResultBytes)
+	}
 	return 0
 }
 

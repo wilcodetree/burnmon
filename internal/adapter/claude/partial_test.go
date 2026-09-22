@@ -28,7 +28,7 @@ func TestParseDoesNotConsumeTrailingPartialLine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	events, offset, err := a.Parse(path, 0)
+	events, _, offset, err := a.Parse(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestParseDoesNotConsumeTrailingPartialLine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	events2, offset2, err := a.Parse(path, offset)
+	events2, _, offset2, err := a.Parse(path, offset)
 	if err != nil {
 		t.Fatal(err)
 	}

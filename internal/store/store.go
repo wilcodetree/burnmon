@@ -170,6 +170,86 @@ WHERE excluded.output > events.output
 	return tx.Commit()
 }
 
+// UpsertToolCalls inserts tool calls, keyed by (vendor, session_id, call_id).
+// A repeat call for the same call_id (a later incremental read of the same
+// file re-encountering the row, or the call and its result arriving in
+// separate Parse calls) updates every column but only overwrites
+// result_bytes when the new row actually carries one, so a result already
+// recorded is never wiped back to unknown by a later row that has none.
+func (s *Store) UpsertToolCalls(calls []schema.ToolCall) error {
+	if len(calls) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+INSERT INTO tool_calls (vendor, agent, session_id, call_id, turn, tool, at, input_bytes, result_bytes)
+VALUES (?,?,?,?,?,?,?,?,?)
+ON CONFLICT (vendor, session_id, call_id) DO UPDATE SET
+	agent = excluded.agent, turn = excluded.turn, tool = excluded.tool, at = excluded.at,
+	input_bytes = excluded.input_bytes,
+	result_bytes = COALESCE(excluded.result_bytes, tool_calls.result_bytes)
+`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, c := range calls {
+		_, err = stmt.Exec(
+			c.Vendor, c.Agent, c.SessionID, c.CallID, c.Turn, c.Tool,
+			c.At.UTC().Format(time.RFC3339Nano), c.InputBytes, nullInt(c.ResultBytes),
+		)
+		if err != nil {
+			return fmt.Errorf("store: upsert tool call %s/%s: %w", c.Vendor, c.CallID, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ToolCallTotal is one tool name's aggregated activity since a cutoff, as
+// `burnmon-cli tools` and (later) the Tools tab both need it.
+type ToolCallTotal struct {
+	Tool        string `json:"tool"`
+	Calls       int64  `json:"calls"`
+	Sessions    int64  `json:"sessions"`
+	InputBytes  int64  `json:"input_bytes"`
+	ResultBytes int64  `json:"result_bytes"`
+}
+
+// ToolCallTotals returns one row per tool name for every call at or after
+// since, ordered by call count descending. result_bytes sums only the calls
+// that have one recorded; a tool whose calls never carried a result (an
+// orphaned call_id, see schema.ToolCall) still gets a row, with
+// result_bytes 0.
+func (s *Store) ToolCallTotals(since time.Time) ([]ToolCallTotal, error) {
+	rows, err := s.db.Query(`
+SELECT tool, COUNT(*) AS calls, COUNT(DISTINCT session_id) AS sessions,
+	SUM(input_bytes) AS input_bytes, SUM(COALESCE(result_bytes, 0)) AS result_bytes
+FROM tool_calls
+WHERE at >= ?
+GROUP BY tool
+ORDER BY calls DESC`, since.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ToolCallTotal
+	for rows.Next() {
+		var t ToolCallTotal
+		if err := rows.Scan(&t.Tool, &t.Calls, &t.Sessions, &t.InputBytes, &t.ResultBytes); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 func nullInt(p *int64) any {
 	if p == nil {
 		return nil

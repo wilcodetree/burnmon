@@ -14,8 +14,10 @@ type Adapter interface {
 	Roots() []string
 
 	// Parse reads path starting at byte offset from and returns every
-	// complete Event found from there to EOF, plus the new offset to pass
-	// next time (the byte position right after the last complete line
-	// consumed; a trailing partial line is left unread for the next call).
-	Parse(path string, from int64) (events []schema.Event, newOffset int64, err error)
+	// complete Event and ToolCall found from there to EOF, plus the new
+	// offset to pass next time (the byte position right after the last
+	// complete line consumed; a trailing partial line is left unread for the
+	// next call). A tool call whose result lands after the read's end is
+	// returned with ResultBytes nil (see schema.ToolCall).
+	Parse(path string, from int64) (events []schema.Event, toolCalls []schema.ToolCall, newOffset int64, err error)
 }

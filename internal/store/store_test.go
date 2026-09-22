@@ -254,8 +254,80 @@ func TestFreshStoreAtHeadVersion(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version: %v", err)
 	}
-	if version != 2 {
-		t.Fatalf("schema_version = %d, want 2", version)
+	if version != 3 {
+		t.Fatalf("schema_version = %d, want 3", version)
+	}
+}
+
+// TestUpsertToolCallsAndTotals guards S2's tool_calls store path: a call and
+// its result upsert onto the same row (matched by call_id), a later upsert
+// that carries no result never wipes one already recorded, and
+// ToolCallTotals aggregates per tool name within the given cutoff.
+func TestUpsertToolCallsAndTotals(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	call := schema.ToolCall{
+		Vendor: "anthropic", Agent: "claude-code", SessionID: "s1",
+		CallID: "toolu_1", Turn: "req-1", Tool: "Read", At: base, InputBytes: 20,
+	}
+	if err := st.UpsertToolCalls([]schema.ToolCall{call}); err != nil {
+		t.Fatal(err)
+	}
+	// A later row for the same call_id with no result yet (input_bytes only)
+	// must not erase a result already recorded... except none has been
+	// recorded yet here, so this checks the opposite: recording one now.
+	withResult := call
+	withResult.ResultBytes = ptr(int64(100))
+	if err := st.UpsertToolCalls([]schema.ToolCall{withResult}); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a stray re-upsert of the bare call (e.g. a re-read of the same
+	// region) with no result: the already-recorded result_bytes must survive.
+	if err := st.UpsertToolCalls([]schema.ToolCall{call}); err != nil {
+		t.Fatal(err)
+	}
+
+	other := schema.ToolCall{
+		Vendor: "openai", Agent: "codex", SessionID: "s2",
+		CallID: "call_1", Turn: "turn-1", Tool: "exec",
+		At: base.Add(time.Minute), InputBytes: 50, ResultBytes: ptr(int64(30)),
+	}
+	old := schema.ToolCall{
+		Vendor: "anthropic", Agent: "claude-code", SessionID: "s1",
+		CallID: "toolu_old", Turn: "req-0", Tool: "Read",
+		At: base.Add(-48 * time.Hour), InputBytes: 5, ResultBytes: ptr(int64(5)),
+	}
+	if err := st.UpsertToolCalls([]schema.ToolCall{other, old}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := st.ToolCallTotals(base.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byTool := map[string]ToolCallTotal{}
+	for _, r := range rows {
+		byTool[r.Tool] = r
+	}
+	read, ok := byTool["Read"]
+	if !ok {
+		t.Fatal("missing Read row")
+	}
+	if read.Calls != 1 || read.Sessions != 1 || read.InputBytes != 20 || read.ResultBytes != 100 {
+		t.Fatalf("Read totals = %+v, want 1 call, 1 session, 20 input bytes, 100 result bytes (old call outside the window excluded)", read)
+	}
+	exec, ok := byTool["exec"]
+	if !ok {
+		t.Fatal("missing exec row")
+	}
+	if exec.Calls != 1 || exec.InputBytes != 50 || exec.ResultBytes != 30 {
+		t.Fatalf("exec totals = %+v, want 1 call, 50 input bytes, 30 result bytes", exec)
 	}
 }
 
@@ -344,8 +416,8 @@ func TestMigrateRealV01Store(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version after migrate: %v", err)
 	}
-	if version != 2 {
-		t.Fatalf("schema_version after migrate = %d, want 2", version)
+	if version != 3 {
+		t.Fatalf("schema_version after migrate = %d, want 3", version)
 	}
 
 	got, err := st.AllEvents()

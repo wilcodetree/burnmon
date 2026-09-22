@@ -151,7 +151,7 @@ func TestSnapshotChangesOnAppend(t *testing.T) {
 	}
 
 	adapter := claude.Adapter{}
-	events, offset, err := adapter.Parse(path, 0)
+	events, _, offset, err := adapter.Parse(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestSnapshotChangesOnAppend(t *testing.T) {
 	}
 	f.Close()
 
-	moreEvents, _, err := adapter.Parse(path, offset)
+	moreEvents, _, _, err := adapter.Parse(path, offset)
 	if err != nil {
 		t.Fatal(err)
 	}

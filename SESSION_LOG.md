@@ -2,6 +2,52 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 40A: tool_calls table, both adapters, tools --json, CLI live windowed (S2, S3)
+
+Before writing the extraction, opened one real Claude Code transcript (`C--ZND\29c211b0-...jsonl`,
+540 tool_use blocks) and one real Codex rollout under a `C:\ZND` cwd (never `C:\dev\Work`, per
+the house rule), confirmed field names in code, not from the spec's prose. Claude: an assistant
+message's content array carries `{type:"tool_use", id, name, input, caller}`; the matching
+result lands on the next `user` line as `{type:"tool_result", tool_use_id, type, content}`
+(content usually a plain string, its byte length the natural "result bytes"; occasionally a
+block list, summed by "text" field). Codex is not the clean "function_call items" the spec's
+prose names: a sampled rollout's payload types were `custom_tool_call`/`custom_tool_call_output`
+(54 pairs, name "exec", the actual shell/tool execution Codex sessions mostly consist of) versus
+`function_call`/`function_call_output` (10 pairs, e.g. "request_user_input_async"), both matched
+by `call_id`. Implementing only `function_call` would have captured a small minority of real
+Codex tool calls; flagged this to Wilco as an open choice before writing anything, and he chose
+both families.
+
+Migration 3 (`internal\store\migrations\migrations.go`) adds `tool_calls`, keyed by (vendor,
+session_id, call_id) so a call and its later-arriving result upsert onto the same row;
+`result_bytes` stays nullable rather than defaulting to 0, so "no result seen yet" stays
+distinguishable from "an empty result" (`store.UpsertToolCalls`'s `ON CONFLICT` only overwrites
+it when the new row actually carries one). `adapter.Adapter.Parse` now returns `[]schema.ToolCall`
+alongside `[]schema.Event` (every implementer and caller updated: both adapters, `dataset.go`'s
+ingest, `internal/live`'s test helper); each adapter tracks tool calls the same way it already
+tracks turns, in a `pendingToolCall` map keyed by the vendor's own call id (`toolu_...` for
+Claude, `call_...` for Codex), filled in when the result/output line is seen later in the same
+read (a call and its result almost always land in the same incremental read in practice, so this
+is not backfilled across separate reads, matching the codex adapter's own existing precedent for
+turn state). `dataset.Cache.Collect` gates a one-time full re-read of every file behind a new
+`tool_calls_backfilled_v1` meta flag, so every session ingested before this build gets its
+tool_calls backfilled exactly once rather than on every run. `store.ToolCallTotals(since)` groups
+by tool name (calls, sessions, input/result bytes); `burnmon-cli tools --since 30d --json` (also
+accepts `7d`, `24h`, anything `time.ParseDuration` takes plus a bare day suffix) runs a normal
+Collect pass then prints it, ready for a later Tools tab (which does not exist yet, P1 not having
+landed) to call the same store method. S3: `runLive` (`cmd\burnmon-cli\main.go`) now calls
+`store.EventsSince(now.Add(-live.ChartWindow))` plus `live.ApplySessionTotals`, the same F1 path
+the app's own live poll already used, instead of `AllEvents`. Verified all of this by hand against
+the real 33+ MB store on this laptop, not only fixtures: first `tools --json` run took long (the
+full backfill re-reading every real transcript), a second run 4 seconds; `live -json` still shows
+this very session running with the right turn count and cache-hit ratio. New tests: a two-tool-call
+fixture per adapter (`testdata\toolcalls.jsonl` for Claude, `testdata\codex\tool-calls.jsonl` for
+Codex); `store.TestUpsertToolCallsAndTotals`; `cmd\burnmon-cli\TestLiveQueryPathStaysBoundedOnLargeStore`,
+which substitutes a deterministic assertion (`EventsSince` on a 50,000-old-event store returns only
+the recent window, not a count proportional to store size) plus a heap-growth check under 50 MB for
+a flaky wall-clock/RSS measurement, since automated memory-bound testing was not otherwise practised
+in this codebase. `go test ./... -count=1` and `.\build.ps1` both green.
+
 ## 2026-09-22, v0.2 39B: versioned migrations, owner column, reown
 
 Replaced the drop-and-rebuild `ensureSchemaVersion` (`internal\store\store.go` around

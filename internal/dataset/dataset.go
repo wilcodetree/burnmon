@@ -422,6 +422,11 @@ func filesUnderAny(files, roots []string) []string {
 	return out
 }
 
+// toolCallsBackfillMetaKey gates the one-time full re-read Collect does the
+// first time it runs against a store built before S2's tool_calls table
+// existed. See Collect's own comment.
+const toolCallsBackfillMetaKey = "tool_calls_backfilled_v1"
+
 // Registered adapters. v0.1 Step 1 wired only Claude; Step 2 adds Codex
 // alongside it without touching this loop's shape.
 var adapters = []adapter.Adapter{claude.Adapter{}, codex.Adapter{}}
@@ -494,7 +499,7 @@ func (c *Cache) ingest(cfg *pricing.Config, files []string, trustSlow map[string
 			// offset.
 			startOffset = 0
 		}
-		events, newOffset, err := a.Parse(f, startOffset)
+		events, toolCalls, newOffset, err := a.Parse(f, startOffset)
 		if err != nil {
 			if progress != nil {
 				progress(i+1, total)
@@ -519,6 +524,15 @@ func (c *Cache) ingest(cfg *pricing.Config, files []string, trustSlow map[string
 			}
 			if err := c.Store.UpsertEvents(events[start:end]); err != nil {
 				return fmt.Errorf("dataset: upsert events for %s: %w", f, err)
+			}
+		}
+		for start := 0; start < len(toolCalls); start += upsertBatch {
+			end := start + upsertBatch
+			if end > len(toolCalls) {
+				end = len(toolCalls)
+			}
+			if err := c.Store.UpsertToolCalls(toolCalls[start:end]); err != nil {
+				return fmt.Errorf("dataset: upsert tool calls for %s: %w", f, err)
 			}
 		}
 		if err := c.Store.SetCursor(f, newOffset, fi.ModTime(), fi.Size()); err != nil {
@@ -561,6 +575,19 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 		return Payload{}, err
 	}
 
+	// S2's tool_calls table did not exist before this build: every existing
+	// session's transcripts must be re-read once from offset 0 so their tool
+	// calls backfill into the store, gated by this meta flag so it only ever
+	// happens on the first Collect after upgrading, not on every run.
+	backfillDone, _, err := c.Store.Meta(toolCallsBackfillMetaKey)
+	if err != nil {
+		return Payload{}, fmt.Errorf("dataset: read %s: %w", toolCallsBackfillMetaKey, err)
+	}
+	backfilling := backfillDone != "1"
+	if backfilling {
+		opts.ForceFull = true
+	}
+
 	fast, slow, roots := resolveSources(cfg, opts)
 	fast = dedupeCaseInsensitive(fast)
 	slow = dedupeCaseInsensitive(slow)
@@ -598,6 +625,11 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 	}
 	if err := c.ingest(cfg, files, trustSlow, opts.ForceFull, progress); err != nil {
 		return Payload{}, err
+	}
+	if backfilling {
+		if err := c.Store.SetMeta(toolCallsBackfillMetaKey, "1"); err != nil {
+			return Payload{}, fmt.Errorf("dataset: set %s: %w", toolCallsBackfillMetaKey, err)
+		}
 	}
 	// A transcript that no longer exists on disk (deleted, renamed, moved)
 	// must not keep contributing its session to every future report; v0.0.1's

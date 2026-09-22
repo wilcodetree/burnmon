@@ -146,21 +146,54 @@ func skillTag(name string, input map[string]any) string {
 	return name
 }
 
+// pendingToolCall is one tool_use block awaiting its tool_result, tracked by
+// the block's own id (the only field a later "user" line's tool_result
+// carries to match it back).
+type pendingToolCall struct {
+	turn        string
+	tool        string
+	at          string
+	inputBytes  int64
+	resultBytes *int64
+}
+
+// contentByteLen approximates a tool_result block's byte size: content is
+// usually a plain string (its own length), occasionally a block list (the
+// sum of its "text" fields' lengths), matching extractText's own shapes.
+func contentByteLen(content any) int64 {
+	switch v := content.(type) {
+	case string:
+		return int64(len(v))
+	case []any:
+		var n int64
+		for _, item := range v {
+			if b, ok := item.(map[string]any); ok {
+				if t, ok := b["text"].(string); ok {
+					n += int64(len(t))
+				}
+			}
+		}
+		return n
+	}
+	return 0
+}
+
 // Parse reads path from byte offset from to EOF and returns one Event per
 // distinct API call turn found (deduped by requestId/uuid, largest
-// output_tokens wins, exactly as v0.0.1's ParseSession did), plus the byte
-// offset right after the last complete line consumed. A trailing partial
-// line (the file still being written) is left for the next call.
-func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
+// output_tokens wins, exactly as v0.0.1's ParseSession did), one ToolCall per
+// tool_use block (S2), plus the byte offset right after the last complete
+// line consumed. A trailing partial line (the file still being written) is
+// left for the next call.
+func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, from, err
+		return nil, nil, from, err
 	}
 	defer f.Close()
 
 	if from > 0 {
 		if _, err := f.Seek(from, io.SeekStart); err != nil {
-			return nil, from, err
+			return nil, nil, from, err
 		}
 	}
 
@@ -175,6 +208,8 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 	calls := map[string]*turn{}
 	var order []string
 	toolCounts := map[string]map[string]int64{}
+	pendingCalls := map[string]*pendingToolCall{}
+	var toolCallOrder []string
 
 	offset := from
 	reader := bufio.NewReader(f)
@@ -189,7 +224,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 				// unprocessed and do not advance offset past it.
 				break
 			}
-			return nil, from, readErr
+			return nil, nil, from, readErr
 		}
 		lineLen := int64(len(rawLine))
 		line := strings.TrimSpace(rawLine)
@@ -210,9 +245,27 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 				cwd = c
 			}
 		}
-		if title == "" && obj["type"] == "user" {
+		if obj["type"] == "user" {
 			if msg, ok := obj["message"].(map[string]any); ok {
-				title = cleanTitle(extractText(msg["content"]))
+				if title == "" {
+					title = cleanTitle(extractText(msg["content"]))
+				}
+				if content, ok := msg["content"].([]any); ok {
+					for _, item := range content {
+						block, ok := item.(map[string]any)
+						if !ok || block["type"] != "tool_result" {
+							continue
+						}
+						tuid, _ := block["tool_use_id"].(string)
+						if tuid == "" {
+							continue
+						}
+						if pc, ok := pendingCalls[tuid]; ok {
+							n := contentByteLen(block["content"])
+							pc.resultBytes = &n
+						}
+					}
+				}
 			}
 		}
 		if obj["type"] != "assistant" {
@@ -222,9 +275,18 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 		if !ok {
 			continue
 		}
+		lineTS, _ := obj["timestamp"].(string)
 
 		if content, ok := msg["content"].([]any); ok {
 			lineTools := map[string]int64{}
+			tk := ""
+			if s, ok := obj["requestId"].(string); ok && s != "" {
+				tk = s
+			} else if s, ok := obj["uuid"].(string); ok && s != "" {
+				tk = s
+			} else {
+				tk = fmt.Sprintf("_toolrow%d", rowIdx)
+			}
 			for _, item := range content {
 				block, ok := item.(map[string]any)
 				if !ok || block["type"] != "tool_use" {
@@ -236,16 +298,17 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 				}
 				input, _ := block["input"].(map[string]any)
 				lineTools[skillTag(name, input)]++
+
+				if id, _ := block["id"].(string); id != "" {
+					inputBytes := int64(0)
+					if b, err := json.Marshal(input); err == nil {
+						inputBytes = int64(len(b))
+					}
+					pendingCalls[id] = &pendingToolCall{turn: tk, tool: skillTag(name, input), at: lineTS, inputBytes: inputBytes}
+					toolCallOrder = append(toolCallOrder, id)
+				}
 			}
 			if len(lineTools) > 0 {
-				tk := ""
-				if s, ok := obj["requestId"].(string); ok && s != "" {
-					tk = s
-				} else if s, ok := obj["uuid"].(string); ok && s != "" {
-					tk = s
-				} else {
-					tk = fmt.Sprintf("_toolrow%d", rowIdx)
-				}
 				seen := toolCounts[tk]
 				if seen == nil {
 					seen = map[string]int64{}
@@ -341,5 +404,21 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, int64, error) {
 		})
 	}
 
-	return events, offset, nil
+	var toolCalls []schema.ToolCall
+	for _, id := range toolCallOrder {
+		pc := pendingCalls[id]
+		var at time.Time
+		if pc.at != "" {
+			if parsed, err := time.Parse(time.RFC3339Nano, pc.at); err == nil {
+				at = parsed.UTC()
+			}
+		}
+		toolCalls = append(toolCalls, schema.ToolCall{
+			Vendor: "anthropic", Agent: agentFor(surface), SessionID: sessionID,
+			CallID: id, Turn: pc.turn, Tool: pc.tool, At: at,
+			InputBytes: pc.inputBytes, ResultBytes: pc.resultBytes,
+		})
+	}
+
+	return events, toolCalls, offset, nil
 }

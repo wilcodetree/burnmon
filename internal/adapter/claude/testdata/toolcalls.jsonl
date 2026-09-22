@@ -1,0 +1,5 @@
+{"type":"user","cwd":"C:\proj\demo","message":{"content":"do the thing"}}
+{"type":"assistant","timestamp":"2026-09-22T10:00:00.000Z","requestId":"req-1","message":{"model":"claude-x","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"a.go"}}],"usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10}}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"package a\n"}]}}
+{"type":"assistant","timestamp":"2026-09-22T10:01:00.000Z","requestId":"req-2","message":{"model":"claude-x","content":[{"type":"tool_use","id":"toolu_2","name":"Bash","input":{"command":"go build ./..."}}],"usage":{"input_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":20}}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_2","content":[{"type":"text","text":"ok\n"}]}]}}

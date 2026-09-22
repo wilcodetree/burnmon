@@ -11,7 +11,7 @@ func TestParseThreeTurnsFixture(t *testing.T) {
 	a := Adapter{}
 	path := filepath.Join("..", "..", "..", "testdata", "codex", "three-turns.jsonl")
 
-	events, offset, err := a.Parse(path, 0)
+	events, _, offset, err := a.Parse(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,14 +120,14 @@ func TestParseResumesFromOffset(t *testing.T) {
 	a := Adapter{}
 	path := filepath.Join("..", "..", "..", "testdata", "codex", "three-turns.jsonl")
 
-	first, off1, err := a.Parse(path, 0)
+	first, _, off1, err := a.Parse(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(first) != 3 {
 		t.Fatalf("first pass: got %d events, want 3", len(first))
 	}
-	second, off2, err := a.Parse(path, off1)
+	second, _, off2, err := a.Parse(path, off1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestParseIncrementalReadKeepsSurface(t *testing.T) {
 	}
 
 	// Consume the whole fixture first, as the initial full backfill would.
-	_, off1, err := a.Parse(path, 0)
+	_, _, off1, err := a.Parse(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestParseIncrementalReadKeepsSurface(t *testing.T) {
 	}
 	f.Close()
 
-	events, _, err := a.Parse(path, off1)
+	events, _, _, err := a.Parse(path, off1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestParseSubRunModelBecomesTitle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	events, _, err := a.Parse(path, 0)
+	events, _, _, err := a.Parse(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,6 +225,56 @@ func TestParseSubRunModelBecomesTitle(t *testing.T) {
 	}
 	if e.Title != "codex-auto-review" {
 		t.Fatalf("Title = %q, want codex-auto-review", e.Title)
+	}
+}
+
+// TestParseToolCalls guards S2's tool_calls extraction for Codex: both
+// payload families carry real tool calls (SESSION_LOG.md), custom_tool_call
+// (the shell/exec activity Codex sessions mostly consist of) and the rarer
+// function_call, each paired with its own *_output by call_id.
+func TestParseToolCalls(t *testing.T) {
+	a := Adapter{}
+	path := filepath.Join("..", "..", "..", "testdata", "codex", "tool-calls.jsonl")
+
+	_, toolCalls, _, err := a.Parse(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(toolCalls) != 2 {
+		t.Fatalf("got %d tool calls, want 2", len(toolCalls))
+	}
+
+	byID := map[string]struct {
+		tool       string
+		inputBytes int64
+		resultLen  int64
+	}{
+		"call_shell1": {"exec", int64(len(`{"cmd":"go build ./..."}`)), int64(len("build ok\n"))},
+		"call_ask1":   {"request_user_input_async", int64(len(`{"question":"proceed?"}`)), int64(len(`{"accepted":true}`))},
+	}
+	for _, tc := range toolCalls {
+		want, ok := byID[tc.CallID]
+		if !ok {
+			t.Fatalf("unexpected CallID %q", tc.CallID)
+		}
+		if tc.Tool != want.tool {
+			t.Fatalf("%s Tool = %q, want %q", tc.CallID, tc.Tool, want.tool)
+		}
+		if tc.Turn != "turn-1" {
+			t.Fatalf("%s Turn = %q, want turn-1", tc.CallID, tc.Turn)
+		}
+		if tc.Vendor != "openai" || tc.Agent != "codex" {
+			t.Fatalf("%s Vendor/Agent = %q/%q, want openai/codex", tc.CallID, tc.Vendor, tc.Agent)
+		}
+		if tc.At.IsZero() {
+			t.Fatalf("%s At is zero, want the call line's timestamp", tc.CallID)
+		}
+		if tc.InputBytes != want.inputBytes {
+			t.Fatalf("%s InputBytes = %d, want %d", tc.CallID, tc.InputBytes, want.inputBytes)
+		}
+		if tc.ResultBytes == nil || *tc.ResultBytes != want.resultLen {
+			t.Fatalf("%s ResultBytes = %v, want %d", tc.CallID, tc.ResultBytes, want.resultLen)
+		}
 	}
 }
 
