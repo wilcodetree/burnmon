@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 // ModelPrice is USD per million tokens at published API list rates.
@@ -45,6 +46,12 @@ const (
 	// standard-tier windows; Sonnet's documented 1M-token beta context is not
 	// used here since it needs a separate beta header burnmon never sends.
 	ContextWindowBookDate = "2026-09-22"
+
+	// ClaudeCodeCacheBookDate is when the cache-lifetime and auto-compact
+	// facts below were checked against code.claude.com/docs/en/costs and
+	// code.claude.com/docs/en/model-config, closing the v0.2 spec's I2
+	// VERIFY item.
+	ClaudeCodeCacheBookDate = "2026-09-22"
 )
 
 // Subscription is the calibration that turns token counts into a share of the
@@ -138,6 +145,69 @@ type Config struct {
 	// compiled-in 10-minute default (the Now page features note's
 	// "runningWindow" constant).
 	LiveRunningWindowMinutes float64 `json:"live_running_window_minutes"`
+
+	// ClaudeCodeCacheTTLMinutes is the prompt-cache lifetime insight's
+	// re-prefill rule (v0.2 I2) uses to infer a "gap since the previous turn
+	// exceeded the cache TTL" cause. Zero or absent means the compiled-in
+	// 60-minute default. Verified ClaudeCodeCacheBookDate against
+	// code.claude.com/docs/en/costs: on a Claude subscription seat
+	// (Pro/Max/Team/Enterprise, Wilco's own setup, see Subscription above)
+	// the lifetime is one hour; it drops to five minutes once the session is
+	// drawing on usage credits, and is five minutes by default on a bare API
+	// key or cloud provider. The 60-minute default matches the subscription
+	// case; override this for an API-key or usage-credits setup.
+	ClaudeCodeCacheTTLMinutes float64 `json:"claude_code_cache_ttl_minutes"`
+
+	// ClaudeCodeAutoCompactTokens documents, but is not applied by any v0.2
+	// rule, the token count at which Claude Code's own auto-compact runs.
+	// Verified ClaudeCodeCacheBookDate against
+	// code.claude.com/docs/en/model-config: there is no single fixed
+	// percentage; Claude Code compacts when the conversation reaches the
+	// model's context window, except models running a native 1M-token
+	// window (Sonnet 5, the Fable models, Opus 4.7+ on the Anthropic API),
+	// which compact early at about 967,000 tokens by default. burnmon's own
+	// ContextWindows table above prices the 200,000-token standard tier, not
+	// the 1M beta, so this number does not apply to it directly; insight's
+	// compaction rule (I2) detects a compaction by its effect instead, a
+	// greater-than-30%-percent context drop between consecutive turns, not
+	// by comparing against this threshold.
+	ClaudeCodeAutoCompactTokens int64 `json:"claude_code_auto_compact_tokens"`
+
+	// ReprefillCacheWriteThreshold is the cache-write token count (in one
+	// turn) above which insight's re-prefill rule (v0.2 I2) reports a
+	// finding. Zero or absent means the compiled-in 20,000-token default
+	// (the spec's "cache write in a turn exceeds 20K tokens").
+	ReprefillCacheWriteThreshold int64 `json:"reprefill_cache_write_threshold"`
+}
+
+// DefaultClaudeCodeCacheTTLMinutes is the compiled-in cache-lifetime
+// fallback used when ClaudeCodeCacheTTLMinutes is zero or absent: the
+// subscription-seat figure verified ClaudeCodeCacheBookDate (see the field's
+// comment).
+const DefaultClaudeCodeCacheTTLMinutes = 60
+
+// DefaultReprefillCacheWriteThreshold is the compiled-in re-prefill
+// threshold fallback used when ReprefillCacheWriteThreshold is zero or
+// absent.
+const DefaultReprefillCacheWriteThreshold = 20_000
+
+// ClaudeCodeCacheTTL returns the configured prompt-cache lifetime, falling
+// back to DefaultClaudeCodeCacheTTLMinutes.
+func (c *Config) ClaudeCodeCacheTTL() time.Duration {
+	m := c.ClaudeCodeCacheTTLMinutes
+	if m <= 0 {
+		m = DefaultClaudeCodeCacheTTLMinutes
+	}
+	return time.Duration(m * float64(time.Minute))
+}
+
+// ReprefillThreshold returns the configured re-prefill cache-write
+// threshold in tokens, falling back to DefaultReprefillCacheWriteThreshold.
+func (c *Config) ReprefillThreshold() int64 {
+	if c.ReprefillCacheWriteThreshold > 0 {
+		return c.ReprefillCacheWriteThreshold
+	}
+	return DefaultReprefillCacheWriteThreshold
 }
 
 // DefaultRunningWindow is the compiled-in "running session" threshold used

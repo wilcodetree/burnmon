@@ -2,6 +2,55 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 42A: insight package, re-prefill, compaction (I1, I2 part 1)
+
+New package `internal\insight`, no HTML and no store writes per I1: `Analyze(events
+[]schema.Event, cfg *pricing.Config) []Finding` takes one session's events in any order
+(sorted by `At` internally), drops the claude adapter's synthetic tool-only events the
+same way `internal/live` and `internal/dataset/fromstore.go` already do, and returns
+`[]Finding{Kind, Turn, At, Evidence map[string]float64, Cause, Confidence}` in turn order,
+`Turn` 1-based over real API-call turns only. Two I2 rules: `compaction` fires when
+context size (input + cache read + cache write) drops more than 30% between consecutive
+turns; `re-prefill` fires when a turn's cache write exceeds
+`cfg.ReprefillThreshold()` (20,000 tokens, `pricing.Config.ReprefillCacheWriteThreshold`,
+overridable in `burnmon.json`), with cause inferred in the spec's fixed order: a
+compaction finding at this turn or the one before it, else a model change since the
+previous turn, else a gap since the previous turn past `cfg.ClaudeCodeCacheTTL()`, else,
+when there is no previous turn to compare against at all, "first turn after resume"
+(a best-guess label, not a hard fact: a brand-new session's own first turn also always
+writes its whole prompt to cache, and insight has no explicit resume signal from the
+store to tell the two apart), else "unknown".
+
+VERIFY closed: read `code.claude.com/docs/en/costs` and `code.claude.com/docs/en/model-config`,
+dated `2026-09-22` (`pricing.ClaudeCodeCacheBookDate`). Cache lifetime: one hour on a
+Claude subscription seat (Pro/Max/Team/Enterprise, Wilco's own setup), dropping to five
+minutes once a session draws on usage credits, and five minutes by default on a bare API
+key or cloud provider; compiled-in default is the one-hour subscription figure
+(`pricing.Config.ClaudeCodeCacheTTLMinutes`, `DefaultClaudeCodeCacheTTLMinutes = 60`),
+so the re-prefill cause text is the real figure ("gap 90 min, exceeds 60 min cache TTL"),
+not the spec's unverified placeholder. Auto-compact: no single fixed percentage exists;
+Claude Code compacts when the conversation reaches the model's context window, except
+models on a native 1M-token window (Sonnet 5, the Fable models, Opus 4.7+ on the
+Anthropic API), which compact early at about 967,000 tokens by default. Documented as
+`pricing.Config.ClaudeCodeAutoCompactTokens` for the record, but not applied by either
+rule: burnmon's own `ContextWindows` table prices the 200K standard tier, not the 1M
+beta, and the compaction rule already detects a compaction by its effect (the drop),
+not by comparing against this number.
+
+Wired into `internal/live`'s `Session.Findings` (bmLive, per poll, on the same windowed
+turns `BuildSnapshot` already grouped per session, no extra store read) and into
+`burnmon-cli insight <session-id> [--json]` (new `Store.EventsForSession`, plus a
+positional-argument-after-flag fix in the CLI's own arg splitting, since Go's `flag`
+package stops parsing at the first non-flag argument and the spec's own example puts
+`--json` after the session id). `Analyze` measured at under 5ms for a synthetic
+2,000-turn marathon session (`TestAnalyze_UnderFiveMillisecondsPerSession`), well inside
+budget since it is a single linear pass plus one small sort of the findings themselves.
+Tests: one fixture per cause (compaction, model-changed, gap, first-turn-after-resume,
+unknown), one for the 30% compaction threshold's boundary, one all-quiet session with no
+findings, one confirming synthetic tool-only events are ignored, plus store and live
+coverage for the new query and wiring. `go test ./... -count=1` and `.\build.ps1` both
+green.
+
 ## 2026-09-22, v0.2 41B: vendor strip (P3), Hermes adapter (A1)
 
 P3: new package `internal\vendorstrip`, `Row{Agent,AgentLabel,Today,Week,Month}` and

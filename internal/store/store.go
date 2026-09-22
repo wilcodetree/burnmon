@@ -409,6 +409,25 @@ func (s *Store) EventsSince(from time.Time) ([]schema.Event, error) {
 	return scanEvents(rows)
 }
 
+// EventsForSession returns every stored event for sessionID, any vendor,
+// oldest first: `burnmon-cli insight <session-id>` (v0.2 I1) reads one
+// session's whole history this way rather than through AllEvents, the same
+// "windowed, not whole-table" instinct EventsSince already follows for the
+// Now page. A bare session_id is not guaranteed unique across vendors
+// (SessionKey's own doc comment), so a session id shared by two vendors
+// returns both; insight.Analyze still groups by turn order within the
+// result, which read as multiplexed turns of two sessions is a display bug,
+// not a correctness one, no vendor has ever repeated another's id in
+// practice.
+func (s *Store) EventsForSession(sessionID string) ([]schema.Event, error) {
+	rows, err := s.db.Query(`SELECT `+eventColumns+` FROM events WHERE session_id = ? ORDER BY at ASC`,
+		sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return scanEvents(rows)
+}
+
 // SessionModelTotal is one (vendor, session_id, model) group's SQL-summed
 // token counts, turn count and time span. A running session can switch
 // model mid-session, so SessionTotals groups by model too rather than

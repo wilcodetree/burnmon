@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"burnmon/internal/dataset"
+	"burnmon/internal/insight"
 	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
@@ -56,6 +57,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "tools" {
 		os.Exit(runTools(os.Args[2:]))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "insight" {
+		os.Exit(runInsight(os.Args[2:]))
 		return
 	}
 	os.Exit(run())
@@ -250,6 +255,94 @@ func runTools(args []string) int {
 	fmt.Printf("%-28s %8s %8s %14s %14s\n", "tool", "calls", "sessions", "input bytes", "result bytes")
 	for _, r := range rows {
 		fmt.Printf("%-28s %8d %8d %14d %14d\n", r.Tool, r.Calls, r.Sessions, r.InputBytes, r.ResultBytes)
+	}
+	return 0
+}
+
+// runInsight prints v0.2 I1/I2's findings for one session: `burnmon-cli
+// insight <session-id> --json`. Does a full Collect pass first (same as
+// live and tools) so the store is as current as a one-shot process can
+// make it, then reads that one session's whole history through
+// store.EventsForSession rather than AllEvents.
+func runInsight(args []string) int {
+	// `insight <session-id> --json` puts the flag after the positional
+	// argument; Go's flag package stops parsing flags at the first
+	// non-flag argument, so the session id and the flags are split out by
+	// hand before fs.Parse ever sees them, rather than requiring
+	// `insight --json <session-id>`.
+	var sessionID string
+	var flagArgs []string
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") || sessionID != "" {
+			flagArgs = append(flagArgs, a)
+			continue
+		}
+		sessionID = a
+	}
+
+	fs := flag.NewFlagSet("insight", flag.ExitOnError)
+	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
+	jsonOut := fs.Bool("json", false, "print findings as JSON instead of a table")
+	if err := fs.Parse(flagArgs); err != nil {
+		return 1
+	}
+	if sessionID == "" {
+		fmt.Fprintln(os.Stderr, "usage: burnmon-cli insight <session-id> [--json]")
+		return 1
+	}
+
+	cfg, err := loadConfig(*cfgPath, true)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config error:", err)
+		return 1
+	}
+
+	storePath, err := store.DefaultPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	st, err := store.Open(storePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not open the local store at", storePath, ":", err)
+		return 1
+	}
+	defer st.Close()
+
+	cache := dataset.Cache{Store: st}
+	opts := dataset.CollectOpts{Seat: "Standard", MonthsN: 1, RefreshSlow: true}
+	if _, err := cache.Collect(&cfg, opts, nil); err != nil {
+		var seatErr *dataset.SeatError
+		if !errors.As(err, &seatErr) && !errors.Is(err, dataset.ErrNoSessions) {
+			fmt.Fprintln(os.Stderr, "could not collect:", err)
+			return 1
+		}
+	}
+
+	events, err := st.EventsForSession(sessionID)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	findings := insight.Analyze(events, &cfg)
+
+	if *jsonOut {
+		b, err := json.MarshalIndent(findings, "", " ")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "internal error:", err)
+			return 1
+		}
+		fmt.Println(string(b))
+		return 0
+	}
+
+	if len(findings) == 0 {
+		fmt.Println("no findings for session", sessionID)
+		return 0
+	}
+	fmt.Printf("%-6s %-12s %-25s %-10s %s\n", "turn", "kind", "at", "confidence", "cause")
+	for _, f := range findings {
+		fmt.Printf("%-6d %-12s %-25s %-10.2f %s\n", f.Turn, f.Kind, f.At.Format(time.RFC3339), f.Confidence, f.Cause)
 	}
 	return 0
 }

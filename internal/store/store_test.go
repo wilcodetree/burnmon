@@ -199,6 +199,41 @@ func TestEventsSince(t *testing.T) {
 	}
 }
 
+// TestEventsForSession guards the query `burnmon-cli insight <session-id>`
+// (v0.2 I1) reads through: every event for sessionID, ordered oldest first,
+// and none of another session's events.
+func TestEventsForSession(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	s1a := schema.Event{
+		Vendor: "anthropic", Agent: "claude-code", Surface: "cli",
+		SessionID: "s1", RequestID: "r1", Model: "claude-x",
+		At: time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC), Input: 10, Output: 1,
+	}
+	s1b := s1a
+	s1b.RequestID = "r2"
+	s1b.At = time.Date(2026, 9, 1, 10, 5, 0, 0, time.UTC)
+	other := s1a
+	other.SessionID = "s2"
+	other.RequestID = "r3"
+	if err := st.UpsertEvents([]schema.Event{s1b, s1a, other}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := st.EventsForSession("s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].RequestID != "r1" || got[1].RequestID != "r2" {
+		t.Fatalf("EventsForSession = %+v, want r1 then r2", got)
+	}
+}
+
 // TestSessionTotals guards F1's SQL-aggregated whole-session totals used by
 // live.ApplySessionTotals: sums must be exact and grouped per model, and the
 // claude adapter's synthetic tool-only events (model="" and input=output=0)

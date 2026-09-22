@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"burnmon/internal/insight"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
 	"burnmon/internal/store"
@@ -49,6 +50,11 @@ type Session struct {
 	Cost          float64    `json:"cost"`
 	CacheHitRatio float64    `json:"cache_hit_ratio"` // last turn: cache_read / (fresh + cache_read)
 	Subagents     []*Session `json:"subagents,omitempty"`
+	// Findings is I3's marker source: insight.Analyze run on this session's
+	// own turns from the same windowed events BuildSnapshot already
+	// grouped, so a running session's re-prefill and compaction findings
+	// are free of any extra store read.
+	Findings []insight.Finding `json:"findings,omitempty"`
 }
 
 // ForecastDay is one day of the Now page's forecast placeholder.
@@ -216,6 +222,7 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 			ContextWindow: window,
 			Tokens:        tokens,
 			Cost:          cost,
+			Findings:      insight.Analyze(turns, cfg),
 			CacheHitRatio: hitRatio,
 		}
 		sessions[g.id] = s
