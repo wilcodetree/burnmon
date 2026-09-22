@@ -2,6 +2,66 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 40B: five tabs, Now default, English only (P1, P4, P5)
+
+`internal\report\template.html` only, no Go touched. Tab bar is now Now, History, Sessions,
+Tools, About; Overview, Months, Weeks, Days and the standalone How it works tab are off the
+tab bar. Per the spec's "do not move the old three pages' code yet": their `<section>` markup
+(`overview`, `months`, `weeks`, `days`) stays in the DOM exactly as it was, just given
+`class="hidden"` and dropped from `TAB_IDS`, so `renderOverview`, `drawOverviewCharts` and
+`renderPeriods` keep running untouched from `renderAll()` on every load, ready for 41A (P2
+History) to call. `showTab`'s dead `if(['overview','months','weeks']...)` re-render branch was
+removed since those ids can never reach it now (not in `TAB_IDS`, and the not-found fallback is
+`'now'`, not `'overview'`). `#now` is unhidden by default and its tab button carries `class="tab
+on"` in the markup, so a cold load needs no JS to land on Now; `#history` is a new placeholder
+section, "History arrives in the next session." and nothing else. Added one small deep-link
+read at the end of the init IIFE: on load only, `location.hash` is checked against `TAB_IDS` and
+`showTab()` is called once if it matches (`#now`, `#history`, `#sessions`, `#tools`, `#about`);
+nothing writes to `location.hash` on navigation, which is deliberate, per the existing comment
+above `TAB_IDS` about the Cowork artifact host reloading the whole document on `pushState`.
+
+How it works becomes the first section of About: moved the whole `<section id="how">` block
+(all seven "How Claude is paid for" cards plus its own "How accurate is this?" close) to open
+`<section id="about">`, ahead of "What this shows, and what it cannot". About already carried
+an identical "How accurate is this?" card near the bottom (word for word, previously invisible
+because the two lived on separate tabs); dropped the newly-moved copy's version rather than the
+original, since About's copy sits in its natural place after "List prices used". The move also
+surfaced a real pre-existing bug: two elements shared `id="how"` (the old section, and the
+"Refreshing" card inside About), so `document.getElementById('how')` on the "How do I refresh
+this?" button's click handler always resolved to the pay-explanation section, not the refresh
+card it was meant to scroll to. Renamed the card's id to `refresh_info` and repointed that
+handler at it, fixing the scroll target as a side effect. Left the "Overview tab" references at
+two spots inside the moved copy (both original, both about where the This month / Last month
+cards used to live) as-is: Overview's own fate is P2's call in 41A, not this session's, so
+rewriting them now risks describing something that changes again in three days; flagging it here
+instead of guessing. Updated the one live cross-reference this session does own: `card_note_sub`
+said "See the How it works tab", now "See the About tab".
+
+P5: language toggle gone entirely, `t()` kept. Removed `btn_lang` (topbar button, its CSS class
+stays since `btn_theme` still uses `.tglbtn`), `UI.lang` (state, localStorage read/write, the
+`applyTopbarLabels` line that displayed it), the `nl` entry of `MONTH_NAMES`/`DOW_SHORT`/
+`DOW_FULL` and all three call sites' `[UI.lang] ||` fallback (now just `.en` directly), the
+entire 90-key `I18N.nl` block, and `t()`'s language lookup (now `I18N.en[key]` directly, no
+`UI.lang` branch). Grepped the template and every `.go` file under the module for Dutch (`nl:`,
+`tabblad`, `taal`, `zetelprijs`, `aanroepen`, `kosten`, `Vernieuw`, `onbekend`, `Momentopname`,
+and a plain "Dutch"/"Nederlands" sweep): all of it was confined to the `nl` I18N block and
+`btn_lang`'s `title` attribute, nothing on the Go side ever had any. `node --check` on the
+extracted inline script, `go test ./... -count=1` and `.\build.ps1` all green.
+
+Opened `burnmon.exe` and screenshotted the real window (`CopyFromScreen`, not a saved report):
+Now is the active tab on cold start, cards and chart populated from this laptop's live store,
+tab bar reads Now / History / Sessions / Tools / About left to right, confirming P1 and P4.
+Clicking tabs to screenshot History and About did not work from this session: `Get-Process` and
+`FindWindow` from the PowerShell tool could not see or address the window that `tasklist`
+confirms was running (session/desktop isolation between this sandbox and the interactive
+desktop, not an app bug), so simulated mouse input never reached it. Did not chase this further;
+the placeholder and About-merge content were verified by direct reading of the rendered section
+HTML instead. Killed the leftover `burnmon.exe` test process (`taskkill`) afterwards so no stray
+instance holds the app's single-instance mutex for the next run. No open product questions came
+up worth stopping for; the two judgment calls above (which "How accurate is this?" copy to keep,
+renaming the colliding `id="how"`) were both forced by pre-existing duplicate-id/content bugs
+with only one sane fix, not product decisions, so made and documented rather than asked.
+
 ## 2026-09-22, v0.2 40A: tool_calls table, both adapters, tools --json, CLI live windowed (S2, S3)
 
 Before writing the extraction, opened one real Claude Code transcript (`C--ZND\29c211b0-...jsonl`,

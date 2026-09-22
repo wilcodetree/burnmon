@@ -136,7 +136,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 #t_sessions th:nth-child(8),#t_sessions td:nth-child(8){width:86px}
 #t_sessions td:nth-child(5) .pill{margin-left:5px}
 #t_sessions td:nth-child(4) .pill{margin-right:3px}
-/* Limits table on How it works: everything right-aligned to match the headers */
+/* Limits table in About's How it works section: everything right-aligned to match the headers */
 #t_limits td,#t_limits th{text-align:right;vertical-align:top}
 #t_limits td:first-child{white-space:nowrap}
 /* ZeroNonsense.dev brand mast */
@@ -161,7 +161,6 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   </div>
   <div class="topright">
     <div class="topctrls">
-      <button id="btn_lang" class="tglbtn" type="button" title="Language / Taal">EN</button>
       <button id="btn_theme" class="tglbtn" type="button" title="Theme">Dark</button>
     </div>
     <div class="stamp" id="stamp"></div>
@@ -169,21 +168,17 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 </div></header>
 <div class="tabsbar"><div class="tabs">
   <button id="tab_back" class="tab-back" title="Back to previous tab" aria-label="Back to previous tab">&lsaquo;</button>
-  <button class="tab" data-t="now">Now</button>
-  <button class="tab on" data-t="overview">Overview</button>
-  <button class="tab" data-t="months">Months</button>
-  <button class="tab" data-t="weeks">Weeks</button>
-  <button class="tab" data-t="days">Days</button>
+  <button class="tab on" data-t="now">Now</button>
+  <button class="tab" data-t="history">History</button>
   <button class="tab" data-t="sessions">Sessions</button>
   <button class="tab" data-t="tools">Tools</button>
-  <button class="tab" data-t="how">How it works</button>
   <button class="tab" data-t="about">About</button>
 </div></div>
 </div>
 
 <div class="wrap">
 
-<section id="now" class="hidden">
+<section id="now">
   <p class="lede">Running Claude Code, Cowork and Codex sessions, live. Polls every 2 seconds while this window is open; a saved report has nothing to poll.</p>
   <div id="now_empty" class="note hidden"></div>
   <div class="grid now-cards" id="now_cards"></div>
@@ -195,7 +190,14 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   <div class="card plain" id="now_forecast"></div>
 </section>
 
-<section id="overview">
+<section id="history" class="hidden">
+  <p class="lede">History arrives in the next session.</p>
+</section>
+
+<!-- Overview, Months, Weeks and Days are no longer on the tab bar (v0.2 P1). Their
+     markup and render functions stay in place, unreferenced, for 41A (P2 History) to
+     reuse; see SESSION_LOG.md tick 40B. -->
+<section id="overview" class="hidden">
   <div class="controls">
     <div><label>Cost basis</label>
       <select id="basis">
@@ -289,7 +291,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   </tr></thead><tbody></tbody></table></div>
 </section>
 
-<section id="how" class="hidden">
+<section id="about" class="hidden">
   <h2>How Claude is paid for, in plain words</h2>
   <p class="lede">Anthropic explains this in about six different places and never all at once. Here it is in one go. Nothing below is specific to you, so it is safe to share.</p>
 
@@ -369,26 +371,6 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
     </ul>
   </div>
 
-  <h2>How accurate is this?</h2>
-  <div class="card plain">
-    <p style="margin-top:0"><b>Close enough to act on, not exact.</b> This dashboard was built
-    with Claude, and Anthropic does not publish how usage turns into money. So the figures come
-    from comparing measured token counts against the totals Anthropic reports for the
-    organisation. They land within roughly a fifth.</p>
-    <p>Three things pull them off. The calibration is fitted to one heavy user's mix of models,
-    so a very different pattern of use will be somewhat out. Your session files can be up to a
-    day old. And prices change, sometimes mid-month.</p>
-    <p><b>None of that affects what you would actually use this for.</b> The trend is right, the
-    split between Cowork and Code is right, and the ranking of your sessions from cheap to
-    expensive is right. Treat it as a compass, not an invoice.</p>
-    <p style="margin-bottom:0">Two token counts here <i>are</i> exact, for what it is worth:
-    the number of API calls and the number of tokens. Anthropic returns both on every reply.
-    It is only the conversion into euros that is estimated.</p>
-  </div>
-
-</section>
-
-<section id="about" class="hidden">
   <h2>What this shows, and what it cannot</h2>
   <div class="card plain">
     <p style="margin-top:0"><b>Where the numbers come from.</b> Claude Cowork and Claude Code write a transcript of every session onto your own machine, and each assistant reply carries the exact token counts Anthropic returned. This page reads those transcripts, throws away the duplicate entries that streaming produces, and prices what is left. The token counts are exact, not estimated.</p>
@@ -440,7 +422,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   </div>
 
   <h2>Refreshing</h2>
-  <div class="card plain" id="how">
+  <div class="card plain" id="refresh_info">
     <p style="margin-top:0">This page holds a snapshot. It cannot poll anything by itself: no network access, no way to read your files.</p>
     <p id="how_task" class="hidden" style="margin-bottom:0"><b>You have automatic refresh set up.</b> It runs on a schedule and republishes this page. You can also press <b>Run now</b> on that task in the Scheduled sidebar, or type <b>/usage-dashboard</b> in Cowork, to rebuild it on demand.</p>
     <p id="how_notask" style="margin-bottom:0"><b>This page is rebuilt every time you run the burnmon CLI again.</b> It reads your session transcripts live at each run, so refreshing is simply running it again: a new report is written and opened for you.</p>
@@ -458,12 +440,12 @@ catch(e){ document.querySelector('.wrap').innerHTML =
   '<div class="note warn" style="margin-top:20px"><b>No usage data embedded.</b> Run the extract script and republish.</div>'; return; }
 
 var LS = 'claude-cost-user-v1';
-var UI = {cur:'eur', fx:0.92, basis:'sub', sort:'start', dir:-1, lang:'en', theme:'dark', f:{surface:'',month:'',q:'',long:''}};
+var UI = {cur:'eur', fx:0.92, basis:'sub', sort:'start', dir:-1, theme:'dark', f:{surface:'',month:'',q:'',long:''}};
 try { var st = JSON.parse(localStorage.getItem(LS)||'null');
   if(st){ UI.cur = st.cur||UI.cur; UI.fx = st.fx>0?st.fx:UI.fx; UI.basis = st.basis||UI.basis;
-    UI.lang = st.lang||UI.lang; UI.theme = st.theme||UI.theme; } } catch(e){}
+    UI.theme = st.theme||UI.theme; } } catch(e){}
 function persist(){ try{ localStorage.setItem(LS, JSON.stringify(
-  {cur:UI.cur, fx:UI.fx, basis:UI.basis, lang:UI.lang, theme:UI.theme})); }catch(e){} }
+  {cur:UI.cur, fx:UI.fx, basis:UI.basis, theme:UI.theme})); }catch(e){} }
 var SUB = D.subscription || {};
 
 var SL = D.surface_labels || {};
@@ -487,7 +469,6 @@ function applyChartDefaults(){
   if (typeof Chart !== 'undefined') { Chart.defaults.color = P.muted; Chart.defaults.borderColor = P.grid; }
 }
 function applyTopbarLabels(){
-  document.getElementById('btn_lang').textContent = UI.lang.toUpperCase();
   document.getElementById('btn_theme').textContent = UI.theme === 'light' ? t('theme_light') : t('theme_dark');
 }
 function applyTheme(){
@@ -498,12 +479,10 @@ function applyTheme(){
 
 // ---------- i18n ----------
 var MONTH_NAMES = {
-  en:['January','February','March','April','May','June','July','August','September','October','November','December'],
-  nl:['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december']
+  en:['January','February','March','April','May','June','July','August','September','October','November','December']
 };
-var DOW_SHORT = {en:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], nl:['zo','ma','di','wo','do','vr','za']};
-var DOW_FULL = {en:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
-  nl:['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag']};
+var DOW_SHORT = {en:['Sun','Mon','Tue','Wed','Thu','Fri','Sat']};
+var DOW_FULL = {en:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']};
 
 var I18N = {
 en:{
@@ -526,7 +505,7 @@ en:{
   },
   card_note_sub:'This is your personal cut of the one Claude bill the company already pays, worked out '
     + 'from how much you used compared with everyone else. It is not an extra charge, and it '
-    + 'is not your seat price. See the How it works tab.',
+    + 'is not your seat price. See the About tab.',
   card_note_list:'What your tokens would cost at Anthropic\'s published API prices, if the company paid per '
     + 'token instead of per seat. Useful for quoting client work. Not what we pay.',
   basis_note_sub_html:'<b>This is not an extra charge, and not your seat price.</b> '
@@ -593,100 +572,10 @@ en:{
   btn_refresh_now:'Refresh now',
   refresh_error:function(v){ return 'Could not start the refresh job: ' + v.err + '. Run burnmon.exe again instead.'; },
   render_error:function(v){ return 'Something went wrong rendering: '+v.msg; }
-},
-nl:{
-  theme_dark:'Donker', theme_light:'Licht',
-  snapshot_taken:'Momentopname genomen', unknown:'onbekend',
-  sessions_word:'sessies', calls_word:'aanroepen', tokens_word:'tokens',
-  no_prev_month:'niets in de vorige maand', no_data:'geen data',
-  busiest_in:function(v){ return 'Drukste sessie in '+v.month; },
-  busiest_generic:'Drukste sessie deze maand',
-  no_sessions_yet:'nog geen sessies deze maand',
-  vs_licence:function(v){ return v.month+' vs. je licentie'; },
-  vs_licence_generic:'Deze maand vs. je licentie',
-  not_enough_data:'nog niet genoeg data',
-  seat_not_configured:'zetelprijs niet ingesteld',
-  seat_sub:function(v){
-    return v.cost + (v.sub ? ' van het abonnement' : ' van de API-listwaarde')
-      + ' tegenover een ' + v.seatPrice + '/maand ' + v.seatName + '-zetel, '
-      + v.dayNow + ' dag' + (v.dayNow===1?'':'en') + ' in de maand'
-      + (v.prevX!=null ? '. Vorige maand eindigde op ' + v.prevX + 'x.' : '');
-  },
-  card_note_sub:'Dit is jouw persoonlijke aandeel in de ene Claude-rekening die het bedrijf al betaalt, '
-    + 'berekend op basis van hoeveel je gebruikte in verhouding tot iedereen anders. Het is geen extra '
-    + 'kosten en ook niet je zetelprijs. Zie het tabblad Hoe het werkt.',
-  card_note_list:'Wat je tokens zouden kosten tegen Anthropic\'s gepubliceerde API-prijzen, als het bedrijf '
-    + 'per token betaalde in plaats van per zetel. Handig voor het offreren van klantwerk. Niet wat wij betalen.',
-  basis_note_sub_html:'<b>Dit zijn geen extra kosten en ook niet je zetelprijs.</b> '
-    + 'Het is jouw deel van de ene factuur die de organisatie al betaalt, verdeeld naar hoeveel '
-    + 'iedereen daadwerkelijk gebruikte. De meeste zetels worden nauwelijks gebruikt, dus hun deel '
-    + 'komt terecht bij de mensen die Claude wel gebruiken. Daarom kan een zware gebruiker een veelvoud '
-    + 'van de eigen zetelprijs laten zien, terwijl het bedrijf hoe dan ook precies hetzelfde betaalt. '
-    + 'Hier wordt niets bij jou in rekening gebracht. Volledige uitleg op het tabblad Over.',
-  basis_note_list_html:'<b>Dit toont de API-listprijs, niet het geld dat we betalen.</b> Elke token tegen '
-    + 'Anthropic\'s gepubliceerde tarieven, inclusief cacheverkeer. Ligt een veelvoud hoger dan het '
-    + 'abonnementscijfer. Handig om klantwerk te prijzen of een API-build te dimensioneren, misleidend als kostenrapport.',
-  verdict_none_html:'<b>Nog niets deze maand.</b> Geen lokale Cowork- of Claude Code-activiteit sinds het begin van de maand. Cowork-sessies die in Anthropic\'s cloud draaien, en claude.ai-gesprekken in de browser, laten geen lokaal transcript achter en kunnen hier niet verschijnen. Kijk in plaats daarvan op het tabblad Werkelijke uitgaven.',
-  verdict_high:function(v){ return '<b>Sessieduur is je belangrijkste kostenfactor.</b> '+v.pct+'% van je '+v.basisWord+' zit in de '+v.ln+' sessie'+(v.ln===1?'':'s')+' die langer duurde dan '+v.longCalls+' aanroepen. Die opsplitsen in kortere, eenderwerp-sessies is de ene verandering die dit cijfer het meest zou beïnvloeden.'; },
-  verdict_mid:function(v){ return '<b>Een handvol lange sessies neemt een merkbaar aandeel voor zijn rekening.</b> '+v.pct+'% van je '+v.basisWord+' zit in '+v.ln+' marathonsessie'+(v.ln===1?'':'s')+' deze maand. Het is de moeite waard om in de gaten te houden, nog niet om je werkwijze om te gooien.'; },
-  verdict_low:function(v){ return '<b>Je sessies blijven compact.</b> Slechts '+v.pct+'% van je '+v.basisWord+' komt uit sessies langer dan '+v.longCalls+' aanroepen, en de gemiddelde sessie kost '+v.avg+'. Dat is de goedkope kant van de verdeling.'; },
-  basis_word_sub:'abonnementskosten', basis_word_list:'tokenwaarde',
-  th_share:'Aandeel', th_total:'Totaal',
-  th_sessions:'Sessies', th_calls:'Aanroepen', th_tokens:'Tokens', th_cost:'Kosten', th_surface:'Oppervlak', th_model:'Model',
-  split_text_html:function(v){ return '<h3>Dit eenmaal lezen</h3><p style="margin-top:0">Van elke token die je verbruikte, '
-    + 'was ' + v.cacheR + '% Claude die al eerder verzonden context opnieuw las, en slechts '
-    + v.out + '% was het antwoord dat het terugschreef. '
-    + v.fresh + '% was echt nieuwe tekst die jij typte.</p>'
-    + '<p style="margin-bottom:0">Dat is normaal en op zich geen verspilling. Het betekent wel dat de manier om minder '
-    + 'uit te geven is om minder context mee te dragen: kortere sessies, minder geladen plugins en skills, '
-    + 'kortere instructiebestanden. Overstappen naar een goedkoper model verandert de vermenigvuldiger; '
-    + 'minder context meedragen verandert het volume.</p>'; },
-  chart_could_not_load:function(v){ return v.label+' kon niet laden (de grafiekbibliotheek is niet geladen vanaf de CDN). De cijfers hierboven en de tabellen hieronder blijven onaangetast.'; },
-  chart_cost_per_day:function(v){ return 'Kosten per dag ('+v.sym+')'; },
-  chart_cost_per_day_label:'Kosten per dag',
-  doughnut_labels:['Cache-lezen, opnieuw verzonden context','Cache-schrijven, context opslaan','Output, het antwoord','Verse input, wat jij typte'],
-  chart_share_title:'Aandeel in je tokenvolume',
-  tooltip_calls_tokens:function(v){ return v.calls+' aanroepen · '+v.tokens+' tokens'; },
-  nothing_in_period:'Niets in deze periode.',
-  week_label:function(v){ return 'Week '+v.n+', '+v.y; },
-  chart_cost_per_week:function(v){ return 'Kosten per week ('+v.sym+')'; },
-  chart_cost_label:'Kosten',
-  tools_no_data_html:'Nog geen tooldata. Het tellen van tools begint bij v0.5.0, dus sessies die door een eerdere versie zijn verwerkt tonen niets totdat de cache opnieuw is opgebouwd.',
-  chart_tools_title:'Meest gebruikte connectors, plugins en skills op aantal aanroepen',
-  chart_calls_label:'Aanroepen',
-  no_sessions_match:'Geen sessies voldoen aan deze filters.',
-  long_pill:'lang',
-  sessions_shown:function(v){ return v.shown+' van de '+v.total+' sessies getoond'; },
-  sessions_count:function(v){ return v.n+' sessies'; },
-  basis_detail_none_html:'<i>Geen abonnementscijfers ingesteld, dus alleen de API-listprijs is beschikbaar.</i>',
-  basis_detail_html:function(v){
-    return '<b>Hoe het is ingericht.</b> De organisatie betaalt maandelijks één factuur voor ieders '
-    + 'zetels. Anthropic meet apart hoeveel elke persoon verbruikte, en over de hele organisatie komt '
-    + 'dat gemeten verbruik neer op ongeveer <b>' + v.used + '%</b> van de factuur, dus er is echt '
-    + 'ruimte over. Jouw cijfers zijn jouw aandeel in dat verbruik toegepast op de factuur, wat betekent '
-    + 'dat de cijfers hier voor iedereen in de organisatie precies optellen tot wat er wordt betaald, '
-    + 'niet meer. Jouw zeteltype is <b>' + v.seat + '</b>. '
-    + 'Gekalibreerd ' + v.calibrated + '.'
-    + (v.credits
-        ? ' Eén ding dat de toewijzing niet meerekent: de organisatie houdt ook een vooruitbetaald '
-          + 'tegoed aan gebruikskrediet aan, zodat mensen door kunnen werken voorbij een planlimiet. '
-          + 'Dat is echt geld dat buiten de factuur om wordt uitgegeven, dus zwaar gebruik kost in '
-          + 'werkelijkheid iets meer dan hier getoond.'
-        : '');
-  },
-  subtitle_sub:'Wat je coding agents verbruiken, live en per maand',
-  subtitle_list:'Wat je coding agents verbruiken, live en per maand',
-  th_price_model:'Model', th_price_input:'Input', th_price_output:'Output', th_price_cw:'Cache-schrijven', th_price_cr:'Cache-lezen',
-  btn_refreshing:'Vernieuwen…',
-  refresh_started_msg_html:'Je vernieuwingsopdracht is gestart. Deze leest je sessies opnieuw in en publiceert deze pagina opnieuw. Geef het een minuutje en herlaad dan.',
-  btn_refresh_started:'Vernieuwing gestart',
-  btn_refresh_now:'Nu vernieuwen',
-  refresh_error:function(v){ return 'Kon de vernieuwingsopdracht niet starten: ' + v.err + '. Voer burnmon.exe opnieuw uit.'; },
-  render_error:function(v){ return 'Er ging iets mis bij het renderen: '+v.msg; }
 }
 };
 function t(key, vars){
-  var s = (I18N[UI.lang] && I18N[UI.lang][key] !== undefined) ? I18N[UI.lang][key] : I18N.en[key];
+  var s = I18N.en[key];
   return typeof s === 'function' ? s(vars||{}) : s;
 }
 
@@ -710,7 +599,7 @@ function n(v){ return (v||0).toLocaleString('en-GB'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){
   return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
 function monthLabel(k){
-  var p = k.split('-'), names = MONTH_NAMES[UI.lang] || MONTH_NAMES.en;
+  var p = k.split('-'), names = MONTH_NAMES.en;
   return names[parseInt(p[1],10)-1] + ' ' + p[0];
 }
 var SHORT = {cli:'Code', code_agent:'Code agent', desktop:'Desktop'};
@@ -881,7 +770,7 @@ function drawOverviewCharts(comp, pc){
   var P = chartPalette();
   var pine=P.accent, pineL=P.muted, sun=P.blue2, lav=P.blue3;
   var dayKeys = Object.keys(D.days||{}).sort();
-  var DOW = DOW_SHORT[UI.lang] || DOW_SHORT.en;
+  var DOW = DOW_SHORT.en;
   function dayLabel(k){
     var d = new Date(k + 'T12:00:00Z');
     return [k.slice(5), isNaN(d) ? '' : DOW[d.getUTCDay()]];
@@ -942,7 +831,7 @@ function periodRows(src, tbodySel, opts){
 
 function dayWithName(k){
   var d = new Date(k + 'T12:00:00Z');
-  var full = DOW_FULL[UI.lang] || DOW_FULL.en;
+  var full = DOW_FULL.en;
   return isNaN(d) ? k : k + '  ' + full[d.getUTCDay()];
 }
 function weekLabel(k){
@@ -1545,18 +1434,15 @@ document.getElementById('fx').addEventListener('input', function(){
 // mirrors that proven pattern: "back" lives entirely in an in-memory stack,
 // with a visible Back button and direct handling of the mouse's physical
 // back button. Nothing here touches location.hash or window.history.
-var TAB_IDS = ['now','overview','months','weeks','days','sessions','tools','how','about'];
+var TAB_IDS = ['now','history','sessions','tools','about'];
 var tabStack = [];
 
 function showTab(id){
-  if(TAB_IDS.indexOf(id) === -1) id = 'overview';
+  if(TAB_IDS.indexOf(id) === -1) id = 'now';
   document.querySelectorAll('.tab').forEach(function(x){
     x.classList.toggle('on', x.getAttribute('data-t') === id); });
   TAB_IDS.forEach(function(tid){
     document.getElementById(tid).classList.toggle('hidden', tid !== id); });
-  if(['overview','months','weeks'].indexOf(id) !== -1){
-    try{ renderPeriods(); if(id === 'overview') renderOverview(); }catch(e){}
-  }
   if(id === 'tools'){
     // Re-render on entry: a chart created while its canvas was hidden
     // (renderAll at load runs with this tab display:none) sizes to zero.
@@ -1571,7 +1457,7 @@ function showTab(id){
 
 function currentTab(){
   var on = document.querySelector('.tab.on');
-  return on ? on.getAttribute('data-t') : 'overview';
+  return on ? on.getAttribute('data-t') : 'now';
 }
 
 function updateTabBackBtn(){
@@ -1600,7 +1486,7 @@ function goTabBack(){
 
 document.getElementById('btn_how').addEventListener('click', function(){
   goToTab('about');
-  document.getElementById('how').scrollIntoView({behavior:'smooth', block:'center'});
+  document.getElementById('refresh_info').scrollIntoView({behavior:'smooth', block:'center'});
 });
 document.querySelectorAll('.tab').forEach(function(t){
   t.addEventListener('click', function(){ goToTab(t.getAttribute('data-t')); });
@@ -1613,18 +1499,18 @@ window.addEventListener('mouseup', function(e){
   if(e.button === 3){ e.preventDefault(); goTabBack(); }
 });
 updateTabBackBtn();
+// Deep links (#now, #history, #sessions, #tools, #about): read once at load,
+// same in-memory back stack otherwise, per the note above on why this never
+// writes to location.hash on navigation.
+(function(){
+  var h = (window.location.hash || '').slice(1);
+  if(TAB_IDS.indexOf(h) !== -1 && h !== currentTab()) showTab(h);
+})();
 
 document.getElementById('cur').value = UI.cur;
 document.getElementById('basis').value = UI.basis;
 document.getElementById('fx').value = UI.fx;
 applyTheme();
-document.getElementById('btn_lang').addEventListener('click', function(){
-  UI.lang = UI.lang === 'en' ? 'nl' : 'en'; persist();
-  applyTopbarLabels();
-  renderPrices(); renderAll();
-  var rbtn = document.getElementById('btn_refresh');
-  if(!rbtn.classList.contains('hidden') && !rbtn.disabled) rbtn.textContent = t('btn_refresh_now');
-});
 document.getElementById('btn_theme').addEventListener('click', function(){
   UI.theme = UI.theme === 'light' ? 'dark' : 'light'; persist();
   applyTheme(); renderAll();
