@@ -26,6 +26,7 @@ import (
 	"burnmon/internal/dataset"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
+	"burnmon/internal/store"
 )
 
 const version = "0.8.1"
@@ -50,8 +51,8 @@ func run() int {
 	cfgPath := flag.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
 	noOpen := flag.Bool("no-open", false, "do not open the report in the browser")
 	quiet := flag.Bool("quiet", false, "suppress progress output")
-	noCache := flag.Bool("no-cache", false, "skip the parse cache entirely: always re-parse "+
-		"every transcript, and do not write the cache file")
+	noCache := flag.Bool("no-cache", false, "re-read every transcript from the start, "+
+		"ignoring the store's cursors")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -83,14 +84,21 @@ func run() int {
 	}
 
 	// The CLI runs once and exits, so this Cache only lives for one Collect
-	// call; the disk-persisted parse cache below is what carries the benefit
-	// across runs, same file the app binary also reads and writes.
-	var cache dataset.Cache
-	cachePath := filepath.Join(cacheDir(), "parsecache.gob")
-	fingerprint := dataset.Fingerprint(version, &cfg)
-	if !*noCache {
-		cache.Load(cachePath, fingerprint)
+	// call; the store on disk is what carries the benefit across runs, same
+	// file the app binary also reads and writes.
+	storePath, err := store.DefaultPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
 	}
+	st, err := store.Open(storePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not open the local store at", storePath, ":", err)
+		return 1
+	}
+	defer st.Close()
+
+	cache := dataset.Cache{Store: st}
 	progress := func(done, total int) {
 		if *quiet {
 			return
@@ -113,15 +121,9 @@ func run() int {
 		MonthsN:     *monthsN,
 		Sources:     []string(sources),
 		RefreshSlow: true,
+		ForceFull:   *noCache,
 	}
 	payload, err := cache.Collect(&cfg, opts, progress)
-	if err == nil && !*noCache {
-		if mkErr := os.MkdirAll(filepath.Dir(cachePath), 0o755); mkErr == nil {
-			if saveErr := cache.Save(cachePath, fingerprint); saveErr != nil && !*quiet {
-				fmt.Fprintln(os.Stderr, "warning: could not save parse cache:", saveErr)
-			}
-		}
-	}
 	if err != nil {
 		var seatErr *dataset.SeatError
 		switch {
@@ -207,17 +209,6 @@ func loadConfig(explicit string, quiet bool) (pricing.Config, error) {
 		fmt.Println("Using config overrides from", path)
 	}
 	return cfg, err
-}
-
-// cacheDir is the same %LOCALAPPDATA%\burnmon folder the app binary uses
-// for its own data, cache and log, so the CLI and the app share one parse
-// cache instead of each keeping a separate copy.
-func cacheDir() string {
-	if lad := os.Getenv("LOCALAPPDATA"); lad != "" {
-		return filepath.Join(lad, "burnmon")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".burnmon")
 }
 
 func defaultReportDir() string {
