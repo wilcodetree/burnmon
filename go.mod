@@ -3,6 +3,7 @@ module burnmon
 go 1.25.0
 
 require (
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.59.0

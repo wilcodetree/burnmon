@@ -481,6 +481,19 @@ func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool
 	return nil
 }
 
+// IngestFile ingests any new bytes of path (one trail file) into the store
+// and advances its cursor, without touching any other file or rebuilding the
+// payload. For internal/watch's live watcher: a file-change notification
+// names one path, and re-running the whole Collect pipeline for it would
+// mean re-listing every source on every keystroke of every open session.
+// Requires a prior full Collect to have populated c.RootsByAdapter, so path
+// classifies to the right adapter; falls back to the claude adapter
+// otherwise, same as ingest does for any other path before the first full
+// pass.
+func (c *Cache) IngestFile(path string) error {
+	return c.ingest([]string{path}, nil, false, nil)
+}
+
 // Collect resolves sources (auto-detecting when opts.Sources is empty, else
 // using opts.Sources/opts.SlowSources as given), lists transcript files,
 // ingests any bytes that are new or changed since the last call on this

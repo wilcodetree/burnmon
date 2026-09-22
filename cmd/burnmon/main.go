@@ -27,11 +27,14 @@ import (
 	webview2 "github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
 
+	"burnmon/internal/adapter/codex"
 	"burnmon/internal/dataset"
+	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
 	"burnmon/internal/scan"
 	"burnmon/internal/store"
+	"burnmon/internal/watch"
 )
 
 const (
@@ -236,6 +239,7 @@ func main() {
 			}
 			return
 		}
+		a.startLiveWatch()
 		if hadDashboard {
 			w.Dispatch(func() { w.Eval("window.ccReload ? ccReload() : location.reload()") })
 			return
@@ -276,6 +280,19 @@ func main() {
 		}()
 	}); err != nil {
 		log.Println("could not bind ccRefresh:", err)
+	}
+
+	if err := w.Bind("bmLive", func() (live.Snapshot, error) {
+		a.mu.Lock()
+		cfg := a.cfg
+		a.mu.Unlock()
+		events, err := st.AllEvents()
+		if err != nil {
+			return live.Snapshot{}, err
+		}
+		return live.BuildSnapshot(events, &cfg, time.Now()), nil
+	}); err != nil {
+		log.Println("could not bind bmLive:", err)
 	}
 
 	if err := w.Bind("ccSaveSettings", func(p settingsPayload) error {
@@ -397,6 +414,58 @@ type app struct {
 	wslDistros []string
 	mu         sync.Mutex
 	building   atomic.Bool
+
+	liveWatcher *watch.Watcher
+}
+
+// startLiveWatch starts the Now page's file watcher: fsnotify on every
+// native adapter root, a 5-second poll on every WSL root (see
+// internal/watch's package doc for why WSL cannot use fsnotify at all on
+// this laptop). Must run after at least one full rebuild, so
+// a.cache.RootsByAdapter is populated; called once, from the startup
+// goroutine, right after the first successful rebuild.
+func (a *app) startLiveWatch() {
+	if a.liveWatcher != nil {
+		return
+	}
+	nativeRoots := append(append([]string{}, scan.DefaultSourcesWithOptions(false)...), codex.NativeSources()...)
+	a.mu.Lock()
+	fullRoots := append(append([]string{}, a.cache.RootsByAdapter["claude"]...), a.cache.RootsByAdapter["codex"]...)
+	a.mu.Unlock()
+	wslRoots := diffRootsCaseInsensitive(fullRoots, nativeRoots)
+
+	wt, err := watch.New(nativeRoots, wslRoots, func(path string) {
+		a.mu.Lock()
+		err := a.cache.IngestFile(path)
+		a.mu.Unlock()
+		if err != nil {
+			log.Println("live watch: ingest", path, ":", err)
+		}
+	})
+	if err != nil {
+		log.Println("could not start the live watcher:", err)
+		return
+	}
+	wt.Start()
+	a.liveWatcher = wt
+}
+
+// diffRootsCaseInsensitive returns the entries of all not present in remove,
+// comparing case-insensitively (Windows paths). Local, minimal copy of
+// dataset's own subtractCaseInsensitive: not worth exporting one function
+// for one caller outside that package.
+func diffRootsCaseInsensitive(all, remove []string) []string {
+	skip := make(map[string]bool, len(remove))
+	for _, r := range remove {
+		skip[strings.ToLower(r)] = true
+	}
+	var out []string
+	for _, a := range all {
+		if !skip[strings.ToLower(a)] {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 var errRebuildBusy = errors.New("a collection is already running")

@@ -112,6 +112,10 @@ ul.tight{margin:8px 0 0;padding-left:20px} ul.tight li{margin-bottom:5px}
 code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px}
 .bar{height:6px;background:var(--merc);border-radius:3px;overflow:hidden;margin-top:5px}
 .bar i{display:block;height:100%;background:var(--pine-l)}
+.now-cards{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.now-card .sub-cards{margin-top:10px;padding-left:10px;border-left:2px solid var(--pine-40);display:flex;flex-direction:column;gap:8px}
+.gauge{height:10px;background:var(--merc);border-radius:5px;overflow:hidden;margin-top:6px}
+.gauge i{display:block;height:100%;background:var(--sun)}
 .tipped{cursor:help}
 .tip{position:fixed;z-index:100;max-width:460px;background:var(--pine-40);color:var(--ink);
   padding:9px 12px;border-radius:8px;font-size:12.5px;line-height:1.45;
@@ -165,6 +169,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 </div></header>
 <div class="tabsbar"><div class="tabs">
   <button id="tab_back" class="tab-back" title="Back to previous tab" aria-label="Back to previous tab">&lsaquo;</button>
+  <button class="tab" data-t="now">Now</button>
   <button class="tab on" data-t="overview">Overview</button>
   <button class="tab" data-t="months">Months</button>
   <button class="tab" data-t="weeks">Weeks</button>
@@ -177,6 +182,18 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 </div>
 
 <div class="wrap">
+
+<section id="now" class="hidden">
+  <p class="lede">Running Claude Code and Codex sessions, live. Polls every 2 seconds while this window is open; a saved report has nothing to poll.</p>
+  <div id="now_empty" class="note hidden"></div>
+  <div class="grid now-cards" id="now_cards"></div>
+
+  <h2>Live burn, last 30 minutes</h2>
+  <div class="chartbox"><canvas id="ch_now"></canvas></div>
+
+  <h2>Forecast</h2>
+  <div class="card plain" id="now_forecast"></div>
+</section>
 
 <section id="overview">
   <div class="controls">
@@ -1209,6 +1226,145 @@ function bindRefresh(){
   });
 }
 
+// ---------- Now page: live sessions, polled via window.bmLive ----------
+var nowTimer = null;
+
+function baseName(p){
+  if(!p) return '';
+  var norm = String(p).replace(/\\/g,'/').replace(/\/+$/,'');
+  var parts = norm.split('/');
+  return parts[parts.length-1] || norm;
+}
+
+function relTimeFrom(iso){
+  var t = Date.parse(iso);
+  if(isNaN(t)) return '';
+  var secs = Math.max(0, Math.round((Date.now()-t)/1000));
+  if(secs < 60) return secs+'s ago';
+  var mins = Math.round(secs/60);
+  if(mins < 60) return mins+'m ago';
+  return Math.round(mins/60)+'h ago';
+}
+
+function gaugeColor(pct){
+  if(pct >= 90) return 'var(--warn)';
+  if(pct >= 80) return 'var(--sun-l)';
+  return 'var(--sun)';
+}
+
+function sessionCardHTML(s, isSub){
+  var pct = (s.context_window && s.context_window > 0) ? Math.min(100, s.context/s.context_window*100) : null;
+  var gaugeHtml = pct == null
+    ? '<div class="small">'+tok(s.context)+' tokens (context window unknown)</div>'
+    : '<div class="gauge"><i style="width:'+pct.toFixed(0)+'%;background:'+gaugeColor(pct)+'"></i></div>'
+      + '<div class="small">'+tok(s.context)+' / '+tok(s.context_window)+' tokens ('+pct.toFixed(0)+'%)</div>';
+  var subHtml = '';
+  if(s.subagents && s.subagents.length){
+    subHtml = '<div class="sub-cards">' + s.subagents.map(function(sub){ return sessionCardHTML(sub, true); }).join('') + '</div>';
+  }
+  return '<div class="card plain now-card"'+(isSub?' style="padding:10px 12px"':'')+'>'
+    + '<div class="k">'+esc(s.agent||'')+' &middot; '+esc(s.surface||'')+'</div>'
+    + '<div class="v" style="font-size:15px">'+esc(s.model||'')+'</div>'
+    + '<div class="small">'+esc(baseName(s.project))+'</div>'
+    + gaugeHtml
+    + '<div class="small">'+tok(s.tokens)+' tokens this session &middot; '+money(s.cost||0)+' &middot; cache hit '+Math.round((s.cache_hit_ratio||0)*100)+'%</div>'
+    + '<div class="small">turn '+n(s.turn_count||0)+' &middot; last turn '+relTimeFrom(s.last_turn)+'</div>'
+    + subHtml
+    + '</div>';
+}
+
+function renderNowForecast(f){
+  var el = document.getElementById('now_forecast');
+  if(!el) return;
+  if(!f || !f.days || !f.days.length){
+    el.innerHTML = '<p class="small" style="margin:0">Forecast: needs one scored week, showing history.</p>';
+    return;
+  }
+  var rows = f.days.map(function(d){
+    return '<tr><td>'+esc(d.date)+'</td><td>'+money(d.cost||0)+'</td><td>'+tok(d.tokens||0)+'</td></tr>';
+  }).join('');
+  el.innerHTML = '<p class="small" style="margin-top:0">'+esc(f.message||'Forecast: needs one scored week, showing history.')+'</p>'
+    + '<table><thead><tr><th class="nosort">Day</th><th>Cost</th><th>Tokens</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+function drawNowChart(buckets){
+  if(typeof Chart === 'undefined'){ chartFallback('ch_now', 'Live burn'); return; }
+  buckets = buckets || [];
+  try {
+    var labels = buckets.map(function(b){ return (b.minute||'').slice(11,16); });
+    var sessionIds = [];
+    buckets.forEach(function(b){
+      Object.keys(b.by_session||{}).forEach(function(id){ if(sessionIds.indexOf(id)===-1) sessionIds.push(id); });
+    });
+    var P = chartPalette();
+    var colors = [P.accent, P.blue2, P.blue3, P.muted];
+    var datasets = sessionIds.map(function(id, i){
+      return {type:'bar', label: id, stack:'tokens', yAxisID:'y',
+        data: buckets.map(function(b){
+          var v = (b.by_session||{})[id];
+          return v ? (v.fresh + v.cache_write + v.cache_read + v.output) : 0;
+        }),
+        backgroundColor: colors[i % colors.length]};
+    });
+    datasets.push({type:'line', label:'Cost/min', yAxisID:'cost',
+      data: buckets.map(function(b){ return +((b.cost||0)*rate()).toFixed(4); }),
+      borderColor: P.blue3, backgroundColor:'transparent', tension:0.25});
+    if(charts.now) charts.now.destroy();
+    charts.now = new Chart(document.getElementById('ch_now'), {
+      data:{labels:labels, datasets:datasets},
+      options:{responsive:true, maintainAspectRatio:false,
+        scales:{
+          x:{stacked:true, grid:{display:false}, ticks:{font:{size:10}}},
+          y:{stacked:true, beginAtZero:true, grid:{color:P.grid}},
+          cost:{position:'right', beginAtZero:true, grid:{display:false}}
+        },
+        plugins:{legend:{position:'bottom', labels:{font:{size:10}, boxWidth:10}}}}});
+  } catch(e){
+    chartFallback('ch_now', 'Live burn');
+  }
+}
+
+function renderNow(snap){
+  var empty = document.getElementById('now_empty');
+  var cards = document.getElementById('now_cards');
+  if(!empty || !cards) return;
+  if(!snap || !snap.sessions || !snap.sessions.length){
+    empty.classList.remove('hidden');
+    empty.textContent = 'No running sessions. Start Claude Code or Codex and this page fills within two seconds.';
+    cards.innerHTML = '';
+  } else {
+    empty.classList.add('hidden');
+    cards.innerHTML = snap.sessions.map(function(s){ return sessionCardHTML(s, false); }).join('');
+  }
+  if(currentTab() === 'now') drawNowChart(snap && snap.chart);
+  renderNowForecast(snap && snap.forecast);
+}
+
+function pollNow(){
+  var empty = document.getElementById('now_empty');
+  if(typeof window.bmLive !== 'function'){
+    if(empty){
+      empty.classList.remove('hidden');
+      empty.textContent = 'Live view is only available in the BurnMon app window, not in a saved report.';
+    }
+    var cards = document.getElementById('now_cards');
+    if(cards) cards.innerHTML = '';
+    return;
+  }
+  Promise.resolve(window.bmLive()).then(renderNow).catch(function(e){
+    if(empty){
+      empty.classList.remove('hidden');
+      empty.textContent = 'Could not read live sessions: ' + (e && e.message ? e.message : String(e));
+    }
+  });
+}
+
+function startNowPolling(){
+  pollNow();
+  if(nowTimer) clearInterval(nowTimer);
+  nowTimer = setInterval(pollNow, 2000);
+}
+
 // ---------- wiring ----------
 function renderAll(){
   // Each stage runs independently: one broken stage (e.g. a chart library that
@@ -1232,7 +1388,7 @@ document.getElementById('fx').addEventListener('input', function(){
 // mirrors that proven pattern: "back" lives entirely in an in-memory stack,
 // with a visible Back button and direct handling of the mouse's physical
 // back button. Nothing here touches location.hash or window.history.
-var TAB_IDS = ['overview','months','weeks','days','sessions','tools','how','about'];
+var TAB_IDS = ['now','overview','months','weeks','days','sessions','tools','how','about'];
 var tabStack = [];
 
 function showTab(id){
@@ -1249,6 +1405,9 @@ function showTab(id){
     // (renderAll at load runs with this tab display:none) sizes to zero.
     // renderTools destroys any existing chart first, so this is idempotent.
     try{ renderTools(); }catch(e){}
+  }
+  if(id === 'now'){
+    try{ pollNow(); }catch(e){}
   }
   return id;
 }
@@ -1313,7 +1472,7 @@ document.getElementById('btn_theme').addEventListener('click', function(){
   UI.theme = UI.theme === 'light' ? 'dark' : 'light'; persist();
   applyTheme(); renderAll();
 });
-buildFilters(); bindTitleTip(); bindRefresh(); renderPrices();
+buildFilters(); bindTitleTip(); bindRefresh(); renderPrices(); startNowPolling();
 try { renderAll(); } catch(e){
   document.getElementById('verdict').innerHTML = '<b style="color:var(--warn)">'+esc(t('render_error',{msg:e.message}))+'</b>';
 }

@@ -2,6 +2,58 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.1 Step 3: the Now page
+
+Landed the Now page minimum from `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
+Step 3: `internal\watch` (fsnotify on native adapter roots, a 5-second poll on WSL roots),
+`internal\live` (the snapshot builder), a bound `bmLive()` in `cmd\burnmon`, `burnmon-cli.exe
+live -json`, a `context_window` table in the price book, and a new first tab "Now" in
+`internal\report\template.html`. **WSL confirmed on this laptop, answering the spec's open
+question directly rather than by assumption**: a throwaway probe built against
+`github.com/fsnotify/fsnotify` and pointed at a live `\\wsl.localhost\Ubuntu-24.04\...` folder
+did not merely see events late, it failed to add the watch at all, `ReadDirectoryChanges:
+Incorrect function`, confirmed by writing into the real folder from `wsl -d Ubuntu-24.04` while
+the probe was running and seeing nothing. `internal\watch` therefore never attempts fsnotify on
+a WSL root; those are polled by mtime every 5 seconds, exactly as the spec's fallback assumed,
+just for a stronger reason than "inotify does not cross the boundary". `internal\dataset` gained
+one exported method, `Cache.IngestFile`, a one-line wrapper around the existing private `ingest`
+loop with a single-path slice: the watcher's file-change callback needed a way to ingest one
+path without re-resolving every source, and `ingest` already handled a single-file list
+correctly, so no new ingest logic was written, only a name for calling it that way. `bmLive` and
+`cmd\burnmon`'s live watcher both take `app.mu` around their store/cache access, serialising with
+the existing 15-minute and WSL rebuild tickers, which stay as the safety net the spec calls for.
+`internal\live.BuildSnapshot` takes the whole event list (already in memory from `store.AllEvents`,
+same as every other read path in this codebase) rather than a windowed store query, matching the
+store package's own stated v0.1 scale trade-off. Context windows: `platform.claude.com`'s
+published standard tier is 200,000 tokens for every Claude model id seen on this laptop (the
+1M-token beta window needs a beta header burnmon never sends, so it is not used); OpenAI's Codex
+model pages give 400,000 tokens for the Astra/Sol/Terra/Luna family; `codex-auto-review` has no
+published window (also unpriced, per Step 2) and is left out on purpose, so its gauge shows raw
+tokens only, per the spec. Verified against real, current activity, not just fixtures: running
+`burnmon-cli.exe live -json` mid-session showed this very Claude Code session as the one running
+entry, context 234,819 of a 200,000 window (over 100%, the UI gauge clamps display at 100%),
+alongside 30 minutes of real per-minute chart buckets covering both this session and several
+recent Codex rollouts that had already gone stale past the 10-minute running window, correctly
+excluded from `sessions` while still present on the chart's tail. Launching `burnmon.exe` itself
+confirmed no bind or watcher-startup error in `burnmon-app.log`, and the rendered
+`dashboard.html` carries the new `now` tab, `ch_now` canvas and `startNowPolling` call. **Not
+verified**: no live Codex session was running alongside this one during the session, so the
+spec's full "both sessions show a context percentage and the chart moves within 2 seconds of a
+turn" done-when is confirmed for Claude Code and confirmed structurally (real Codex data flows
+through the same code path in `live -json`) but not watched live side by side; and the WebView2
+window's actual on-screen rendering was not visually inspected, only its generated HTML and
+absence of log errors. Cache clock and turn ticker were left out, in scope only if the week
+allowed and it did not. `go test ./...`, `go vet ./...` and `.\build.ps1` are green, including
+new tests for `internal\live` (running-vs-stale, subagent nesting, unknown-model gauge, and the
+done-when's own "append to a temp trail, assert the snapshot changes" test against a real
+adapter) and `internal\watch` (native fsnotify sees a new file and a newly created subdirectory;
+the WSL poll path fires once per real mtime change and not on a re-poll of an unchanged file).
+Tag command below, not run.
+
+```
+git tag -a v0.1.0 -m "Step 3: the Now page"
+```
+
 ## 2026-09-22, v0.1 Step 2: Codex adapter
 
 Landed `internal\adapter\codex` from `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`

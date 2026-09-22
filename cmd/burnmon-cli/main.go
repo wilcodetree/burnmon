@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"burnmon/internal/dataset"
+	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
 	"burnmon/internal/store"
@@ -44,7 +45,74 @@ func main() {
 		os.Exit(runPriceCheck(os.Args[2:]))
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "live" {
+		os.Exit(runLive(os.Args[2:]))
+		return
+	}
 	os.Exit(run())
+}
+
+// runLive does one full Collect pass (so the store is as current as a
+// one-shot process can make it, same as `report`), then prints the Now
+// page's JSON snapshot once: "for tests and for a later TUI" (v0.1 spec,
+// Step 3).
+func runLive(args []string) int {
+	fs := flag.NewFlagSet("live", flag.ExitOnError)
+	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
+	jsonOut := fs.Bool("json", false, "print the snapshot as JSON (the only supported form today)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	cfg, err := loadConfig(*cfgPath, true)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config error:", err)
+		return 1
+	}
+
+	storePath, err := store.DefaultPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	st, err := store.Open(storePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not open the local store at", storePath, ":", err)
+		return 1
+	}
+	defer st.Close()
+
+	cache := dataset.Cache{Store: st}
+	opts := dataset.CollectOpts{Seat: "Standard", MonthsN: 1, RefreshSlow: true}
+	if _, err := cache.Collect(&cfg, opts, nil); err != nil {
+		var seatErr *dataset.SeatError
+		if !errors.As(err, &seatErr) && !errors.Is(err, dataset.ErrNoSessions) {
+			fmt.Fprintln(os.Stderr, "could not collect:", err)
+			return 1
+		}
+		// No sessions inside the reporting window is fine here: the store
+		// may still hold events (an old session), or none at all, either
+		// way the snapshot below is what actually answers "is anything
+		// running now".
+	}
+
+	events, err := st.AllEvents()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	snap := live.BuildSnapshot(events, &cfg, time.Now())
+
+	if !*jsonOut {
+		fmt.Fprintln(os.Stderr, "live currently only supports -json")
+	}
+	b, err := json.MarshalIndent(snap, "", " ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	fmt.Println(string(b))
+	return 0
 }
 
 // runPriceCheck prints every compiled-in (or burnmon.json-overridden) price

@@ -38,6 +38,13 @@ type OpenAIModelPrice struct {
 const (
 	AnthropicPriceBookDate = "2026-09-22"
 	OpenAIPriceBookDate    = "2026-09-22"
+
+	// ContextWindowBookDate is when the context_window table below was last
+	// checked against platform.claude.com/docs/en/about-claude/models and
+	// developers.openai.com/codex's model pages. VERIFY: both are published
+	// standard-tier windows; Sonnet's documented 1M-token beta context is not
+	// used here since it needs a separate beta header burnmon never sends.
+	ContextWindowBookDate = "2026-09-22"
 )
 
 // Subscription is the calibration that turns token counts into a share of the
@@ -102,6 +109,39 @@ type Config struct {
 	// hours; zero or absent means the compiled-in 4-hour default. The app's
 	// -wsl-interval flag wins over this when both are present.
 	WSLIntervalHours float64 `json:"wsl_interval_hours"`
+
+	// ContextWindows is the Now page's context-window table, tokens per
+	// exact model id (not family, unlike Prices), dated by
+	// ContextWindowBookDate. A model id with no entry here is unknown: the
+	// Now page's gauge shows raw tokens with no percentage for it.
+	ContextWindows map[string]int64 `json:"context_window"`
+
+	// LiveRunningWindowMinutes is how long since a session's last turn it
+	// still counts as "running" on the Now page; zero or absent means the
+	// compiled-in 10-minute default (the Now page features note's
+	// "runningWindow" constant).
+	LiveRunningWindowMinutes float64 `json:"live_running_window_minutes"`
+}
+
+// DefaultRunningWindow is the compiled-in "running session" threshold used
+// when LiveRunningWindowMinutes is zero or absent.
+const DefaultRunningWindow = 10 * 60 // seconds
+
+// RunningWindowSeconds returns the configured running-session threshold in
+// seconds, falling back to DefaultRunningWindow.
+func (c *Config) RunningWindowSeconds() float64 {
+	if c.LiveRunningWindowMinutes > 0 {
+		return c.LiveRunningWindowMinutes * 60
+	}
+	return DefaultRunningWindow
+}
+
+// ContextWindow returns model's context window in tokens and whether it is
+// known. An unknown model (no entry in ContextWindows) returns (0, false):
+// the Now page shows raw token counts with no percentage for it.
+func (c *Config) ContextWindow(model string) (int64, bool) {
+	w, ok := c.ContextWindows[model]
+	return w, ok
 }
 
 // Defaults mirrors the PRICES and SUBSCRIPTION blocks of
@@ -129,6 +169,25 @@ func Defaults() Config {
 			"gpt-5.6-sol":   {Label: "GPT-5.6 Sol", In: 4.00, CachedIn: 0.40, Out: 20.00},
 			"gpt-5.6-terra": {Label: "GPT-5.6 Terra", In: 2.00, CachedIn: 0.20, Out: 12.00},
 			"gpt-5.6-luna":  {Label: "GPT-5.6 Luna", In: 0.20, CachedIn: 0.02, Out: 1.20},
+		},
+		// Context windows, tokens, dated ContextWindowBookDate. Anthropic
+		// models: 200,000 tokens standard tier, per
+		// platform.claude.com/docs/en/about-claude/models (Sonnet's 1M-token
+		// beta window needs a beta header burnmon never sends, so it is not
+		// used here). OpenAI Codex models: 400,000 tokens, per
+		// developers.openai.com/codex's model pages for the Codex-class
+		// models seen on Wilco's laptop. "codex-auto-review" has no
+		// published context window (also unpriced, see OpenAIPrices) and is
+		// deliberately left out, so its gauge shows tokens only.
+		ContextWindows: map[string]int64{
+			"claude-opus-5":             200_000,
+			"claude-sonnet-5":           200_000,
+			"claude-haiku-4-5-20251001": 200_000,
+			"claude-fable-5-1":          200_000,
+			"gpt-6-astra":               400_000,
+			"gpt-5.6-sol":               400_000,
+			"gpt-5.6-terra":             400_000,
+			"gpt-5.6-luna":              400_000,
 		},
 		Subscription: Subscription{
 			// Illustrative example calibration, not a real invoice. Drop a
