@@ -332,6 +332,20 @@ func main() {
 		log.Println("could not bind bmLive:", err)
 	}
 
+	// bmTurn (I3): the Now page's "explain this spike" drawer, called on
+	// demand when a marker or ticker line is clicked, not polled. Re-reads
+	// sessionID's whole event history (EventsForSession, any vendor) rather
+	// than bmLive's windowed one, so a drawer opened on a turn that has
+	// since scrolled out of the 30-minute chart still resolves.
+	if err := w.Bind("bmTurn", func(sessionID string, turn int) (live.TurnDetail, error) {
+		a.mu.Lock()
+		cfg := a.cfg
+		a.mu.Unlock()
+		return live.BuildTurnDetail(st, &cfg, sessionID, turn)
+	}); err != nil {
+		log.Println("could not bind bmTurn:", err)
+	}
+
 	// bmHistory (P2): queried on demand from the History tab's filter
 	// controls, not polled, so it re-reads the whole store on every call
 	// rather than the windowed query bmLive uses for its 2-second poll.

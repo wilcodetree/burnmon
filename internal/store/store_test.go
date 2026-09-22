@@ -289,8 +289,8 @@ func TestFreshStoreAtHeadVersion(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version: %v", err)
 	}
-	if version != 3 {
-		t.Fatalf("schema_version = %d, want 3", version)
+	if version != 4 {
+		t.Fatalf("schema_version = %d, want 4", version)
 	}
 }
 
@@ -363,6 +363,72 @@ func TestUpsertToolCallsAndTotals(t *testing.T) {
 	}
 	if exec.Calls != 1 || exec.InputBytes != 50 || exec.ResultBytes != 30 {
 		t.Fatalf("exec totals = %+v, want 1 call, 50 input bytes, 30 result bytes", exec)
+	}
+}
+
+// TestToolCallsForTurn checks the I3 drawer's join: looked up by (vendor,
+// session_id, turn), oldest first, a path carried through and preserved
+// across a later re-upsert that has no path of its own (migration4).
+func TestToolCallsForTurn(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	read := schema.ToolCall{
+		Vendor: "anthropic", Agent: "claude-code", SessionID: "s1",
+		CallID: "toolu_1", Turn: "req-1", Tool: "Read", At: base,
+		InputBytes: 20, Path: `C:\ZND\foo.go`,
+	}
+	edit := schema.ToolCall{
+		Vendor: "anthropic", Agent: "claude-code", SessionID: "s1",
+		CallID: "toolu_2", Turn: "req-1", Tool: "Edit", At: base.Add(time.Second),
+		InputBytes: 40, Path: `C:\ZND\bar.go`,
+	}
+	otherTurn := schema.ToolCall{
+		Vendor: "anthropic", Agent: "claude-code", SessionID: "s1",
+		CallID: "toolu_3", Turn: "req-2", Tool: "Read", At: base.Add(time.Minute),
+		InputBytes: 5, Path: `C:\ZND\baz.go`,
+	}
+	if err := st.UpsertToolCalls([]schema.ToolCall{read, edit, otherTurn}); err != nil {
+		t.Fatal(err)
+	}
+	// A stray re-upsert of the same call_id with an empty path (e.g. a
+	// second Parse pass that could not re-derive it) must not blank out the
+	// path already recorded.
+	readNoPath := read
+	readNoPath.Path = ""
+	readNoPath.ResultBytes = ptr(int64(99))
+	if err := st.UpsertToolCalls([]schema.ToolCall{readNoPath}); err != nil {
+		t.Fatal(err)
+	}
+
+	calls, err := st.ToolCallsForTurn("anthropic", "s1", "req-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("want 2 calls for req-1, got %d: %+v", len(calls), calls)
+	}
+	if calls[0].Tool != "Read" || calls[0].Path != `C:\ZND\foo.go` {
+		t.Fatalf("calls[0] = %+v, want Read with its path preserved through the re-upsert", calls[0])
+	}
+	if calls[0].ResultBytes == nil || *calls[0].ResultBytes != 99 {
+		t.Fatalf("calls[0].ResultBytes = %v, want 99", calls[0].ResultBytes)
+	}
+	if calls[1].Tool != "Edit" || calls[1].Path != `C:\ZND\bar.go` {
+		t.Fatalf("calls[1] = %+v, want Edit with its own path", calls[1])
+	}
+
+	none, err := st.ToolCallsForTurn("anthropic", "s1", "req-nope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("want no calls for an unknown turn, got %d", len(none))
 	}
 }
 
@@ -451,8 +517,8 @@ func TestMigrateRealV01Store(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version after migrate: %v", err)
 	}
-	if version != 3 {
-		t.Fatalf("schema_version after migrate = %d, want 3", version)
+	if version != 4 {
+		t.Fatalf("schema_version after migrate = %d, want 4", version)
 	}
 
 	got, err := st.AllEvents()

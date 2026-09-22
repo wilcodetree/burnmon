@@ -44,21 +44,31 @@ type Event struct {
 
 // ToolCall is one tool invocation (a Claude tool_use block, a Codex
 // function_call or custom_tool_call payload), stored alongside Events so S2's
-// `tool_calls` table and a later "tool calls that turn" drawer don't need to
-// re-parse a session's transcript.
+// `tool_calls` table and the I3 "tool calls that turn" drawer don't need to
+// re-parse a session's transcript. Fields carry json tags because the I3
+// drawer (internal/live.BuildTurnDetail) returns ToolCalls straight through
+// bmTurn to the Now page.
 type ToolCall struct {
-	Vendor    string
-	Agent     string
-	SessionID string
-	CallID    string // the vendor's own tool_use id / call_id; dedup key together with Vendor and SessionID
-	Turn      string // the turn this call belongs to: Claude's Event.RequestID key, Codex's rollout turn_id
-	Tool      string
-	At        time.Time
+	Vendor    string `json:"vendor"`
+	Agent     string `json:"agent"`
+	SessionID string `json:"session_id"`
+	CallID    string `json:"call_id"` // the vendor's own tool_use id / call_id; dedup key together with Vendor and SessionID
+	Turn      string `json:"turn"`    // the turn this call belongs to: Claude's Event.RequestID key, Codex's rollout turn_id
+	Tool      string `json:"tool"`
+	At        time.Time `json:"at"`
 
-	InputBytes int64
+	InputBytes int64 `json:"input_bytes"`
 	// ResultBytes is nil until the matching tool_result/*_output is seen in
 	// the same Parse read; a call and its result almost always land in the
 	// same incremental read in practice (they are adjacent lines), so this
 	// is not backfilled across separate reads.
-	ResultBytes *int64
+	ResultBytes *int64 `json:"result_bytes,omitempty"`
+	// Path is the file path the call touched, when the tool's own input
+	// names one plainly (Claude's Read/Edit/Write/NotebookEdit: file_path or
+	// notebook_path; Codex's function_call arguments, when they are a JSON
+	// object carrying file_path or path). "" when the tool named no file
+	// (a shell/exec call, a search) or the trail did not carry one in a
+	// recognised shape: this is a best-effort extraction, not a guaranteed
+	// one, per I3's "files read where the trail has them".
+	Path string `json:"path,omitempty"`
 }

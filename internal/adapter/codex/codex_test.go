@@ -278,6 +278,30 @@ func TestParseToolCalls(t *testing.T) {
 	}
 }
 
+// TestFilePathFromArgs checks I3's best-effort file path extraction: a
+// function_call's JSON arguments carrying file_path or path decode; a
+// custom_tool_call's plain shell-command string (not JSON at all) safely
+// yields no path rather than an error.
+func TestFilePathFromArgs(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"file_path key", `{"file_path":"C:\\ZND\\foo.go","content":"x"}`, `C:\ZND\foo.go`},
+		{"path key", `{"path":"bar.txt"}`, "bar.txt"},
+		{"not json (shell command)", `go build ./...`, ""},
+		{"json with neither key", `{"cmd":"go build ./..."}`, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := filePathFromArgs(tc.raw); got != tc.want {
+				t.Fatalf("filePathFromArgs(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestNameAndRoots(t *testing.T) {
 	a := Adapter{}
 	if a.Name() != "codex" {

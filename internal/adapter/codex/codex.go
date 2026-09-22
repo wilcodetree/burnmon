@@ -238,6 +238,29 @@ type pendingToolCall struct {
 	at          string
 	inputBytes  int64
 	resultBytes *int64
+	path        string
+}
+
+// filePathFromArgs is I3's best-effort file path extraction for a Codex
+// function_call/custom_tool_call's own raw input: both arrive as a raw
+// string (function_call's "arguments" is JSON, custom_tool_call's "input"
+// usually is not, e.g. a shell command), so this only ever returns a path
+// when raw happens to decode as a JSON object carrying "file_path" or
+// "path". Unverified against a real custom_tool_call fixture (SESSION_LOG.md
+// carries the caveat); "" is the safe, common case (a shell/exec call named
+// no single file at all).
+func filePathFromArgs(raw string) string {
+	var obj map[string]any
+	if json.Unmarshal([]byte(raw), &obj) != nil {
+		return ""
+	}
+	if p, ok := obj["file_path"].(string); ok && p != "" {
+		return p
+	}
+	if p, ok := obj["path"].(string); ok && p != "" {
+		return p
+	}
+	return ""
 }
 
 // toolCallOutputBytes approximates a *_output payload's byte size: a plain
@@ -385,7 +408,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 						turn, _ = meta["turn_id"].(string)
 					}
 					ts, _ := obj["timestamp"].(string)
-					pendingCalls[callID] = &pendingToolCall{turn: turn, tool: name, at: ts, inputBytes: int64(len(raw))}
+					pendingCalls[callID] = &pendingToolCall{turn: turn, tool: name, at: ts, inputBytes: int64(len(raw)), path: filePathFromArgs(raw)}
 					toolCallOrder = append(toolCallOrder, callID)
 				}
 				continue
@@ -473,7 +496,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 		toolCalls = append(toolCalls, schema.ToolCall{
 			Vendor: "openai", Agent: "codex", SessionID: sessionID,
 			CallID: callID, Turn: pc.turn, Tool: pc.tool, At: at,
-			InputBytes: pc.inputBytes, ResultBytes: pc.resultBytes,
+			InputBytes: pc.inputBytes, ResultBytes: pc.resultBytes, Path: pc.path,
 		})
 	}
 

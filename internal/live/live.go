@@ -5,6 +5,7 @@
 package live
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -76,6 +77,35 @@ type Forecast struct {
 	Days    []ForecastDay `json:"days"`
 }
 
+// TurnEvent is one real API-call turn inside the Now page's 30-minute
+// window, running session or not: the I3 turn ticker's one-line-per-turn
+// source, and the marker overlay's per-finding placement, both need every
+// individual turn rather than BuildSnapshot's per-10-second, per-session
+// aggregation (Bucket.BySession sums several turns together when more than
+// one lands in the same slot).
+type TurnEvent struct {
+	Vendor    string  `json:"vendor"`
+	Agent     string  `json:"agent"`
+	SessionID string  `json:"session_id"`
+	Model     string  `json:"model"`
+	// Turn is 1-based over this session's own real API-call turns, the same
+	// numbering insight.Finding.Turn and BuildTurnDetail's turn argument use,
+	// so a ticker line's turn number is what bmTurn(sessionID, turn) expects
+	// back.
+	Turn       int     `json:"turn"`
+	At         string  `json:"at"` // RFC3339 UTC
+	Fresh      int64   `json:"fresh"`
+	CacheWrite int64   `json:"cache_write"`
+	CacheRead  int64   `json:"cache_read"`
+	Output     int64   `json:"output"`
+	// Finding is this turn's own finding, when insight.Analyze found exactly
+	// this Turn among the session's findings; nil on an unremarkable turn.
+	// A turn with more than one finding kind (rare) carries only the first,
+	// in Kind order: the ticker line and marker both show one finding per
+	// turn, the drawer (bmTurn) is where every finding at that turn appears.
+	Finding *insight.Finding `json:"finding,omitempty"`
+}
+
 // Snapshot is what bmLive() and `burnmon-cli.exe live --json` both return.
 type Snapshot struct {
 	GeneratedAt          string     `json:"generated_at"`
@@ -89,7 +119,13 @@ type Snapshot struct {
 	BucketSeconds int      `json:"bucket_seconds"`
 	Chart         []Bucket `json:"chart"`
 	Forecast      Forecast `json:"forecast"`
+	// Turns is I3's turn ticker source: every real turn across every
+	// session in the chart window, newest first, capped at turnTickerCap.
+	Turns []TurnEvent `json:"turns"`
 }
+
+// turnTickerCap is I3's fixed cap on the turn ticker: "capped at 50 lines".
+const turnTickerCap = 50
 
 // ChartWindow is how far back both the chart and BuildSnapshot's own
 // "running" detection look. Exported so main.go's bmLive binding can pull
@@ -269,7 +305,166 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 		BucketSeconds:        BucketSeconds,
 		Chart:                buildChart(events, cfg, windowStart, now),
 		Forecast:             buildForecast(events, cfg, now),
+		Turns:                buildTurns(events, cfg, windowStart, now),
 	}
+}
+
+// buildTurns implements I3's turn ticker and marker source: every real turn
+// across every (vendor, session_id) group with at least one turn inside
+// [windowStart, now], newest first, capped at turnTickerCap. Groups its own
+// events independently of BuildSnapshot's sessions map (which only keeps
+// still-running groups) so a session that stopped a few minutes ago but is
+// still inside the 30-minute chart window still contributes its turns and
+// findings here.
+func buildTurns(events []schema.Event, cfg *pricing.Config, windowStart, now time.Time) []TurnEvent {
+	type group struct {
+		vendor, sessionID string
+		events            []schema.Event
+	}
+	groups := map[string]*group{}
+	var order []string
+	for _, e := range events {
+		if !isTurn(e) || e.At.IsZero() || e.At.Before(windowStart) || e.At.After(now) {
+			continue
+		}
+		key := e.Vendor + "|" + e.SessionID
+		g := groups[key]
+		if g == nil {
+			g = &group{vendor: e.Vendor, sessionID: e.SessionID}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.events = append(g.events, e)
+	}
+
+	var out []TurnEvent
+	for _, key := range order {
+		g := groups[key]
+		sort.SliceStable(g.events, func(i, j int) bool { return g.events[i].At.Before(g.events[j].At) })
+		findings := insight.Analyze(g.events, cfg)
+		findingByTurn := map[int]*insight.Finding{}
+		for i := range findings {
+			f := findings[i]
+			if findingByTurn[f.Turn] == nil {
+				findingByTurn[f.Turn] = &f
+			}
+		}
+		for i, e := range g.events {
+			turn := i + 1
+			te := TurnEvent{
+				Vendor: g.vendor, Agent: e.Agent, SessionID: g.sessionID, Model: e.Model,
+				Turn: turn, At: e.At.UTC().Format(time.RFC3339),
+				Fresh: e.Input, Output: e.Output,
+			}
+			if e.CacheWrite != nil {
+				te.CacheWrite = *e.CacheWrite
+			}
+			if e.CacheRead != nil {
+				te.CacheRead = *e.CacheRead
+			}
+			te.Finding = findingByTurn[turn]
+			out = append(out, te)
+		}
+	}
+
+	sort.SliceStable(out, func(i, j int) bool { return out[i].At > out[j].At })
+	if len(out) > turnTickerCap {
+		out = out[:turnTickerCap]
+	}
+	return out
+}
+
+// TurnDetail is bmTurn(sessionID, turn)'s payload: the I3 "explain this
+// spike" drawer's whole content in one struct, so the template's drawer is
+// one branch fed by one bound function per the spec.
+type TurnDetail struct {
+	SessionID  string             `json:"session_id"`
+	Vendor     string             `json:"vendor"`
+	Agent      string             `json:"agent"`
+	Model      string             `json:"model"`
+	Turn       int                `json:"turn"`
+	At         string             `json:"at"` // RFC3339 UTC
+	Fresh      int64              `json:"fresh"`
+	CacheWrite int64              `json:"cache_write"`
+	CacheRead  int64              `json:"cache_read"`
+	Output     int64              `json:"output"`
+	// HasGap is false for a session's own first turn: there is no previous
+	// turn to measure a gap against.
+	HasGap     bool               `json:"has_gap"`
+	GapSeconds float64            `json:"gap_seconds,omitempty"`
+	ToolCalls  []schema.ToolCall  `json:"tool_calls,omitempty"`
+	// Files is ToolCalls' own Path values, deduplicated, first-seen order:
+	// "files read where the trail has them" (I3).
+	Files    []string          `json:"files,omitempty"`
+	Findings []insight.Finding `json:"findings,omitempty"`
+}
+
+// ErrTurnNotFound is BuildTurnDetail's error when sessionID has no turn
+// numbered turn (an out-of-range click, or a session bmTurn's caller no
+// longer has events for).
+var ErrTurnNotFound = fmt.Errorf("live: turn not found")
+
+// BuildTurnDetail is bmTurn's implementation: sessionID's every stored event
+// (any vendor, EventsForSession), re-derives that session's own turns and
+// insight.Analyze findings exactly as buildTurns and BuildSnapshot already
+// do, then reports the one at 1-based turn, its tool calls (S2's tool_calls,
+// looked up by the turn's own RequestID as its Turn key, the join
+// internal/store.ToolCallsForTurn documents) and every file path they
+// carried.
+func BuildTurnDetail(st *store.Store, cfg *pricing.Config, sessionID string, turn int) (TurnDetail, error) {
+	events, err := st.EventsForSession(sessionID)
+	if err != nil {
+		return TurnDetail{}, err
+	}
+	var turns []schema.Event
+	for _, e := range events {
+		if isTurn(e) {
+			turns = append(turns, e)
+		}
+	}
+	sort.SliceStable(turns, func(i, j int) bool { return turns[i].At.Before(turns[j].At) })
+	if turn < 1 || turn > len(turns) {
+		return TurnDetail{}, ErrTurnNotFound
+	}
+	e := turns[turn-1]
+
+	d := TurnDetail{
+		SessionID: sessionID, Vendor: e.Vendor, Agent: e.Agent, Model: e.Model,
+		Turn: turn, At: e.At.UTC().Format(time.RFC3339),
+		Fresh: e.Input, Output: e.Output,
+	}
+	if e.CacheWrite != nil {
+		d.CacheWrite = *e.CacheWrite
+	}
+	if e.CacheRead != nil {
+		d.CacheRead = *e.CacheRead
+	}
+	if turn > 1 {
+		d.HasGap = true
+		d.GapSeconds = e.At.Sub(turns[turn-2].At).Seconds()
+	}
+
+	findings := insight.Analyze(turns, cfg)
+	for _, f := range findings {
+		if f.Turn == turn {
+			d.Findings = append(d.Findings, f)
+		}
+	}
+
+	calls, err := st.ToolCallsForTurn(e.Vendor, sessionID, e.RequestID)
+	if err != nil {
+		return TurnDetail{}, err
+	}
+	d.ToolCalls = calls
+	seen := map[string]bool{}
+	for _, c := range calls {
+		if c.Path == "" || seen[c.Path] {
+			continue
+		}
+		seen[c.Path] = true
+		d.Files = append(d.Files, c.Path)
+	}
+	return d, nil
 }
 
 func firstNonEmptyProject(events []schema.Event) string {

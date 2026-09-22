@@ -2,6 +2,77 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 43A: markers, ticker, spike drawer (I3 on Now)
+
+Wired every I3 piece onto the Now page from the findings `bmLive` already computes.
+`internal/live.Snapshot` gained `Turns []TurnEvent`: every real turn across every
+session inside the 30-minute chart window (not just still-running ones, unlike
+`Snapshot.Sessions`), newest first, capped at 50, each carrying its own matching
+`insight.Finding` when `Analyze` found one at that turn (`buildTurns`, independent of
+`BuildSnapshot`'s running-sessions map, same `insight.Analyze` call per session group).
+`template.html`'s `drawNowChart` grew one Chart.js point dataset per finding Kind seen
+in `Turns` (`findingMarkerDatasets`: triangle/rect/circle/star, one shape and color per
+kind), each point's height pinned near the token axis's top so a marker never buries
+under a tall stack; a `pointMeta` array carries session id and turn per point so the
+chart's own `onClick` (`nowChartOnClick`) can open the drawer without re-deriving
+anything from pixel coordinates. Rebuilding the marker datasets every poll and
+reassigning `chart.data.datasets` does not touch F8's own bar-dataset caching
+(`nowChart.datasetById`) or its smoothed axis maxima, so the "no jump, only the
+rightmost bar grows" behaviour is unchanged; confirmed by reading F8's code path, not
+by eye (see the live-check note below). A `#now_ticker` list under the chart
+(`renderNowTicker`) renders one line per turn, newest first, `<time> <agent>, turn
+<n>, <fresh> new[, <cache_read> cached][ · <Kind>: <Cause>]`, click-delegated (no
+inline `onclick`, so no session id needs attribute-escaping) to the same drawer.
+
+The drawer itself is one template branch (`renderTurnDrawer`) fed by one new bound
+function, `bmTurn(sessionID, turn)` → `live.BuildTurnDetail`: re-reads
+`EventsForSession(sessionID)` (any vendor, matching the store's own doc comment on
+that method), re-derives the session's own turns and `insight.Analyze` findings the
+same way `buildTurns` does, and reports the one at 1-based `turn`: model, all four
+token classes, gap since the previous turn (absent on turn 1), every finding whose
+`Turn` matches, and its tool calls, joined by the turn's own `RequestID` as the S2
+`tool_calls.turn` key (`store.ToolCallsForTurn`, new). Confirmed by construction for
+Claude (`tk` in `claude.go`'s tool_use parsing uses the identical requestId/uuid
+precedence as the event key `EventsForSession` returns), left as an open, logged risk
+for Codex: `pendingCalls[...].turn` comes from `internal_chat_message_metadata_passthrough.turn_id`,
+a different id space than `Event.RequestID` (`sessionID + ":" + ordinal`), unverified
+against any real Codex fixture to actually coincide; a Codex turn whose tool calls
+don't join just shows none, not an error, same as a turn that truly called no tool.
+
+The drawer's "files read" line was an open choice: `schema.ToolCall` had no path
+field at all before this session (S2's migration 3 never carried one). Stopped and
+asked; decided to add it now rather than ship the drawer without it.
+`migrations.go` gained migration4 (`tool_calls.path`, additive, default `''`); both
+adapters populate it best-effort, Claude from `file_path`/`notebook_path` on a
+Read/Edit/Write/NotebookEdit tool_use's own input (confirmed against a real fixture:
+`toolu_1`'s `{"file_path":"a.go"}` now round-trips as `Path: "a.go"`), Codex by
+attempting to JSON-decode a function_call's `arguments` or a custom_tool_call's
+`input` for `file_path`/`path` (unverified against a real custom_tool_call fixture:
+most of those are shell commands, not JSON, so this is expected to resolve to "" in
+practice more often than not, a documented gap rather than a silent one). `ToolCall`
+also gained json tags throughout (first time any ToolCall crosses the wire to JS).
+
+Verified end to end against the real local store, not a synthetic fixture: ran
+`burnmon-cli.exe` for a full ingest pass (`store` migrated live from version 3 to 4
+with real rows, no error), then `burnmon-cli.exe live -json` showed this very Claude
+Code session's own turns and a real `re-prefill` finding on turn 8; a throwaway
+`go run` of `live.BuildTurnDetail` against the same store for that session/turn
+returned the matching Bash tool call (joined by `RequestID` = `req_011CfKA4QxE1DZye2XKpw3BE`)
+and gap (`4.818`s), deleted afterward. Built and started the fresh `burnmon.exe`
+(replacing the stale instance still holding the single-instance mutex from an earlier
+run today); `burnmon-app.log` polled cleanly (`bmLive poll 30/60/90`, no panic, no
+"could not bind") for the several minutes this agent could observe it running. The
+spec's own "watch 5 minutes live: markers appear within 2 seconds, chart still drifts
+without jumping" is a visual check this agent has no way to perform on a native
+WebView2 window (no screenshot capability for it); the above is the strongest
+headless substitute, not a replacement for Wilco actually watching the window with a
+Claude Code or Codex session running.
+
+`node --check` on the extracted inline script (`internal/report/template.html`
+lines 462-1947) passed. `go test ./... -count=1` and `.\build.ps1` both green;
+two store tests (`TestFreshStoreAtHeadVersion`, `TestMigrateRealV01Store`) had their
+hardcoded `schema_version` expectation bumped from 3 to 4 for migration4.
+
 ## 2026-09-22, v0.2 42B: context runway, expensive turn (I2 part 2)
 
 Two more `internal/insight` rules, both computed fresh per `Analyze` call, no store

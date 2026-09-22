@@ -135,6 +135,49 @@ func TestBuildSnapshot_ChartIsDense(t *testing.T) {
 	}
 }
 
+// TestBuildSnapshot_Turns checks I3's ticker source: one TurnEvent per real
+// turn in the chart window (stale sessions included, unlike snap.Sessions),
+// newest first, with a re-prefill finding attached to its own turn only.
+func TestBuildSnapshot_Turns(t *testing.T) {
+	now := time.Now().UTC()
+	events := []schema.Event{
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s", RequestID: "r1",
+			Model: "claude-sonnet-5", At: now.Add(-10 * time.Minute), Input: 100, Output: 50},
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s", RequestID: "r2",
+			Model: "claude-sonnet-5", At: now.Add(-9 * time.Minute), Input: 100, CacheWrite: ptr(25_000), Output: 50},
+		// Stale: outside the running window, but inside the 30-minute chart
+		// window, so it must still appear (unlike snap.Sessions).
+		{Vendor: "openai", Agent: "codex", SessionID: "old", RequestID: "old:0",
+			Model: "gpt-5-codex", At: now.Add(-20 * time.Minute), Input: 40, Output: 10},
+	}
+	snap := BuildSnapshot(events, testConfig(), now)
+	if len(snap.Turns) != 3 {
+		t.Fatalf("want 3 turns, got %d: %+v", len(snap.Turns), snap.Turns)
+	}
+	for i := 1; i < len(snap.Turns); i++ {
+		if snap.Turns[i-1].At < snap.Turns[i].At {
+			t.Fatalf("Turns not newest-first at index %d: %q before %q", i, snap.Turns[i-1].At, snap.Turns[i].At)
+		}
+	}
+	var reprefill *TurnEvent
+	for i := range snap.Turns {
+		if snap.Turns[i].SessionID == "s" && snap.Turns[i].Turn == 2 {
+			reprefill = &snap.Turns[i]
+		}
+	}
+	if reprefill == nil {
+		t.Fatal("missing session s turn 2")
+	}
+	if reprefill.Finding == nil {
+		t.Fatalf("turn 2's Finding = %+v, want a finding (it both re-prefills and starts a context-runway fit)", reprefill.Finding)
+	}
+	for _, te := range snap.Turns {
+		if te.SessionID == "s" && te.Turn == 1 && te.Finding != nil {
+			t.Fatalf("turn 1 should carry no finding, got %+v", te.Finding)
+		}
+	}
+}
+
 // TestSnapshotChangesOnAppend is the v0.1 Step 3 done-when: "a test feeds a
 // fixture append to a temp trail and asserts the snapshot changes." Parses a
 // real trail file through the claude adapter twice, incrementally, exactly

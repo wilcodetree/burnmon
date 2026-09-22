@@ -167,9 +167,10 @@ func TestParseToolCalls(t *testing.T) {
 		turn       string
 		inputBytes int64
 		resultLen  int64
+		path       string
 	}{
-		"toolu_1": {"Read", "req-1", int64(len(`{"file_path":"a.go"}`)), int64(len("package a\n"))},
-		"toolu_2": {"Bash", "req-2", int64(len(`{"command":"go build ./..."}`)), int64(len("ok\n"))},
+		"toolu_1": {"Read", "req-1", int64(len(`{"file_path":"a.go"}`)), int64(len("package a\n")), "a.go"},
+		"toolu_2": {"Bash", "req-2", int64(len(`{"command":"go build ./..."}`)), int64(len("ok\n")), ""},
 	}
 	for _, tc := range toolCalls {
 		want, ok := byID[tc.CallID]
@@ -181,6 +182,9 @@ func TestParseToolCalls(t *testing.T) {
 		}
 		if tc.Turn != want.turn {
 			t.Fatalf("%s Turn = %q, want %q", tc.CallID, tc.Turn, want.turn)
+		}
+		if tc.Path != want.path {
+			t.Fatalf("%s Path = %q, want %q (I3 file extraction)", tc.CallID, tc.Path, want.path)
 		}
 		if tc.Vendor != "anthropic" || tc.Agent != "claude-code" {
 			t.Fatalf("%s Vendor/Agent = %q/%q, want anthropic/claude-code", tc.CallID, tc.Vendor, tc.Agent)

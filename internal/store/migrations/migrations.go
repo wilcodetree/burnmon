@@ -20,6 +20,7 @@ var All = []Migration{
 	{1, "baseline v0.1 schema (events, cursors, meta)", migration1},
 	{2, "owner column on events (P6 owner split)", migration2},
 	{3, "tool_calls table (S2)", migration3},
+	{4, "tool_calls.path column (I3)", migration4},
 }
 
 // migration1 records the v0.1 schema as version 1 without changing it: the
@@ -96,5 +97,14 @@ CREATE TABLE IF NOT EXISTS tool_calls (
 CREATE INDEX IF NOT EXISTS idx_tool_calls_at ON tool_calls (at);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls (tool);
 `)
+	return err
+}
+
+// migration4 adds I3's tool_calls.path column: the file path a Read, Edit,
+// Write or NotebookEdit call touched, when the adapter could extract one
+// from the tool's own input, "" otherwise (a shell/exec call, a search, or a
+// trail whose input shape was not recognised).
+func migration4(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE tool_calls ADD COLUMN path TEXT NOT NULL DEFAULT ''`)
 	return err
 }

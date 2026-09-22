@@ -187,12 +187,13 @@ func (s *Store) UpsertToolCalls(calls []schema.ToolCall) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-INSERT INTO tool_calls (vendor, agent, session_id, call_id, turn, tool, at, input_bytes, result_bytes)
-VALUES (?,?,?,?,?,?,?,?,?)
+INSERT INTO tool_calls (vendor, agent, session_id, call_id, turn, tool, at, input_bytes, result_bytes, path)
+VALUES (?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT (vendor, session_id, call_id) DO UPDATE SET
 	agent = excluded.agent, turn = excluded.turn, tool = excluded.tool, at = excluded.at,
 	input_bytes = excluded.input_bytes,
-	result_bytes = COALESCE(excluded.result_bytes, tool_calls.result_bytes)
+	result_bytes = COALESCE(excluded.result_bytes, tool_calls.result_bytes),
+	path = CASE WHEN excluded.path != '' THEN excluded.path ELSE tool_calls.path END
 `)
 	if err != nil {
 		return err
@@ -202,13 +203,53 @@ ON CONFLICT (vendor, session_id, call_id) DO UPDATE SET
 	for _, c := range calls {
 		_, err = stmt.Exec(
 			c.Vendor, c.Agent, c.SessionID, c.CallID, c.Turn, c.Tool,
-			c.At.UTC().Format(time.RFC3339Nano), c.InputBytes, nullInt(c.ResultBytes),
+			c.At.UTC().Format(time.RFC3339Nano), c.InputBytes, nullInt(c.ResultBytes), c.Path,
 		)
 		if err != nil {
 			return fmt.Errorf("store: upsert tool call %s/%s: %w", c.Vendor, c.CallID, err)
 		}
 	}
 	return tx.Commit()
+}
+
+// ToolCallsForTurn returns every tool call at or after cutoff (S2's
+// tool_calls.at) for (vendor, session_id, turn), oldest first: the I3
+// drawer's "tool calls that turn" list. turn is the calling turn's own
+// Event.RequestID (Claude) or rollout turn_id (Codex); a Codex turn_id whose
+// id space does not actually match its Event.RequestID (unverified, no
+// fixture proves the two coincide) simply returns no rows rather than
+// erroring, same as a turn that truly called no tool.
+func (s *Store) ToolCallsForTurn(vendor, sessionID, turn string) ([]schema.ToolCall, error) {
+	rows, err := s.db.Query(`
+SELECT vendor, agent, session_id, call_id, turn, tool, at, input_bytes, result_bytes, path
+FROM tool_calls
+WHERE vendor = ? AND session_id = ? AND turn = ?
+ORDER BY at ASC`, vendor, sessionID, turn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []schema.ToolCall
+	for rows.Next() {
+		var c schema.ToolCall
+		var atStr string
+		var resultBytes sql.NullInt64
+		if err := rows.Scan(&c.Vendor, &c.Agent, &c.SessionID, &c.CallID, &c.Turn, &c.Tool,
+			&atStr, &c.InputBytes, &resultBytes, &c.Path); err != nil {
+			return nil, err
+		}
+		c.At, err = time.Parse(time.RFC3339Nano, atStr)
+		if err != nil {
+			return nil, fmt.Errorf("store: parse at %q: %w", atStr, err)
+		}
+		if resultBytes.Valid {
+			v := resultBytes.Int64
+			c.ResultBytes = &v
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // ToolCallTotal is one tool name's aggregated activity since a cutoff, as

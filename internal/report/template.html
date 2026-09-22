@@ -116,6 +116,17 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 .now-card .sub-cards{margin-top:10px;padding-left:10px;border-left:2px solid var(--pine-40);display:flex;flex-direction:column;gap:8px}
 .gauge{height:10px;background:var(--merc);border-radius:5px;overflow:hidden;margin-top:6px}
 .gauge i{display:block;height:100%;background:var(--sun)}
+#now_ticker{max-height:220px;overflow-y:auto;border:1px solid var(--pine-40);border-radius:6px;background:var(--merc-l)}
+.ticker-line{padding:4px 10px;font-family:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:12px;color:var(--ink);cursor:pointer;border-bottom:1px solid var(--pine-10)}
+.ticker-line:last-child{border-bottom:none}
+.ticker-line:hover{background:var(--pine-10)}
+.ticker-line .finding{color:var(--sun);font-weight:600}
+#turn_drawer_overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center}
+#turn_drawer_overlay:not(.hidden){display:flex}
+#turn_drawer{position:relative;background:var(--pine);color:var(--ink);border-radius:10px;padding:22px 26px;width:560px;max-width:92vw;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+#turn_drawer_close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer}
+#turn_drawer h3{margin:0 0 4px}
+#turn_drawer h4{margin:16px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 .tipped{cursor:help}
 .tip{position:fixed;z-index:100;max-width:460px;background:var(--pine-40);color:var(--ink);
   padding:9px 12px;border-radius:8px;font-size:12.5px;line-height:1.45;
@@ -192,9 +203,20 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   <h2>Live burn, last 30 minutes</h2>
   <div class="chartbox"><canvas id="ch_now"></canvas></div>
 
+  <h2>Turn ticker</h2>
+  <p class="lede" style="margin-top:-8px">Newest first, capped at 50 lines. Click a line, or a marker on the chart above, for the full turn detail.</p>
+  <div id="now_ticker"></div>
+
   <h2>Forecast</h2>
   <div class="card plain" id="now_forecast"></div>
 </section>
+
+<div id="turn_drawer_overlay" class="hidden" onclick="if(event.target===this) closeTurnDrawer()">
+  <div id="turn_drawer">
+    <button id="turn_drawer_close" type="button" title="Close" aria-label="Close" onclick="closeTurnDrawer()">&times;</button>
+    <div id="turn_drawer_body"></div>
+  </div>
+</div>
 
 <section id="history" class="hidden">
   <p class="lede">Tokens and cost across every vendor. Filters set the period, range, vendor and (when owner rules are configured) owner; the totals, chart and table below always describe exactly what is selected. State lives in the page's URL, so a view can be reopened.</p>
@@ -1200,7 +1222,81 @@ function sessionChartLabel(s){
 // window's raw peak. Known trade-off of no longer destroying the chart
 // every poll: a theme toggle no longer repaints its existing bars/grid
 // until a full page reload, unlike every other chart on this page.
-function drawNowChart(chart, sessions){
+// findingMarkerStyle maps an I3 finding Kind to how its marker draws: a
+// distinct point shape plus color per kind, so a glance at the chart tells
+// kinds apart without reading the legend.
+var findingMarkerStyle = {
+  're-prefill':      {shape:'triangle', color:'#FFB84D', label:'Re-prefill'},
+  'compaction':       {shape:'rect',     color:'#C77DFF', label:'Compaction'},
+  'context-runway':   {shape:'circle',   color:'#4DA3FF', label:'Context runway'},
+  'expensive-turn':   {shape:'star',     color:'#FF6B6B', label:'Expensive turn'}
+};
+
+// findingMarkerDatasets builds one Chart.js point dataset per finding Kind
+// present in turns (I3: "a marker per finding on the live chart at its
+// slot, shaped by kind"). chart is the dense bucket array bmLive returns;
+// bucketMs is each slot's width in milliseconds, derived from two
+// consecutive slots rather than assumed, so this keeps working if
+// BucketSeconds ever changes server-side. Each dataset carries isMarker and
+// a parallel pointMeta array (session id, turn) so the chart's onClick
+// handler below can open the I3 drawer without re-deriving which point was
+// clicked from pixel coordinates itself.
+function findingMarkerDatasets(chart, turns){
+  if(!chart || !chart.length || !turns || !turns.length) return [];
+  var windowStartMs = Date.parse(chart[0].at);
+  var bucketMs = chart.length > 1 ? (Date.parse(chart[1].at) - windowStartMs) : 10000;
+  if(!(bucketMs > 0)) bucketMs = 10000;
+
+  var byKind = {};
+  turns.forEach(function(te){
+    if(!te.finding) return;
+    var kind = te.finding.Kind;
+    var style = findingMarkerStyle[kind];
+    if(!style) return;
+    var idx = Math.floor((Date.parse(te.at) - windowStartMs) / bucketMs);
+    if(idx < 0 || idx >= chart.length) return;
+    if(!byKind[kind]){
+      byKind[kind] = {
+        data: new Array(chart.length).fill(null),
+        meta: new Array(chart.length).fill(null)
+      };
+    }
+    // Chart's own top: just above where the token bars can reach, so a
+    // marker never gets buried under a tall stack.
+    byKind[kind].data[idx] = nowChart.tokenMax * 0.98;
+    byKind[kind].meta[idx] = {session_id: te.session_id, turn: te.turn, kind: kind};
+  });
+
+  return Object.keys(byKind).map(function(kind){
+    var style = findingMarkerStyle[kind];
+    var entry = byKind[kind];
+    return {
+      type: 'line', label: style.label, yAxisID: 'y', showLine: false,
+      isMarker: true, pointMeta: entry.meta,
+      data: entry.data, pointStyle: style.shape,
+      pointRadius: entry.data.map(function(v){ return v==null ? 0 : 7; }),
+      pointHoverRadius: 9,
+      backgroundColor: style.color, borderColor: style.color
+    };
+  });
+}
+
+// nowChartOnClick opens the I3 drawer when a finding marker (isMarker
+// dataset, see findingMarkerDatasets) is clicked; a click that lands on a
+// bar or the cost line, or misses every point, does nothing.
+function nowChartOnClick(evt, elements, chart){
+  for(var i=0;i<elements.length;i++){
+    var el = elements[i];
+    var ds = chart.data.datasets[el.datasetIndex];
+    if(ds && ds.isMarker && ds.pointMeta && ds.pointMeta[el.index]){
+      var meta = ds.pointMeta[el.index];
+      openTurnDrawer(meta.session_id, meta.turn);
+      return;
+    }
+  }
+}
+
+function drawNowChart(chart, sessions, turns){
   if(typeof Chart === 'undefined'){ chartFallback('ch_now', 'Live burn'); return; }
   chart = chart || [];
   try {
@@ -1274,7 +1370,8 @@ function drawNowChart(chart, sessions){
       nowChart.costDataset = {type:'line', label:'Cost/10s', yAxisID:'cost', sessionId: null,
         data: costData, borderColor: P.blue3, backgroundColor:'transparent', tension:0.25, pointRadius:0};
     }
-    var datasets = barDatasets.concat([nowChart.costDataset]);
+    var markerDatasets = findingMarkerDatasets(chart, turns);
+    var datasets = barDatasets.concat([nowChart.costDataset]).concat(markerDatasets);
 
     // One label per 5 minutes, on the round minute, so only the edge label
     // changes as the window drifts (decided, grill question 12); every
@@ -1314,7 +1411,8 @@ function drawNowChart(chart, sessions){
           plugins:{
             legend:{position:'bottom', labels:{font:{size:10}, boxWidth:10}},
             tooltip:{callbacks:{afterLabel: afterLabel}}
-          }}});
+          },
+          onClick: nowChartOnClick}});
     } else {
       charts.now.data.labels = labels;
       charts.now.data.datasets = datasets;
@@ -1340,8 +1438,104 @@ function renderNow(snap){
     empty.classList.add('hidden');
     cards.innerHTML = snap.sessions.map(function(s){ return sessionCardHTML(s, false); }).join('');
   }
-  if(currentTab() === 'now') drawNowChart(snap && snap.chart, snap && snap.sessions);
+  if(currentTab() === 'now') drawNowChart(snap && snap.chart, snap && snap.sessions, snap && snap.turns);
   renderNowForecast(snap && snap.forecast);
+  renderNowTicker(snap && snap.turns);
+}
+
+// ---------- Turn ticker and drawer (I3) ----------
+
+// renderNowTicker renders the Now page's turn ticker: one line per turn,
+// newest first (snap.turns is already ordered and capped at 50 by
+// internal/live.buildTurns), with the turn's own finding (if any) appended.
+// Each line is click-target for the I3 drawer, via delegated click handling
+// below rather than an inline handler, so no session id needs escaping into
+// an onclick attribute.
+function renderNowTicker(turns){
+  var el = document.getElementById('now_ticker');
+  if(!el) return;
+  if(!turns || !turns.length){
+    el.innerHTML = '<p class="small" style="margin:8px 10px">No turns in the last 30 minutes.</p>';
+    return;
+  }
+  el.innerHTML = turns.map(function(te){
+    var line = localHMS(te.at) + ' ' + esc(te.agent||'') + ', turn ' + te.turn
+      + ', ' + tok(te.fresh) + ' new';
+    if(te.cache_read) line += ', ' + tok(te.cache_read) + ' cached';
+    if(te.finding) line += ' &middot; <span class="finding">' + esc(te.finding.Kind) + '</span>: ' + esc(te.finding.Cause);
+    return '<div class="ticker-line" data-session="' + esc(te.session_id) + '" data-turn="' + te.turn + '">' + line + '</div>';
+  }).join('');
+}
+
+document.addEventListener('click', function(e){
+  var line = e.target && e.target.closest && e.target.closest('.ticker-line');
+  if(line) openTurnDrawer(line.getAttribute('data-session'), parseInt(line.getAttribute('data-turn'), 10));
+});
+
+// openTurnDrawer is the I3 drawer's single entry point, fed by one bound
+// function (bmTurn) per the spec: a marker click (nowChartOnClick) and a
+// ticker line click (the delegated handler above) both call this the same
+// way. renderTurnDrawer is the one template branch that turns bmTurn's
+// TurnDetail into the drawer's HTML.
+function openTurnDrawer(sessionID, turn){
+  var overlay = document.getElementById('turn_drawer_overlay');
+  var body = document.getElementById('turn_drawer_body');
+  if(!overlay || !body || !sessionID || !turn) return;
+  overlay.classList.remove('hidden');
+  if(typeof window.bmTurn !== 'function'){
+    body.innerHTML = '<p class="small">Turn detail is only available in the BurnMon app window, not in a saved report.</p>';
+    return;
+  }
+  body.innerHTML = '<p class="small">Loading turn detail&hellip;</p>';
+  Promise.resolve(window.bmTurn(sessionID, turn)).then(renderTurnDrawer).catch(function(e){
+    body.innerHTML = '<p class="small">Could not load turn detail: ' + esc(e && e.message ? e.message : String(e)) + '</p>';
+  });
+}
+
+function closeTurnDrawer(){
+  var overlay = document.getElementById('turn_drawer_overlay');
+  if(overlay) overlay.classList.add('hidden');
+}
+
+// renderTurnDrawer is bmTurn's one template branch: model, token classes,
+// tool calls that turn (from S2's tool_calls), files read where the trail
+// has them, gap since the previous turn, every finding's cause and
+// confidence, and the session id (I3).
+function renderTurnDrawer(d){
+  var body = document.getElementById('turn_drawer_body');
+  if(!body || !d) return;
+
+  var gapText = d.has_gap ? (Math.round(d.gap_seconds) + 's since the previous turn') : 'first turn seen for this session';
+
+  var findingsHtml = (d.findings && d.findings.length)
+    ? d.findings.map(function(f){
+        return '<div class="small">' + esc(f.Kind) + ', confidence ' + Math.round((f.Confidence||0)*100)
+          + '%: ' + esc(f.Cause) + '</div>';
+      }).join('')
+    : '<div class="small">No findings on this turn.</div>';
+
+  var toolRows = (d.tool_calls || []).map(function(c){
+    return '<tr><td>' + esc(c.tool) + '</td><td>' + esc(c.path||'') + '</td>'
+      + '<td>' + tok(c.input_bytes) + '</td><td>' + (c.result_bytes!=null ? tok(c.result_bytes) : '') + '</td></tr>';
+  }).join('');
+  var toolCallsHtml = toolRows
+    ? '<table><thead><tr><th class="nosort">Tool</th><th class="nosort">Path</th><th>Input bytes</th><th>Result bytes</th></tr></thead><tbody>' + toolRows + '</tbody></table>'
+    : '<div class="small">No tool calls recorded for this turn.</div>';
+
+  var filesHtml = (d.files && d.files.length)
+    ? '<ul class="tight" style="margin:0">' + d.files.map(function(p){ return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>'
+    : '<div class="small">No files recorded for this turn.</div>';
+
+  body.innerHTML =
+    '<h3>Turn ' + n(d.turn) + '</h3>'
+    + '<div class="small">Session ' + esc(d.session_id) + ' &middot; ' + esc(d.model||'model unknown') + '</div>'
+    + '<div class="small">' + localHMS(d.at) + ' &middot; ' + esc(gapText) + '</div>'
+    + '<h4>Token classes</h4>'
+    + '<div class="small">fresh ' + tok(d.fresh) + ', cache write ' + tok(d.cache_write)
+      + ', cache read ' + tok(d.cache_read) + ', output ' + tok(d.output) + '</div>'
+    + '<h4>Findings</h4>' + findingsHtml
+    + '<h4>Tool calls this turn</h4>' + toolCallsHtml
+    + '<h4>Files read</h4>' + filesHtml;
 }
 
 function pollNow(){

@@ -155,6 +155,21 @@ type pendingToolCall struct {
 	at          string
 	inputBytes  int64
 	resultBytes *int64
+	path        string
+}
+
+// filePathFromInput extracts I3's best-effort file path from a Claude
+// tool_use block's own input: Read/Edit/Write carry "file_path",
+// NotebookEdit carries "notebook_path". "" when the tool named no file (a
+// shell/exec call, a search) or input carried neither key.
+func filePathFromInput(input map[string]any) string {
+	if p, ok := input["file_path"].(string); ok && p != "" {
+		return p
+	}
+	if p, ok := input["notebook_path"].(string); ok && p != "" {
+		return p
+	}
+	return ""
 }
 
 // contentByteLen approximates a tool_result block's byte size: content is
@@ -304,7 +319,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 					if b, err := json.Marshal(input); err == nil {
 						inputBytes = int64(len(b))
 					}
-					pendingCalls[id] = &pendingToolCall{turn: tk, tool: skillTag(name, input), at: lineTS, inputBytes: inputBytes}
+					pendingCalls[id] = &pendingToolCall{turn: tk, tool: skillTag(name, input), at: lineTS, inputBytes: inputBytes, path: filePathFromInput(input)}
 					toolCallOrder = append(toolCallOrder, id)
 				}
 			}
@@ -416,7 +431,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 		toolCalls = append(toolCalls, schema.ToolCall{
 			Vendor: "anthropic", Agent: agentFor(surface), SessionID: sessionID,
 			CallID: id, Turn: pc.turn, Tool: pc.tool, At: at,
-			InputBytes: pc.inputBytes, ResultBytes: pc.resultBytes,
+			InputBytes: pc.inputBytes, ResultBytes: pc.resultBytes, Path: pc.path,
 		})
 	}
 
