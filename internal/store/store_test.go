@@ -50,6 +50,61 @@ func TestUpsertEventsLargestOutputWins(t *testing.T) {
 	}
 }
 
+// TestUpsertEventsScopedPerSession guards against the Cowork mirror-session
+// bug: two different sessions can share the same request_id (e.g. a
+// transcript mirrored across session-id files), and each session's event
+// must survive independently rather than being deduped against the other.
+func TestUpsertEventsScopedPerSession(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := schema.Event{
+		Vendor: "anthropic", Agent: "claude-code", Surface: "cli",
+		SessionID: "session-a", RequestID: "req_shared", Model: "claude-x",
+		At: time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
+		Input: 100, Output: 100,
+	}
+	b := schema.Event{
+		Vendor: "anthropic", Agent: "claude-code", Surface: "cli",
+		SessionID: "session-b", RequestID: "req_shared", Model: "claude-x",
+		At: time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
+		Input: 100, Output: 50,
+	}
+	if err := st.UpsertEvents([]schema.Event{a, b}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := st.AllEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d events, want 2 (same request_id, different session_id must not dedup)", len(got))
+	}
+	bySession := map[string]schema.Event{}
+	for _, e := range got {
+		bySession[e.SessionID] = e
+	}
+	ga, ok := bySession["session-a"]
+	if !ok {
+		t.Fatal("missing event for session-a")
+	}
+	if ga.Output != 100 {
+		t.Fatalf("session-a Output = %d, want 100 (not overwritten by session-b)", ga.Output)
+	}
+	gb, ok := bySession["session-b"]
+	if !ok {
+		t.Fatal("missing event for session-b")
+	}
+	if gb.Output != 50 {
+		t.Fatalf("session-b Output = %d, want 50 (not overwritten by session-a)", gb.Output)
+	}
+}
+
 func TestCursorRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	st, err := Open(filepath.Join(dir, "burnmon.db"))

@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS events (
 	window_used REAL,
 	window_reset TEXT,
 	tools       TEXT NOT NULL DEFAULT '{}',
-	PRIMARY KEY (vendor, request_id)
+	PRIMARY KEY (vendor, session_id, request_id)
 );
 CREATE INDEX IF NOT EXISTS idx_events_session ON events (vendor, session_id);
 CREATE TABLE IF NOT EXISTS cursors (
@@ -83,10 +83,10 @@ func Open(path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-// UpsertEvents inserts events, keeping, per (vendor, request_id), the one
-// with the largest Output ("largest output wins": a streamed API call is
-// written as several lines sharing a request id with only output_tokens
-// growing).
+// UpsertEvents inserts events, keeping, per (vendor, session_id, request_id),
+// the one with the largest Output ("largest output wins": a streamed API
+// call is written as several lines sharing a request id with only
+// output_tokens growing, all within one session's ingest).
 func (s *Store) UpsertEvents(events []schema.Event) error {
 	if len(events) == 0 {
 		return nil
@@ -103,7 +103,7 @@ INSERT INTO events (
 	project, title, input, cache_write, cache_read, output, reasoning,
 	vendor_cost, window_used, window_reset, tools
 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-ON CONFLICT (vendor, request_id) DO UPDATE SET
+ON CONFLICT (vendor, session_id, request_id) DO UPDATE SET
 	agent = excluded.agent, surface = excluded.surface,
 	session_id = excluded.session_id, parent_id = excluded.parent_id,
 	at = excluded.at, model = excluded.model, project = excluded.project,
