@@ -58,7 +58,7 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 	var stamps []string
 	for _, e := range events {
 		if !e.At.IsZero() {
-			stamps = append(stamps, e.At.Format("2006-01-02T15:04:05Z"))
+			stamps = append(stamps, e.At.Format("2006-01-02T15:04:05.000Z"))
 		}
 	}
 	if len(stamps) == 0 {
@@ -122,7 +122,7 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		pm.Cost += c
 		pm.CostSub += cs
 
-		ts := e.At.Format("2006-01-02T15:04:05Z")
+		ts := e.At.Format("2006-01-02T15:04:05.000Z")
 		if e.At.IsZero() {
 			ts = stamps[0]
 		}
