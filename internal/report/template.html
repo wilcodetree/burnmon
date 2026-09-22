@@ -145,8 +145,12 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 #t_sessions th:nth-child(6),#t_sessions td:nth-child(6){width:70px}
 #t_sessions th:nth-child(7),#t_sessions td:nth-child(7){width:76px}
 #t_sessions th:nth-child(8),#t_sessions td:nth-child(8){width:86px}
+#t_sessions th:nth-child(9),#t_sessions td:nth-child(9){width:90px}
+#t_sessions th:nth-child(10),#t_sessions td:nth-child(10){width:190px}
 #t_sessions td:nth-child(5) .pill{margin-left:5px}
 #t_sessions td:nth-child(4) .pill{margin-right:3px}
+#t_sessions td.col-findings{cursor:pointer}
+#t_sessions tr.finding-row td{white-space:normal}
 /* Limits table in About's How it works section: everything right-aligned to match the headers */
 #t_limits td,#t_limits th{text-align:right;vertical-align:top}
 #t_limits td:first-child{white-space:nowrap}
@@ -299,6 +303,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
     <div><label>Month</label><select id="f_month"><option value="">All</option></select></div>
     <div><label>Search title</label><input type="text" id="f_q" placeholder="e.g. hub, sprint, invoice" style="width:200px"></div>
     <div><label>Only marathon sessions</label><select id="f_long"><option value="">No</option><option value="1">Yes</option></select></div>
+    <div id="f_owner_wrap" class="hidden"><label>Owner</label><select id="f_owner"><option value="">All</option></select></div>
     <div style="flex:1"></div>
     <div class="small" id="s_count"></div>
   </div>
@@ -306,6 +311,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
     <th data-s="start">Started</th><th data-s="title">What it was</th><th data-s="surface">Surface</th>
     <th class="nosort">Models</th><th data-s="calls">Calls</th><th data-s="tokens">Tokens</th>
     <th data-s="cost_per_call">Per call</th><th data-s="cost">Cost</th>
+    <th data-s="owner" class="col-owner hidden">Owner</th><th class="nosort">Findings</th>
   </tr></thead><tbody></tbody><tfoot></tfoot></table></div>
 </section>
 
@@ -467,7 +473,7 @@ catch(e){ document.querySelector('.wrap').innerHTML =
   '<div class="note warn" style="margin-top:20px"><b>No usage data embedded.</b> Run the extract script and republish.</div>'; return; }
 
 var LS = 'claude-cost-user-v1';
-var UI = {cur:'eur', fx:0.92, basis:'sub', sort:'start', dir:-1, theme:'dark', f:{surface:'',month:'',q:'',long:''}};
+var UI = {cur:'eur', fx:0.92, basis:'sub', sort:'start', dir:-1, theme:'dark', f:{surface:'',month:'',q:'',long:'',owner:''}};
 try { var st = JSON.parse(localStorage.getItem(LS)||'null');
   if(st){ UI.cur = st.cur||UI.cur; UI.fx = st.fx>0?st.fx:UI.fx; UI.basis = st.basis||UI.basis;
     UI.theme = st.theme||UI.theme; } } catch(e){}
@@ -925,6 +931,7 @@ function renderSessions(){
     if(f.surface && s.surface !== f.surface) return false;
     if(f.month && !(s.start.slice(0,7) <= f.month && f.month <= s.end.slice(0,7))) return false;
     if(f.long && !s.long) return false;
+    if(f.owner && s.owner !== f.owner) return false;
     if(f.q && s.title.toLowerCase().indexOf(f.q.toLowerCase()) === -1) return false;
     return true;
   });
@@ -957,14 +964,100 @@ function renderSessions(){
       + '<td>'+n(s.calls)+(s.long?' <span class="pill sun">'+t('long_pill')+'</span>':'')+'</td>'
       + '<td>'+tok(s.tokens)+'</td>'
       + '<td>'+money(pickCall(s),3)+'</td>'
-      + '<td><b>'+money(pick(s),2)+'</b></td>';
+      + '<td><b>'+money(pick(s),2)+'</b></td>'
+      + '<td class="col-owner hidden">'+esc(s.owner||'')+'</td>'
+      + '<td class="col-findings" data-session="'+esc(s.session_id)+'"><span class="small">&hellip;</span></td>';
     tb.appendChild(tr);
+
+    var dr = document.createElement('tr');
+    dr.className = 'finding-row hidden';
+    dr.setAttribute('data-session', s.session_id);
+    dr.innerHTML = '<td colspan="10" class="small">Loading findings&hellip;</td>';
+    tb.appendChild(dr);
   });
-  if(!ss.length) tb.innerHTML = '<tr><td colspan="8" class="small">'+t('no_sessions_match')+'</td></tr>';
+  if(!ss.length) tb.innerHTML = '<tr><td colspan="10" class="small">'+t('no_sessions_match')+'</td></tr>';
   document.querySelector('#t_sessions tfoot').innerHTML = ss.length
-    ? '<tr><td>'+t('sessions_count',{n:ss.length})+'</td><td></td><td></td><td></td><td>'+n(tcalls)+'</td><td>'+tok(tt)+'</td><td>'+(tcalls?money(tc/tcalls,3):'—')+'</td><td>'+money(tc)+'</td></tr>' : '';
+    ? '<tr><td>'+t('sessions_count',{n:ss.length})+'</td><td></td><td></td><td></td><td>'+n(tcalls)+'</td><td>'+tok(tt)+'</td><td>'+(tcalls?money(tc/tcalls,3):'—')+'</td><td>'+money(tc)+'</td><td class="col-owner hidden"></td><td></td></tr>' : '';
   document.getElementById('s_count').textContent = t('sessions_shown', {shown: ss.length, total: (D.sessions||[]).length});
+  applyOwnerColumnVisibility();
+  ss.forEach(function(s){
+    sessionInsight(s.session_id).then(function(findings){
+      var cell = tb.querySelector('.col-findings[data-session="' + cssAttrEscape(s.session_id) + '"]');
+      if(cell) cell.innerHTML = findingsSummary(findings);
+    });
+  });
 }
+
+// ---------- Sessions tab findings (I3): bmSessionInsight(sessionID) is
+// called on demand per session, never polled, and cached here in page
+// memory for the tab's lifetime so re-expanding a row or re-sorting the
+// table never re-fetches the same session twice.
+var SESSION_INSIGHT_CACHE = {};
+function sessionInsight(sessionID){
+  if(!SESSION_INSIGHT_CACHE[sessionID]){
+    SESSION_INSIGHT_CACHE[sessionID] = (typeof window.bmSessionInsight === 'function')
+      ? Promise.resolve(window.bmSessionInsight(sessionID)).catch(function(){ return []; })
+      : Promise.resolve([]);
+  }
+  return SESSION_INSIGHT_CACHE[sessionID];
+}
+
+// cssAttrEscape lets a session id built from arbitrary vendor ids be used
+// safely inside a CSS attribute-value selector.
+function cssAttrEscape(s){
+  return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
+}
+
+function findingsSummary(findings){
+  if(!findings || !findings.length) return '<span class="small">none</span>';
+  var counts = {};
+  findings.forEach(function(f){ counts[f.Kind] = (counts[f.Kind]||0) + 1; });
+  return Object.keys(counts).sort().map(function(k){ return counts[k] + ' ' + esc(k); }).join(', ');
+}
+
+// findingsDetailHTML reuses the Now page's .ticker-line class (I3) so the
+// document-level click delegation that already opens the "explain this
+// spike" drawer through bmTurn picks these lines up unchanged.
+// findingEvidenceText renders a Finding's Evidence map (turn, kind, cause and
+// confidence are their own columns; evidence is the numeric detail behind
+// them, e.g. cache_write, threshold, drop_ratio) as one sorted "key: value"
+// list, so the expandable row's own line matches the spec's "evidence
+// numbers" without duplicating the drawer's separate rendering.
+function findingEvidenceText(evidence){
+  if(!evidence) return '';
+  return Object.keys(evidence).sort().map(function(k){
+    var v = evidence[k];
+    return k + ': ' + (Math.abs(v) >= 1 ? Math.round(v * 100) / 100 : v);
+  }).join(', ');
+}
+
+function findingsDetailHTML(sessionID, findings){
+  if(!findings || !findings.length) return '<div class="small">No findings for this session.</div>';
+  return findings.map(function(f){
+    var evText = findingEvidenceText(f.Evidence);
+    return '<div class="ticker-line" data-session="' + esc(sessionID) + '" data-turn="' + f.Turn + '">'
+      + 'Turn ' + f.Turn + ' &middot; <span class="finding">' + esc(f.Kind) + '</span>: ' + esc(f.Cause)
+      + ' (confidence ' + Math.round((f.Confidence||0)*100) + '%)'
+      + (evText ? ' &middot; ' + esc(evText) : '') + '</div>';
+  }).join('');
+}
+
+document.addEventListener('click', function(e){
+  var cell = e.target && e.target.closest && e.target.closest('.col-findings');
+  if(!cell) return;
+  var sessionID = cell.getAttribute('data-session');
+  var row = cell.closest('tr');
+  var detail = row && row.nextElementSibling;
+  if(!detail || !detail.classList.contains('finding-row') || detail.getAttribute('data-session') !== sessionID) return;
+  if(!detail.classList.contains('hidden')){
+    detail.classList.add('hidden');
+    return;
+  }
+  detail.classList.remove('hidden');
+  sessionInsight(sessionID).then(function(findings){
+    detail.querySelector('td').innerHTML = findingsDetailHTML(sessionID, findings);
+  });
+});
 
 function bindTitleTip(){
   var tip = document.getElementById('tip');
@@ -1003,12 +1096,25 @@ function bindTitleTip(){
   });
 }
 
+// applyOwnerColumnVisibility shows the Sessions tab's owner column and
+// filter only when owner rules are actually configured (P6: "empty table,
+// one owner, no owner column shown anywhere"), detected the same way the
+// filter itself reads owners: any session carrying a non-empty s.owner.
+function applyOwnerColumnVisibility(){
+  var hasOwner = (D.sessions||[]).some(function(s){ return !!s.owner; });
+  document.querySelectorAll('#t_sessions .col-owner').forEach(function(el){
+    el.classList.toggle('hidden', !hasOwner);
+  });
+  document.getElementById('f_owner_wrap').classList.toggle('hidden', !hasOwner);
+}
+
 function buildFilters(){
-  var surfaces = {}, months = {};
+  var surfaces = {}, months = {}, owners = {};
   // A long-running session should offer every month it touched, not just the
   // one it started in, so the Month filter matches renderSessions' span test.
   (D.sessions||[]).forEach(function(s){
     surfaces[s.surface] = 1;
+    if(s.owner) owners[s.owner] = 1;
     var a = s.start.slice(0,7), b = s.end.slice(0,7) || a;
     var y = +a.slice(0,4), mo = +a.slice(5,7);
     for(var guard=0; guard<120; guard++){
@@ -1024,8 +1130,12 @@ function buildFilters(){
   var fm = document.getElementById('f_month');
   Object.keys(months).sort().reverse().forEach(function(k){
     fm.insertAdjacentHTML('beforeend', '<option value="'+esc(k)+'">'+esc(monthLabel(k))+'</option>'); });
+  var fo = document.getElementById('f_owner');
+  Object.keys(owners).sort().forEach(function(k){
+    fo.insertAdjacentHTML('beforeend', '<option value="'+esc(k)+'">'+esc(k)+'</option>'); });
+  applyOwnerColumnVisibility();
 
-  ['f_surface','f_month','f_long'].forEach(function(id){
+  ['f_surface','f_month','f_long','f_owner'].forEach(function(id){
     document.getElementById(id).addEventListener('change', function(){
       UI.f[id.slice(2)] = this.value; renderSessions(); });
   });

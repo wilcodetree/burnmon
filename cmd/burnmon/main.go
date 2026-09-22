@@ -32,6 +32,7 @@ import (
 	"burnmon/internal/adapter/hermes"
 	"burnmon/internal/dataset"
 	"burnmon/internal/history"
+	"burnmon/internal/insight"
 	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
@@ -346,6 +347,19 @@ func main() {
 		return live.BuildTurnDetail(st, &cfg, sessionID, turn)
 	}); err != nil {
 		log.Println("could not bind bmTurn:", err)
+	}
+
+	// bmSessionInsight (I3, Sessions tab): the findings column and its
+	// expandable row call this on demand, one sessionID at a time, never
+	// polled; the frontend caches the result in page memory so re-expanding
+	// a row costs nothing further.
+	if err := w.Bind("bmSessionInsight", func(sessionID string) ([]insight.Finding, error) {
+		a.mu.Lock()
+		cfg := a.cfg
+		a.mu.Unlock()
+		return live.BuildSessionInsight(st, &cfg, sessionID)
+	}); err != nil {
+		log.Println("could not bind bmSessionInsight:", err)
 	}
 
 	// bmHistory (P2): queried on demand from the History tab's filter

@@ -467,6 +467,27 @@ func BuildTurnDetail(st *store.Store, cfg *pricing.Config, sessionID string, tur
 	return d, nil
 }
 
+// BuildSessionInsight is bmSessionInsight's implementation (I3, Sessions
+// tab): sessionID's every stored event, re-derived into turns and run
+// through insight.Analyze exactly as BuildTurnDetail does for one turn, but
+// returning every finding for the whole session. Computed fresh on every
+// call, per the spec ("not stored"); the frontend is the one that caches it,
+// in page memory for the tab's lifetime.
+func BuildSessionInsight(st *store.Store, cfg *pricing.Config, sessionID string) ([]insight.Finding, error) {
+	events, err := st.EventsForSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	var turns []schema.Event
+	for _, e := range events {
+		if isTurn(e) {
+			turns = append(turns, e)
+		}
+	}
+	sort.SliceStable(turns, func(i, j int) bool { return turns[i].At.Before(turns[j].At) })
+	return insight.Analyze(turns, cfg), nil
+}
+
 func firstNonEmptyProject(events []schema.Event) string {
 	for _, e := range events {
 		if e.Project != "" {

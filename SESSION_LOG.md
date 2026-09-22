@@ -2,6 +2,31 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, 44A: Sessions tab findings (I3)
+
+Added the Sessions tab half of I3 the spec left open: a Findings column (count
+by kind, e.g. "2 re-prefill, 1 expensive-turn") on every session row, an
+expandable detail row below it listing each finding (turn, kind, cause,
+confidence, evidence numbers), and clicking a finding line opens the same
+drawer as the Now page, through the existing `.ticker-line` click delegation
+and `bmTurn`, no new wiring needed there. Findings are computed on request
+through one new bound function, `bmSessionInsight(sessionID)`
+(`internal/live/live.go`'s `BuildSessionInsight`, the same
+events-to-turns-to-`insight.Analyze` shape `BuildTurnDetail` already used for
+one turn, just returning every finding for the session); nothing is stored,
+and the frontend caches each session's result in a page-lifetime JS object
+(`SESSION_INSIGHT_CACHE`) so re-expanding a row or re-sorting the table never
+re-fetches. Measured `BuildSessionInsight` against the longest real session in
+Wilco's own store (`%LOCALAPPDATA%\burnmon\burnmon.db`, 51,727 events total):
+the longest session has 461 turns, and 20 warm calls averaged **39ms**, well
+under the 200ms gate, so no v0.3 caching proposal is needed. Also added the
+owner column and owner filter to the Sessions tab (P6), shown only when at
+least one session carries a non-empty `owner`, mirroring the History tab's
+own `payload.owners`-driven toggle but derived client-side from `D.sessions`
+since the Sessions tab's data is the embedded report snapshot, not a bound
+call. `node --check`, `go test ./... -count=1` and `.\build.ps1` all green;
+`C:\dev\Work` untouched. No open call was hit that needed stopping to ask.
+
 ## 2026-09-23, correction: A3 (VS Code Copilot OTel) is yes, not no
 
 The 43B entry below (committed `876c37e`) answered A3 "no" from a CLI-only test that
