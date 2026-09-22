@@ -50,11 +50,12 @@ running in the background.
   re-read WSL transcripts specifically, default 4h, floor 15m; see "WSL"
   below), `-months` (default 2), `-seat`, `-config`, `-source` (repeatable).
   Same meaning as the CLI flags below.
-- Parsed transcripts are cached in `%LOCALAPPDATA%\claudecost\parsecache.gob`,
-  so only the first start (and the first after an update or a config change)
-  reads every transcript; later starts show the previous dashboard right
-  away and quietly refresh in the background. Delete that file to force a
-  full re-read.
+- Parsed transcripts are stored in `%LOCALAPPDATA%\claudecost\burnmon.db`, a
+  SQLite database that tracks how far each transcript file has been read, so
+  only the first start (and the first after an update or a config change)
+  reads every transcript from the beginning; later starts show the previous
+  dashboard right away, read only the new bytes, and quietly refresh in the
+  background. Delete that file to force a full re-read.
 - Click the gear icon (top right, next to Refresh now) to edit your
   subscription numbers, seat counts and seat prices from inside the window,
   no more hand-editing `claudecost.json`. Saving re-reads everything, since
@@ -81,7 +82,8 @@ report and opens it once, then exits.
     claudecost -no-open         write the report without opening it
     claudecost -json data.json  also write the raw dataset
     claudecost -source DIR      scan DIR instead of the auto-detected folders
-    claudecost -no-cache        skip the parse cache, always re-parse everything
+    claudecost -no-cache        re-read every transcript from the start, ignoring the
+                                 store's cursors
 
 Reports land in a `reports` folder next to the exe if writable, otherwise in
 `%LOCALAPPDATA%\claudecost\reports`. Override with `-out DIR`.

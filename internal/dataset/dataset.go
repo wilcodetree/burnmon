@@ -5,26 +5,22 @@
 package dataset
 
 import (
-	"crypto/sha256"
-	"encoding/gob"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"math"
 	"os"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
+	"burnmon/internal/adapter"
+	"burnmon/internal/adapter/claude"
 	"burnmon/internal/agg"
 	"burnmon/internal/pricing"
 	"burnmon/internal/scan"
+	"burnmon/internal/store"
 )
 
 // CoverageNote explains what burnmon can and cannot see. Unchanged from
@@ -190,141 +186,21 @@ func BuildPayload(cfg *pricing.Config, seat string, cutoff, today time.Time,
 // Cache: mtime/size-aware parsing shared by the CLI and the app window
 // ---------------------------------------------------------------------------
 
-type cacheEntry struct {
-	mtime   time.Time
-	size    int64
-	session *scan.Session // nil means the file parsed to no usable session
-}
-
-// Cache reuses parsed sessions across calls to Collect when a transcript
-// file's mtime and size are unchanged since the last call. The zero value is
-// ready to use.
+// Cache resolves sources, ingests new transcript bytes into the store, and
+// builds the dashboard Payload from what the store now holds. The name is
+// kept from v0.0.1's in-memory/gob cache for minimal call-site churn in
+// cmd/burnmon and cmd/burnmon-cli; what it actually caches now is durable,
+// in Store, not in this struct.
 type Cache struct {
-	entries map[string]cacheEntry
+	Store *store.Store
 
-	// Sources and Files hold the folder and file lists resolved by the most
-	// recent Collect call. Collect's progress callback only carries a
-	// done/total file count, so a caller that wants to report the folder
-	// count too (as the CLI's "Scanning N folder(s)..." line does) reads it
-	// from here inside that same callback.
-	Sources []string
-	Files   []string
-
-	// SlowFiles is the file list found under the slow (WSL) sources on the
-	// most recent pass that actually walked them (a Collect call with
-	// RefreshSlow true). A pass with RefreshSlow false reuses this list
-	// instead of re-walking the WSL sources, and Collect skips the
-	// mtime/size stat for any of these files that already has a cache
-	// entry, since a stat over the WSL 9P file server is exactly the round
-	// trip the slow cadence exists to avoid. In memory only: a restart
-	// always does a full pass before the first render, so nothing here is
-	// worth persisting in the gob.
-	SlowFiles     []string
-	SlowScannedAt time.Time
-
-	// DroppedDuplicates is how many sessions the most recent Collect call
-	// removed as cross-session duplicates: the same conversation recorded
-	// under two session IDs, which a forked or resumed session produces.
+	// Sources, Files, SlowFiles, SlowScannedAt, DroppedDuplicates: same
+	// meaning as v0.0.1, read by cmd/burnmon for its stamp/log lines.
+	Sources           []string
+	Files             []string
+	SlowFiles         []string
+	SlowScannedAt     time.Time
 	DroppedDuplicates int
-}
-
-// ---------------------------------------------------------------------------
-// Disk persistence: parsed sessions survive restarts, keyed by an app
-// version + pricing config fingerprint so a release or recalibration forces
-// a full re-parse instead of serving stale computed costs.
-// ---------------------------------------------------------------------------
-
-// diskEntry and diskCache are the gob-serializable shapes of cacheEntry and
-// Cache.entries. gob only ever sees exported fields, so these are separate
-// types rather than exporting cacheEntry itself. scan.Session and
-// scan.PerModel hold only exported fields, so they round-trip through gob
-// correctly even though CWD and Daily carry a json:"-" tag; gob does not
-// look at json tags at all.
-type diskEntry struct {
-	MTime   time.Time
-	Size    int64
-	Session *scan.Session // nil = file parsed to no usable session
-}
-
-type diskCache struct {
-	Fingerprint string
-	Entries     map[string]diskEntry
-}
-
-// Fingerprint identifies everything that invalidates cached parse results:
-// the app version (parse logic may change between releases) and the pricing
-// config (cached sessions store computed costs). WSLScan, ExtraSources and
-// WSLIntervalHours are zeroed on a copy first: they are scan-location and
-// cadence settings, not pricing, and hashing them in would mean editing an
-// extra_sources entry throws away the entire parse cache for no reason.
-func Fingerprint(appVersion string, cfg *pricing.Config) string {
-	fpCfg := *cfg
-	fpCfg.WSLScan = ""
-	fpCfg.ExtraSources = nil
-	fpCfg.WSLIntervalHours = 0
-	b, _ := json.Marshal(&fpCfg)
-	sum := sha256.Sum256(b)
-	return appVersion + "|" + hex.EncodeToString(sum[:])
-}
-
-// Load reads a previously saved cache from path, keeping it only if its
-// stored fingerprint matches fingerprint. Any problem opening or decoding
-// the file, or a fingerprint mismatch, is silent: c is simply left with an
-// empty cache, and the next Collect re-parses everything, same as a first
-// run. There is nothing sensible to recover from a stale or corrupt cache
-// file.
-func (c *Cache) Load(path, fingerprint string) {
-	f, err := os.Open(path)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	var dc diskCache
-	if err := gob.NewDecoder(f).Decode(&dc); err != nil {
-		return
-	}
-	if dc.Fingerprint != fingerprint {
-		return
-	}
-
-	entries := make(map[string]cacheEntry, len(dc.Entries))
-	for k, v := range dc.Entries {
-		entries[k] = cacheEntry{mtime: v.MTime, size: v.Size, session: v.Session}
-	}
-	c.entries = entries
-}
-
-// Save writes the cache to path, keeping only entries whose file path is in
-// c.Files (the most recent Collect's file list), so transcripts that no
-// longer exist do not accumulate in the file forever. It writes path+".tmp"
-// and renames it over path, so a crash mid-write, or a concurrent reader,
-// never sees a half-written cache file.
-func (c *Cache) Save(path, fingerprint string) error {
-	entries := make(map[string]diskEntry, len(c.Files))
-	for _, f := range c.Files {
-		e, ok := c.entries[f]
-		if !ok {
-			continue
-		}
-		entries[f] = diskEntry{MTime: e.mtime, Size: e.size, Session: e.session}
-	}
-
-	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	if err := gob.NewEncoder(f).Encode(diskCache{Fingerprint: fingerprint, Entries: entries}); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, path)
 }
 
 // dedupSessions removes the same conversation when it was recorded under
@@ -382,6 +258,11 @@ type CollectOpts struct {
 	// walk the slow sources this time, rather than reusing the file list
 	// from the last pass that did.
 	RefreshSlow bool
+
+	// ForceFull re-reads every file from offset 0 even if its stored cursor
+	// says it is fully read, the store-backed equivalent of v0.0.1's
+	// -no-cache.
+	ForceFull bool
 }
 
 // resolveSources implements the source-list half of "Two refresh cadences".
@@ -467,13 +348,98 @@ func filesUnderAny(files, roots []string) []string {
 	return out
 }
 
+// Registered adapters. v0.1 Step 1 wires only Claude; Step 2 adds Codex
+// alongside it without touching this loop's shape.
+var adapters = []adapter.Adapter{claude.Adapter{}}
+
+func adapterFor(name string) adapter.Adapter {
+	for _, a := range adapters {
+		if a.Name() == name {
+			return a
+		}
+	}
+	return nil
+}
+
+// ingest reads every new byte of every file in files through the claude
+// adapter, upserting Events and advancing that file's cursor in c.Store. A
+// file whose stored cursor already covers its current size and mtime is
+// skipped without opening it. trustSlow files skip the stat entirely (an
+// os.Stat over the WSL 9P file server is exactly the round trip the slow
+// cadence exists to avoid), trusting the store's cursor outright the same
+// way v0.0.1 trusted its in-memory cache entry outright for those files.
+func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool, progress func(done, total int)) error {
+	total := len(files)
+	if progress != nil {
+		progress(0, total)
+	}
+	a := adapterFor("claude")
+	for i, f := range files {
+		offset, mtime, size, ok, err := c.Store.Cursor(f)
+		if err != nil {
+			return fmt.Errorf("dataset: cursor for %s: %w", f, err)
+		}
+		if forceFull {
+			ok = false
+		}
+		if ok && trustSlow[f] {
+			if progress != nil {
+				progress(i+1, total)
+			}
+			continue
+		}
+		fi, statErr := os.Stat(f)
+		if statErr != nil {
+			if progress != nil {
+				progress(i+1, total)
+			}
+			continue // listed a moment ago, gone now; same as v0.0.1's parse-miss-and-drop
+		}
+		if ok && !forceFull && mtime.Equal(fi.ModTime()) && size == fi.Size() && offset == fi.Size() {
+			if progress != nil {
+				progress(i+1, total)
+			}
+			continue // fully read already, nothing new
+		}
+		startOffset := offset
+		if !ok || forceFull || (!mtime.Equal(fi.ModTime()) && fi.Size() < size) || offset > fi.Size() {
+			// File shrank or its mtime moved backward relative to what the
+			// cursor recorded: it was rewritten, not appended to. Or the
+			// stored offset is already past the real file size (a cursor
+			// corrupted by the pre-fix trailing-partial-line bug). Either
+			// way, re-read from the start rather than trust a now-meaningless
+			// offset.
+			startOffset = 0
+		}
+		events, newOffset, err := a.Parse(f, startOffset)
+		if err != nil {
+			if progress != nil {
+				progress(i+1, total)
+			}
+			continue
+		}
+		if len(events) > 0 {
+			if err := c.Store.UpsertEvents(events); err != nil {
+				return fmt.Errorf("dataset: upsert events for %s: %w", f, err)
+			}
+		}
+		if err := c.Store.SetCursor(f, newOffset, fi.ModTime(), fi.Size()); err != nil {
+			return fmt.Errorf("dataset: set cursor for %s: %w", f, err)
+		}
+		if progress != nil {
+			progress(i+1, total)
+		}
+	}
+	return nil
+}
+
 // Collect resolves sources (auto-detecting when opts.Sources is empty, else
 // using opts.Sources/opts.SlowSources as given), lists transcript files,
-// parses any that are new or changed since the last call on this Cache
-// (reusing the cached session otherwise), aggregates the result and returns
-// the dashboard payload for opts.Seat and opts.MonthsN.
+// ingests any bytes that are new or changed since the last call on this
+// Cache's store, rebuilds sessions from the store's Events, aggregates the
+// result and returns the dashboard payload for opts.Seat and opts.MonthsN.
 //
-// progress, if non-nil, is called once with (0, total) before parsing starts
+// progress, if non-nil, is called once with (0, total) before ingest starts
 // and again after every file with (doneSoFar, total).
 func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(done, total int)) (Payload, error) {
 	if err := validateSeat(cfg, opts.Seat); err != nil {
@@ -499,25 +465,10 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 		files = append(files, c.SlowFiles...)
 	}
 	c.Files = files
-	total := len(files)
-	if progress != nil {
-		progress(0, total)
-	}
-	if total == 0 {
+	if len(files) == 0 {
 		return Payload{}, ErrNoFiles
 	}
 
-	if c.entries == nil {
-		c.entries = map[string]cacheEntry{}
-	}
-
-	// When this pass is not walking the slow tier, a slow file already in
-	// the cache is trusted outright rather than stat'ed: an os.Stat over the
-	// WSL 9P file server is exactly the round trip the slow cadence exists
-	// to avoid. A slow file with no cache entry yet (first time it was ever
-	// seen, or the cache was reset) falls through to the normal stat-and-
-	// parse path below, so a first pass with RefreshSlow false still
-	// produces correct numbers rather than a hole.
 	var trustSlow map[string]bool
 	if !opts.RefreshSlow && len(c.SlowFiles) > 0 {
 		trustSlow = make(map[string]bool, len(c.SlowFiles))
@@ -525,113 +476,21 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 			trustSlow[f] = true
 		}
 	}
-
-	// Sequential pass: stat every file and split into cache hits (reuse the
-	// session already held) and misses that need parsing. A miss whose stat
-	// itself failed (listed a moment ago, gone now) is parsed but never
-	// cached, same as before.
-	type miss struct {
-		index int
-		path  string
-		mtime time.Time
-		size  int64
-		stat  bool
+	if err := c.ingest(files, trustSlow, opts.ForceFull, progress); err != nil {
+		return Payload{}, err
 	}
-	results := make([]*scan.Session, len(files))
-	var misses []miss
-	hits := 0
-	for i, f := range files {
-		if trustSlow[f] {
-			if e, ok := c.entries[f]; ok {
-				results[i] = e.session
-				hits++
-				continue
-			}
-		}
-		fi, statErr := os.Stat(f)
-		if statErr == nil {
-			if e, ok := c.entries[f]; ok && e.mtime.Equal(fi.ModTime()) && e.size == fi.Size() {
-				results[i] = e.session
-				hits++
-				continue
-			}
-			misses = append(misses, miss{index: i, path: f, mtime: fi.ModTime(), size: fi.Size(), stat: true})
-			continue
-		}
-		misses = append(misses, miss{index: i, path: f})
+	// A transcript that no longer exists on disk (deleted, renamed, moved)
+	// must not keep contributing its session to every future report; v0.0.1's
+	// gob cache pruned the same way on every save.
+	if err := c.Store.DeleteEventsForOtherPaths(files); err != nil {
+		return Payload{}, err
 	}
 
-	// Cache hits are reported in one batch up front (they count as instantly
-	// done); the workers below report the rest, one file at a time. progress
-	// is not documented as concurrency-safe, so calls to it are serialized.
-	var done atomic.Int64
-	done.Store(int64(hits))
-	var progressMu sync.Mutex
-	report := func() {
-		if progress == nil {
-			return
-		}
-		progressMu.Lock()
-		progress(int(done.Load()), total)
-		progressMu.Unlock()
+	events, err := c.Store.AllEvents()
+	if err != nil {
+		return Payload{}, err
 	}
-	report()
-
-	workers := min(runtime.NumCPU(), 8)
-	if workers > len(misses) {
-		workers = len(misses)
-	}
-	if workers < 1 {
-		workers = 1
-	}
-	if len(misses) > 0 {
-		jobs := make(chan miss)
-		var wg sync.WaitGroup
-		for w := 0; w < workers; w++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for m := range jobs {
-					// results is pre-sized and each index is written by
-					// exactly one goroutine, so no two workers ever touch
-					// the same slot.
-					results[m.index] = scan.ParseSession(m.path, cfg)
-					done.Add(1)
-					report()
-				}
-			}()
-		}
-		go func() {
-			for _, m := range misses {
-				jobs <- m
-			}
-			close(jobs)
-		}()
-		wg.Wait()
-	}
-
-	// Insert the newly parsed entries back into c.entries: single goroutine,
-	// after the pool has fully drained, so the entries map itself is never
-	// touched concurrently.
-	for _, m := range misses {
-		if !m.stat {
-			continue
-		}
-		c.entries[m.path] = cacheEntry{mtime: m.mtime, size: m.size, session: results[m.index]}
-	}
-
-	var sessions []*scan.Session
-	for _, sess := range results {
-		if sess != nil {
-			sessions = append(sessions, sess)
-		}
-	}
-
-	// Cross-session dedup: a forked or resumed session's child transcript
-	// replays the parent's records, so both parse to identical turn sets
-	// under two different session IDs. dataset owns this pass, not scan,
-	// because scan parses one file at a time and has no business knowing
-	// about the others.
+	sessions := SessionsFromEvents(events, cfg)
 	sessions, c.DroppedDuplicates = dedupSessions(sessions)
 	log.Printf("dropped %d duplicate session(s)", c.DroppedDuplicates)
 
@@ -641,6 +500,5 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 	if len(kept) == 0 {
 		return Payload{}, ErrNoSessions
 	}
-
 	return BuildPayload(cfg, opts.Seat, cutoff, today, months, weeks, days, kept), nil
 }
