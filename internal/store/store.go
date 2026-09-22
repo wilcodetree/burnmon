@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,61 +17,20 @@ import (
 	_ "modernc.org/sqlite"
 
 	"burnmon/internal/schema"
+	"burnmon/internal/store/migrations"
 )
 
 type Store struct {
 	db *sql.DB
 }
 
-// SchemaVersion is the current events/cursors schema. Open bumps a
-// mismatched database back to it by dropping and recreating events and
-// cursors (never meta): Step 1's events are cheaply re-derivable from the
-// transcript files on disk, so a rebuild-from-scratch recovery is
-// acceptable and simpler than a real migration.
-const SchemaVersion = "1"
-
-const schemaVersionKey = "schema_version"
-
-const schemaDDL = `
-CREATE TABLE IF NOT EXISTS events (
-	vendor      TEXT NOT NULL,
-	agent       TEXT NOT NULL,
-	surface     TEXT NOT NULL,
-	session_id  TEXT NOT NULL,
-	request_id  TEXT NOT NULL,
-	parent_id   TEXT NOT NULL DEFAULT '',
-	at          TEXT NOT NULL,
-	model       TEXT NOT NULL,
-	project     TEXT NOT NULL DEFAULT '',
-	title       TEXT NOT NULL DEFAULT '',
-	input       INTEGER NOT NULL,
-	cache_write INTEGER,
-	cache_read  INTEGER,
-	output      INTEGER NOT NULL,
-	reasoning   INTEGER,
-	vendor_cost REAL,
-	window_used REAL,
-	window_reset TEXT,
-	tools       TEXT NOT NULL DEFAULT '{}',
-	PRIMARY KEY (vendor, session_id, request_id)
-);
-CREATE INDEX IF NOT EXISTS idx_events_session ON events (vendor, session_id);
-CREATE INDEX IF NOT EXISTS idx_events_at ON events (at);
-CREATE TABLE IF NOT EXISTS cursors (
-	path   TEXT PRIMARY KEY,
-	offset INTEGER NOT NULL,
-	mtime  TEXT NOT NULL,
-	size   INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS meta (
-	key   TEXT PRIMARY KEY,
-	value TEXT NOT NULL
-);
-`
+const schemaVersionDDL = `CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);`
 
 // Open creates path's parent folder if needed, opens (creating if absent)
-// the SQLite file at path and applies the schema. Safe to call every run:
-// every DDL statement is idempotent.
+// the SQLite file at path, and runs every pending migration (migrations.All)
+// inside one transaction, logging the from/to version when it moved. Safe to
+// call every run: every migration is additive and idempotent against a
+// database already at or past its version.
 func Open(path string) (*Store, error) {
 	if dir := filepath.Dir(path); dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -85,42 +45,67 @@ func Open(path string) (*Store, error) {
 	// anyway, and burnmon's own callers (CLI: one-shot; app: one rebuild at
 	// a time, guarded by app.building) never need concurrent writers.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schemaDDL); err != nil {
+	from, to, err := runMigrations(db)
+	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("store: migrate %s: %w", path, err)
 	}
-	s := &Store{db: db}
-	if err := s.ensureSchemaVersion(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("store: schema version %s: %w", path, err)
+	if from != to {
+		log.Printf("store: migrated %s from version %d to %d", path, from, to)
 	}
-	return s, nil
+	return &Store{db: db}, nil
 }
 
-// ensureSchemaVersion writes SchemaVersion into meta when absent (a fresh
-// database), or, on a mismatch (an older code version's database), drops
-// and recreates events and cursors so they get rebuilt from the transcript
-// files on the next ingest, then records the current version.
-func (s *Store) ensureSchemaVersion() error {
-	v, ok, err := s.Meta(schemaVersionKey)
+// runMigrations ensures the schema_version table exists, reads the store's
+// current version (0 for a database that predates this table, including
+// every real v0.1 store on disk), and runs every migration whose Version is
+// greater than that, in order, inside one transaction, recording the head
+// version on success.
+func runMigrations(db *sql.DB) (from, to int, err error) {
+	if _, err = db.Exec(schemaVersionDDL); err != nil {
+		return 0, 0, fmt.Errorf("create schema_version: %w", err)
+	}
+	var current int
+	err = db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&current)
+	if err == sql.ErrNoRows {
+		current, err = 0, nil
+	}
 	if err != nil {
-		return err
+		return 0, 0, fmt.Errorf("read schema_version: %w", err)
 	}
-	if ok && v == SchemaVersion {
-		return nil
-	}
-	if ok && v != SchemaVersion {
-		if _, err := s.db.Exec(`DROP TABLE IF EXISTS events`); err != nil {
-			return fmt.Errorf("drop events: %w", err)
-		}
-		if _, err := s.db.Exec(`DROP TABLE IF EXISTS cursors`); err != nil {
-			return fmt.Errorf("drop cursors: %w", err)
-		}
-		if _, err := s.db.Exec(schemaDDL); err != nil {
-			return fmt.Errorf("recreate: %w", err)
+	from = current
+
+	var pending []migrations.Migration
+	for _, m := range migrations.All {
+		if m.Version > current {
+			pending = append(pending, m)
 		}
 	}
-	return s.SetMeta(schemaVersionKey, SchemaVersion)
+	if len(pending) == 0 {
+		return from, from, nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return from, from, err
+	}
+	defer tx.Rollback()
+	for _, m := range pending {
+		if err = m.Up(tx); err != nil {
+			return from, from, fmt.Errorf("migration %d (%s): %w", m.Version, m.Name, err)
+		}
+	}
+	to = pending[len(pending)-1].Version
+	if _, err = tx.Exec(`DELETE FROM schema_version`); err != nil {
+		return from, from, err
+	}
+	if _, err = tx.Exec(`INSERT INTO schema_version (version) VALUES (?)`, to); err != nil {
+		return from, from, err
+	}
+	if err = tx.Commit(); err != nil {
+		return from, from, err
+	}
+	return from, to, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -143,8 +128,8 @@ func (s *Store) UpsertEvents(events []schema.Event) error {
 INSERT INTO events (
 	vendor, agent, surface, session_id, request_id, parent_id, at, model,
 	project, title, input, cache_write, cache_read, output, reasoning,
-	vendor_cost, window_used, window_reset, tools
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	vendor_cost, window_used, window_reset, tools, owner
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT (vendor, session_id, request_id) DO UPDATE SET
 	agent = excluded.agent, surface = excluded.surface,
 	session_id = excluded.session_id, parent_id = excluded.parent_id,
@@ -153,7 +138,8 @@ ON CONFLICT (vendor, session_id, request_id) DO UPDATE SET
 	cache_write = excluded.cache_write, cache_read = excluded.cache_read,
 	output = excluded.output, reasoning = excluded.reasoning,
 	vendor_cost = excluded.vendor_cost, window_used = excluded.window_used,
-	window_reset = excluded.window_reset, tools = excluded.tools
+	window_reset = excluded.window_reset, tools = excluded.tools,
+	owner = excluded.owner
 WHERE excluded.output > events.output
 `)
 	if err != nil {
@@ -175,7 +161,7 @@ WHERE excluded.output > events.output
 			e.At.UTC().Format(time.RFC3339Nano), e.Model, e.Project, e.Title,
 			e.Input, nullInt(e.CacheWrite), nullInt(e.CacheRead), e.Output,
 			nullInt(e.Reasoning), nullFloat(e.VendorCost), nullFloat(e.WindowUsed),
-			windowReset, string(toolsJSON),
+			windowReset, string(toolsJSON), e.Owner,
 		)
 		if err != nil {
 			return fmt.Errorf("store: upsert %s/%s: %w", e.Vendor, e.RequestID, err)
@@ -200,7 +186,7 @@ func nullFloat(p *float64) any {
 
 const eventColumns = `vendor, agent, surface, session_id, request_id, parent_id, at, model,
 	project, title, input, cache_write, cache_read, output, reasoning,
-	vendor_cost, window_used, window_reset, tools`
+	vendor_cost, window_used, window_reset, tools, owner`
 
 // scanEvents reads every row of rows (already SELECTed with eventColumns'
 // exact column list and order) into Events. Shared by AllEvents and
@@ -219,7 +205,7 @@ func scanEvents(rows *sql.Rows) ([]schema.Event, error) {
 		if err := rows.Scan(&e.Vendor, &e.Agent, &e.Surface, &e.SessionID, &e.RequestID,
 			&e.ParentID, &atStr, &e.Model, &e.Project, &e.Title, &e.Input,
 			&cacheWrite, &cacheRead, &e.Output, &reasoning, &vendorCost, &windowUsed,
-			&windowReset, &toolsJSON); err != nil {
+			&windowReset, &toolsJSON, &e.Owner); err != nil {
 			return nil, err
 		}
 		var err error
@@ -466,6 +452,59 @@ func (s *Store) DeleteEventsForOtherPaths(keepPaths []string) error {
 func sessionIDFromPath(path string) string {
 	base := filepath.Base(path)
 	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+// ReownEvents recomputes every event's owner via ownerFor(project) (P6's
+// light client map, re-run after an owner rule change) and updates every
+// row whose owner actually changes, in one transaction. Returns the number
+// of rows updated. Used by `burnmon-cli reown`.
+func (s *Store) ReownEvents(ownerFor func(project string) string) (int, error) {
+	rows, err := s.db.Query(`SELECT vendor, session_id, request_id, project, owner FROM events`)
+	if err != nil {
+		return 0, fmt.Errorf("store: list events for reown: %w", err)
+	}
+	type update struct {
+		vendor, sessionID, requestID, owner string
+	}
+	var updates []update
+	for rows.Next() {
+		var vendor, sessionID, requestID, project, owner string
+		if err := rows.Scan(&vendor, &sessionID, &requestID, &project, &owner); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("store: scan event for reown: %w", err)
+		}
+		if want := ownerFor(project); want != owner {
+			updates = append(updates, update{vendor, sessionID, requestID, want})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, fmt.Errorf("store: list events for reown: %w", err)
+	}
+	rows.Close()
+	if len(updates) == 0 {
+		return 0, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(`UPDATE events SET owner = ? WHERE vendor = ? AND session_id = ? AND request_id = ?`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+	for _, u := range updates {
+		if _, err := stmt.Exec(u.owner, u.vendor, u.sessionID, u.requestID); err != nil {
+			return 0, fmt.Errorf("store: reown %s/%s: %w", u.vendor, u.requestID, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(updates), nil
 }
 
 func (s *Store) Meta(key string) (string, bool, error) {

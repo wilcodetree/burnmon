@@ -2,6 +2,41 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-22, v0.2 39B: versioned migrations, owner column, reown
+
+Replaced the drop-and-rebuild `ensureSchemaVersion` (`internal\store\store.go` around
+line 101) with a real migration runner: a dedicated `schema_version` table (not the old
+`meta` key, which spec S1 asked to leave behind), migrations listed in
+`internal\store\migrations\migrations.go` as Go functions (chosen over embedded SQL files:
+one small package, no extra build step, and Go's own compiler catches a typo in the DDL
+string at build time rather than at Open), run inside one transaction, from/to version
+logged on a move. Migration 1 records the v0.1 schema (events, cursors, meta) as version 1
+via the same `CREATE TABLE IF NOT EXISTS` statements store.go always ran, so a real v0.1
+store on disk is untouched. Migration 2 adds `events.owner TEXT NOT NULL DEFAULT ''`.
+`TestMigrateRealV01Store` (`internal\store\store_test.go`) copies the actual 33 MB
+`%LOCALAPPDATA%\burnmon\burnmon.db` on this laptop into a temp dir, runs it to head, and
+checks every v0.1 event survives with an identical (vendor, session_id, request_id) key
+and `schema_version` reads 2; it skips rather than fails when no such store exists or it is
+locked. P6's owner column lives on `events`, not a separate `sessions` table: burnmon has
+never materialised sessions (`dataset.SessionsFromEvents` derives them from events on every
+read), so `Owner` is carried per event and reconstructed per session the same way `Title`
+already is (first non-empty value seen), rather than inventing a sessions table this spec
+did not otherwise ask for. `pricing.Config.Owners` is the ordered rule list (`{match,
+owner}`, `*`-suffixed case-insensitive prefix match); `OwnerFor` returns "" when `Owners` is
+empty (P6's default: one owner, no owner column shown anywhere) and "personal" when rules
+exist but none match. Applied at ingest (`dataset.Cache.ingest`, now taking a `*pricing.Config`)
+to each event's `Project` before it reaches the store; `IngestFile` grew the same parameter,
+so its two callers (`cmd\burnmon\main.go`'s live watcher, `cmd\burnmon\main_test.go`) now pass
+a config, the live watcher copying `a.cfg` by value first, the same read-safety idiom
+`rebuild()` already used for the same field. `store.Store.ReownEvents(ownerFor)` recomputes
+every event's owner and updates only the rows that changed, in one transaction; `burnmon-cli
+reown` wires it to `cfg.OwnerFor`. No UI: `scan.Session` gained an `Owner` field
+(`json:"owner,omitempty"`) so the data is there for 44A's Sessions-tab column, but nothing
+renders it yet. `go test ./... -count=1` and `.\build.ps1` both green; `burnmon-cli.exe
+reown` run once by hand against the real store migrated it live from version 0 to 2 and
+reported 0 reowned (no owner rules configured yet), confirming the startup path against a
+real file, not just the test fixture.
+
 ## 2026-09-22, v0.1.2 F9 done, F7-F9 gate closed
 
 Version constants to `0.1.2` in both `cmd\burnmon\main.go` and `cmd\burnmon-cli\main.go`

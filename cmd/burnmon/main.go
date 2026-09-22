@@ -468,7 +468,12 @@ func (a *app) startLiveWatch(nativeClaudeRoots, nativeCodexRoots []string) {
 	}
 	nativeRoots := append(append([]string{}, nativeClaudeRoots...), nativeCodexRoots...)
 	wt, err := watch.New(nativeRoots, nil, func(path string) {
-		if err := a.cache.IngestFile(path); err != nil {
+		// A shallow copy, not a live pointer into a.cfg: same read-safety
+		// idiom rebuild() already uses (see its own comment above), since
+		// this callback runs with no lock held against a concurrent
+		// Settings save.
+		cfg := a.cfg
+		if err := a.cache.IngestFile(&cfg, path); err != nil {
 			log.Println("live watch: ingest", path, ":", err)
 		}
 	})

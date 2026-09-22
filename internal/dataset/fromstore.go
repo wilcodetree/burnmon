@@ -66,10 +66,13 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 	}
 	sort.Strings(stamps)
 
-	title, sessionID, surface := "", events[0].SessionID, events[0].Surface
+	title, owner, sessionID, surface := "", "", events[0].SessionID, events[0].Surface
 	for _, e := range events {
 		if title == "" && e.Title != "" {
 			title = e.Title
+		}
+		if owner == "" && e.Owner != "" {
+			owner = e.Owner
 		}
 	}
 	if title == "" {
@@ -186,6 +189,7 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 	return &scan.Session{
 		SessionID:      sessionID,
 		Title:          title,
+		Owner:          owner,
 		Surface:        surface,
 		CWD:            cwd,
 		Start:          stamps[0],

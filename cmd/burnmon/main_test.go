@@ -69,16 +69,17 @@ func TestLiveWatchCodexTurnWithinTwoSeconds(t *testing.T) {
 
 	cache := &dataset.Cache{Store: st}
 	cache.SeedNativeRoots(nil, []string{dir})
+	ingestCfg := pricing.Defaults()
 	// Ingest the base content first, as the initial backfill would, so the
 	// live turn below is a genuine incremental (from>0) read: exactly the
 	// path that used to lose the session_meta-derived surface (F2).
-	if err := cache.IngestFile(path); err != nil {
+	if err := cache.IngestFile(&ingestCfg, path); err != nil {
 		t.Fatal(err)
 	}
 
 	changed := make(chan string, 4)
 	wt, err := watch.New([]string{dir}, nil, func(p string) {
-		if err := cache.IngestFile(p); err != nil {
+		if err := cache.IngestFile(&ingestCfg, p); err != nil {
 			t.Errorf("IngestFile(%s): %v", p, err)
 			return
 		}

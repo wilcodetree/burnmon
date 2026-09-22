@@ -442,7 +442,7 @@ func adapterFor(name string) adapter.Adapter {
 // os.Stat over the WSL 9P file server is exactly the round trip the slow
 // cadence exists to avoid), trusting the store's cursor outright the same
 // way v0.0.1 trusted its in-memory cache entry outright for those files.
-func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool, progress func(done, total int)) error {
+func (c *Cache) ingest(cfg *pricing.Config, files []string, trustSlow map[string]bool, forceFull bool, progress func(done, total int)) error {
 	total := len(files)
 	if progress != nil {
 		progress(0, total)
@@ -501,6 +501,12 @@ func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool
 			}
 			continue
 		}
+		// P6: the owner split, applied at ingest to each event's project
+		// path so it lands in the store rather than being recomputed on
+		// every read.
+		for j := range events {
+			events[j].Owner = cfg.OwnerFor(events[j].Project)
+		}
 		// F1: commit in batches of 1,000 rather than one transaction for the
 		// whole file, so a first pass over a large existing rollout (a
 		// Codex session can grow past a gigabyte) doesn't hold one huge
@@ -538,8 +544,8 @@ func (c *Cache) ingest(files []string, trustSlow map[string]bool, forceFull bool
 // before either has run. Safe to call concurrently with a Collect on the
 // same Cache: both go through the store's single-connection pool, and
 // RootsByAdapter reads/writes are guarded by rootsMu.
-func (c *Cache) IngestFile(path string) error {
-	return c.ingest([]string{path}, nil, false, nil)
+func (c *Cache) IngestFile(cfg *pricing.Config, path string) error {
+	return c.ingest(cfg, []string{path}, nil, false, nil)
 }
 
 // Collect resolves sources (auto-detecting when opts.Sources is empty, else
@@ -590,7 +596,7 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 			trustSlow[f] = true
 		}
 	}
-	if err := c.ingest(files, trustSlow, opts.ForceFull, progress); err != nil {
+	if err := c.ingest(cfg, files, trustSlow, opts.ForceFull, progress); err != nil {
 		return Payload{}, err
 	}
 	// A transcript that no longer exists on disk (deleted, renamed, moved)

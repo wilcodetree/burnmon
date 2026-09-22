@@ -74,6 +74,16 @@ type Subscription struct {
 	YourSeat string `json:"your_seat,omitempty"`
 }
 
+// OwnerRule is one ordered rule of P6's light client map: the first rule
+// whose Match matches a session's project path wins.
+type OwnerRule struct {
+	// Match is a path prefix, "*"-suffixed (e.g. `C:\dev\Work\*`). Matched
+	// case-insensitively as a plain prefix; the trailing "*" carries no
+	// other glob meaning.
+	Match string `json:"match"`
+	Owner string `json:"owner"`
+}
+
 type Config struct {
 	FXUSDEUR       float64               `json:"fx_usd_eur"`
 	CacheWriteMult float64               `json:"cache_write_mult"`
@@ -81,6 +91,13 @@ type Config struct {
 	FallbackFamily string                `json:"fallback_family"`
 	Prices         map[string]ModelPrice `json:"prices"`
 	Subscription   Subscription          `json:"subscription"`
+
+	// Owners is P6's light client map: ordered rules matched against a
+	// session's project path at ingest. Empty (the default) means one
+	// owner, no owner column shown anywhere: OwnerFor returns "" for every
+	// path. Non-empty means every path gets an owner: the first matching
+	// rule's Owner, or "personal" when no rule matches.
+	Owners []OwnerRule `json:"owners"`
 
 	// OpenAIPrices is the Codex price book, keyed by exact model id (e.g.
 	// "gpt-5.6-terra"), populated with only the ids seen on Wilco's laptop
@@ -142,6 +159,24 @@ func (c *Config) RunningWindowSeconds() float64 {
 func (c *Config) ContextWindow(model string) (int64, bool) {
 	w, ok := c.ContextWindows[model]
 	return w, ok
+}
+
+// OwnerFor returns projectPath's owner per P6's light client map: "" when
+// Owners is empty (default: one owner, no owner column shown anywhere),
+// else the first rule whose Match prefixes projectPath (case-insensitive),
+// else "personal" when Owners is non-empty but nothing matched.
+func (c *Config) OwnerFor(projectPath string) string {
+	if len(c.Owners) == 0 {
+		return ""
+	}
+	lp := strings.ToLower(projectPath)
+	for _, r := range c.Owners {
+		prefix := strings.ToLower(strings.TrimSuffix(r.Match, "*"))
+		if strings.HasPrefix(lp, prefix) {
+			return r.Owner
+		}
+	}
+	return "personal"
 }
 
 // Defaults mirrors the PRICES and SUBSCRIPTION blocks of

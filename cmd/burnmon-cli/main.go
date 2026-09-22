@@ -49,6 +49,10 @@ func main() {
 		os.Exit(runLive(os.Args[2:]))
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "reown" {
+		os.Exit(runReown(os.Args[2:]))
+		return
+	}
 	os.Exit(run())
 }
 
@@ -112,6 +116,44 @@ func runLive(args []string) int {
 		return 1
 	}
 	fmt.Println(string(b))
+	return 0
+}
+
+// runReown re-applies burnmon.json's owner rules (P6) to every event already
+// in the store, for after an owner rule change: without this, an existing
+// session keeps whatever owner ingest gave it at the time, even once the
+// rules that produced it are edited.
+func runReown(args []string) int {
+	fs := flag.NewFlagSet("reown", flag.ExitOnError)
+	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	cfg, err := loadConfig(*cfgPath, true)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config error:", err)
+		return 1
+	}
+
+	storePath, err := store.DefaultPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	st, err := store.Open(storePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not open the local store at", storePath, ":", err)
+		return 1
+	}
+	defer st.Close()
+
+	n, err := st.ReownEvents(cfg.OwnerFor)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not reown events:", err)
+		return 1
+	}
+	fmt.Printf("reowned %d event(s)\n", n)
 	return 0
 }
 

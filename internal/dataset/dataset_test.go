@@ -82,7 +82,8 @@ func TestIngestDispatchesToCodexAdapter(t *testing.T) {
 	}
 
 	c := Cache{Store: st, RootsByAdapter: map[string][]string{"codex": {codexRoot}}}
-	if err := c.ingest([]string{dst}, nil, false, nil); err != nil {
+	cfg := pricing.Defaults()
+	if err := c.ingest(&cfg, []string{dst}, nil, false, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -99,6 +100,53 @@ func TestIngestDispatchesToCodexAdapter(t *testing.T) {
 		}
 		if e.SessionID != "rollout-fixture" {
 			t.Fatalf("SessionID = %q, want rollout-fixture (the file basename)", e.SessionID)
+		}
+	}
+}
+
+// TestIngestAppliesOwnerRules guards P6: ingest must stamp each event's
+// Owner from cfg.Owners, matched against the event's Project path, before
+// it ever reaches the store.
+func TestIngestAppliesOwnerRules(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	srcDir := filepath.Join(dir, "projects")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fixture, err := os.ReadFile(filepath.Join("..", "adapter", "claude", "testdata", "basic.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "sess-fixture.jsonl"), fixture, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := pricing.Defaults()
+	cfg.Owners = []pricing.OwnerRule{{Match: `C:\ZND\*`, Owner: "ZND"}}
+
+	c := Cache{Store: st}
+	if err := c.ingest(&cfg, []string{filepath.Join(srcDir, "sess-fixture.jsonl")}, nil, false, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := st.AllEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("no events ingested")
+	}
+	// The fixture's cwd is C:\proj\demo, which matches none of cfg.Owners'
+	// rules, so every event must fall back to "personal".
+	for _, e := range events {
+		if e.Owner != "personal" {
+			t.Fatalf("event %s Owner = %q, want %q (Project %q matches no rule)", e.RequestID, e.Owner, "personal", e.Project)
 		}
 	}
 }

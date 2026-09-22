@@ -1,0 +1,74 @@
+// Package migrations lists burnmon's store schema migrations in order.
+// Every migration is additive only: add a table, add a column, or backfill
+// data; none may drop or rewrite the events table. internal/store.Open runs
+// every migration whose Version is greater than the store's recorded
+// version, all inside one transaction, then records the new version.
+package migrations
+
+import "database/sql"
+
+// Migration is one numbered, additive schema step.
+type Migration struct {
+	Version int
+	Name    string
+	Up      func(tx *sql.Tx) error
+}
+
+// All is every migration, in order. Version numbers start at 1 and are
+// contiguous.
+var All = []Migration{
+	{1, "baseline v0.1 schema (events, cursors, meta)", migration1},
+	{2, "owner column on events (P6 owner split)", migration2},
+}
+
+// migration1 records the v0.1 schema as version 1 without changing it: the
+// same CREATE TABLE IF NOT EXISTS statements store.go always ran on every
+// startup, so a real v0.1 database on disk (already at this shape) is left
+// untouched and a brand-new database gets the same tables.
+func migration1(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS events (
+	vendor      TEXT NOT NULL,
+	agent       TEXT NOT NULL,
+	surface     TEXT NOT NULL,
+	session_id  TEXT NOT NULL,
+	request_id  TEXT NOT NULL,
+	parent_id   TEXT NOT NULL DEFAULT '',
+	at          TEXT NOT NULL,
+	model       TEXT NOT NULL,
+	project     TEXT NOT NULL DEFAULT '',
+	title       TEXT NOT NULL DEFAULT '',
+	input       INTEGER NOT NULL,
+	cache_write INTEGER,
+	cache_read  INTEGER,
+	output      INTEGER NOT NULL,
+	reasoning   INTEGER,
+	vendor_cost REAL,
+	window_used REAL,
+	window_reset TEXT,
+	tools       TEXT NOT NULL DEFAULT '{}',
+	PRIMARY KEY (vendor, session_id, request_id)
+);
+CREATE INDEX IF NOT EXISTS idx_events_session ON events (vendor, session_id);
+CREATE INDEX IF NOT EXISTS idx_events_at ON events (at);
+CREATE TABLE IF NOT EXISTS cursors (
+	path   TEXT PRIMARY KEY,
+	offset INTEGER NOT NULL,
+	mtime  TEXT NOT NULL,
+	size   INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS meta (
+	key   TEXT PRIMARY KEY,
+	value TEXT NOT NULL
+);
+`)
+	return err
+}
+
+// migration2 adds P6's owner column: the light client map is applied at
+// ingest and stored per event, empty by default, so a store with no owner
+// rules configured carries owner = '' on every row.
+func migration2(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE events ADD COLUMN owner TEXT NOT NULL DEFAULT ''`)
+	return err
+}

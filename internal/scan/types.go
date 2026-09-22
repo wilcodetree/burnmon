@@ -33,6 +33,9 @@ type PerModel struct {
 type Session struct {
 	SessionID      string               `json:"session_id"`
 	Title          string               `json:"title"`
+	// Owner is P6's light client map result, "" when no owner rules are
+	// configured (one owner, no owner column shown anywhere).
+	Owner          string               `json:"owner,omitempty"`
 	Surface        string               `json:"surface"`
 	CWD            string               `json:"-"`
 	Start          string               `json:"start"`

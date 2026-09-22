@@ -19,6 +19,11 @@ type Event struct {
 	Model     string
 	Project   string // cwd or repo path as the trail gives it, "" if unknown
 
+	// Owner is the light client map's result (pricing.Config.OwnerFor) for
+	// this event's Project, applied at ingest. "" when the config carries no
+	// owner rules (P6's default: one owner, no owner column shown anywhere).
+	Owner string
+
 	// Title is not in the v0.1 spec's Event type. It is the session's
 	// cleaned first-user-message text, carried per event so the store alone
 	// (not a file rescan) can reconstruct a session's display title:

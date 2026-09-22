@@ -1,7 +1,11 @@
 package store
 
 import (
+	"database/sql"
+	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -233,6 +237,192 @@ func TestSessionTotals(t *testing.T) {
 	}
 	if !r.MinAt.Equal(base) {
 		t.Fatalf("MinAt = %v, want %v", r.MinAt, base)
+	}
+}
+
+// TestFreshStoreAtHeadVersion guards S1: a brand-new store must run every
+// migration and land at the current head version.
+func TestFreshStoreAtHeadVersion(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	var version int
+	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
+		t.Fatalf("read schema_version: %v", err)
+	}
+	if version != 2 {
+		t.Fatalf("schema_version = %d, want 2", version)
+	}
+}
+
+// copyFile is a plain byte copy, used to snapshot a real store file into a
+// temp dir without touching the original.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
+// rawEventKeys opens path with a bare sqlite connection (not Open, which
+// would migrate it) and returns the (vendor, session_id, request_id) key of
+// every row in events, plus the row count.
+func rawEventKeys(t *testing.T, path string) (map[string]bool, int) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw %s: %v", path, err)
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT vendor, session_id, request_id FROM events`)
+	if err != nil {
+		t.Fatalf("query raw events in %s: %v", path, err)
+	}
+	defer rows.Close()
+	keys := map[string]bool{}
+	for rows.Next() {
+		var v, s, r string
+		if err := rows.Scan(&v, &s, &r); err != nil {
+			t.Fatalf("scan raw event in %s: %v", path, err)
+		}
+		keys[v+"|"+s+"|"+r] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read raw events in %s: %v", path, err)
+	}
+	return keys, len(keys)
+}
+
+// TestMigrateRealV01Store is S1's own acceptance test: copy a real v0.1
+// store from this laptop (DefaultPath, a database created before this
+// session's migrations existed, so it has no schema_version table and no
+// owner column) into a temp dir, run it to head through Open, and check
+// every one of its events survived with identical (vendor, session_id,
+// request_id) ids and that schema_version now reads 2. Skips (does not
+// fail) when this laptop has no such store, or when it is locked by a
+// running burnmon/burnmon-cli process, since neither says anything about
+// whether the migration code is correct.
+func TestMigrateRealV01Store(t *testing.T) {
+	real, err := DefaultPath()
+	if err != nil {
+		t.Skip("no default store path resolvable on this platform")
+	}
+	if _, err := os.Stat(real); err != nil {
+		t.Skipf("no real store at %s to migrate: %v", real, err)
+	}
+
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "burnmon.db")
+	if err := copyFile(real, dst); err != nil {
+		t.Skipf("could not copy the real store at %s (likely locked by a running app): %v", real, err)
+	}
+
+	wantKeys, wantCount := rawEventKeys(t, dst)
+	if wantCount == 0 {
+		t.Skip("real store has no events to check")
+	}
+
+	st, err := Open(dst)
+	if err != nil {
+		t.Fatalf("Open (migrate) the copied v0.1 store: %v", err)
+	}
+	defer st.Close()
+
+	var version int
+	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
+		t.Fatalf("read schema_version after migrate: %v", err)
+	}
+	if version != 2 {
+		t.Fatalf("schema_version after migrate = %d, want 2", version)
+	}
+
+	got, err := st.AllEvents()
+	if err != nil {
+		t.Fatalf("AllEvents after migrate: %v", err)
+	}
+	if len(got) != wantCount {
+		t.Fatalf("event count after migrate = %d, want %d (every v0.1 event must survive)", len(got), wantCount)
+	}
+	for _, e := range got {
+		key := e.Vendor + "|" + e.SessionID + "|" + e.RequestID
+		if !wantKeys[key] {
+			t.Fatalf("event %s not present in the pre-migration v0.1 store", key)
+		}
+		if e.Owner != "" {
+			t.Fatalf("event %s Owner = %q, want empty (migration 2's default before any reown)", key, e.Owner)
+		}
+	}
+}
+
+// TestReownEvents guards `burnmon-cli reown`: every event's owner is
+// recomputed from its stored Project, only rows whose owner actually
+// changes are written, and a repeat call with the same rules is a no-op.
+func TestReownEvents(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	events := []schema.Event{
+		{Vendor: "anthropic", Agent: "claude-code", Surface: "cli", SessionID: "s1", RequestID: "r1",
+			Model: "claude-x", At: base, Input: 1, Output: 1, Project: `C:\ZND\projects\burnmon`},
+		{Vendor: "anthropic", Agent: "claude-code", Surface: "cli", SessionID: "s2", RequestID: "r2",
+			Model: "claude-x", At: base, Input: 1, Output: 1, Project: `C:\dev\Work\other`, Owner: "personal"},
+	}
+	if err := st.UpsertEvents(events); err != nil {
+		t.Fatal(err)
+	}
+
+	ownerFor := func(project string) string {
+		if strings.HasPrefix(strings.ToLower(project), `c:\znd\`) {
+			return "ZND"
+		}
+		return "Valona"
+	}
+	n, err := st.ReownEvents(ownerFor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("ReownEvents updated %d row(s), want 2 (both differ from their stored owner)", n)
+	}
+
+	got, err := st.AllEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bySession := map[string]schema.Event{}
+	for _, e := range got {
+		bySession[e.SessionID] = e
+	}
+	if bySession["s1"].Owner != "ZND" {
+		t.Fatalf("s1 Owner = %q, want ZND", bySession["s1"].Owner)
+	}
+	if bySession["s2"].Owner != "Valona" {
+		t.Fatalf("s2 Owner = %q, want Valona", bySession["s2"].Owner)
+	}
+
+	n2, err := st.ReownEvents(ownerFor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n2 != 0 {
+		t.Fatalf("second ReownEvents updated %d row(s), want 0 (already reowned)", n2)
 	}
 }
 
