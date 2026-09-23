@@ -342,6 +342,139 @@ GROUP BY agent`,
 	return out, rows.Err()
 }
 
+// ForecastScore is one ISO week's F1 scoring row: the plan recorded (meant
+// to be) on Monday, and the actual once that week has fully elapsed.
+// ActualTokens and ScoredAt are nil until then; a week "counts as scored"
+// once both are set.
+type ForecastScore struct {
+	ISOYear      int
+	ISOWeek      int
+	WeekStart    time.Time
+	PlanTokens   int64
+	ActualTokens *int64
+	ScoredAt     *time.Time
+}
+
+const forecastScoreColumns = `iso_year, iso_week, week_start, plan_tokens, actual_tokens, scored_at`
+
+func scanForecastScore(scan func(dest ...any) error) (ForecastScore, error) {
+	var f ForecastScore
+	var weekStartStr string
+	var actual sql.NullInt64
+	var scoredAt sql.NullString
+	if err := scan(&f.ISOYear, &f.ISOWeek, &weekStartStr, &f.PlanTokens, &actual, &scoredAt); err != nil {
+		return ForecastScore{}, err
+	}
+	var err error
+	f.WeekStart, err = time.Parse(time.RFC3339Nano, weekStartStr)
+	if err != nil {
+		return ForecastScore{}, fmt.Errorf("store: parse week_start %q: %w", weekStartStr, err)
+	}
+	if actual.Valid {
+		v := actual.Int64
+		f.ActualTokens = &v
+	}
+	if scoredAt.Valid {
+		t, err := time.Parse(time.RFC3339Nano, scoredAt.String)
+		if err == nil {
+			f.ScoredAt = &t
+		}
+	}
+	return f, nil
+}
+
+// ForecastScore returns the row for one ISO week, ok false when that week
+// has never had a plan recorded.
+func (s *Store) ForecastScore(isoYear, isoWeek int) (ForecastScore, bool, error) {
+	row := s.db.QueryRow(`SELECT `+forecastScoreColumns+` FROM forecast_scores WHERE iso_year = ? AND iso_week = ?`,
+		isoYear, isoWeek)
+	f, err := scanForecastScore(row.Scan)
+	if err == sql.ErrNoRows {
+		return ForecastScore{}, false, nil
+	}
+	if err != nil {
+		return ForecastScore{}, false, err
+	}
+	return f, true, nil
+}
+
+// ForecastScores returns every scored-or-scoring week, oldest first.
+func (s *Store) ForecastScores() ([]ForecastScore, error) {
+	rows, err := s.db.Query(`SELECT ` + forecastScoreColumns + ` FROM forecast_scores ORDER BY iso_year, iso_week`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ForecastScore
+	for rows.Next() {
+		f, err := scanForecastScore(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// InsertForecastPlan records planTokens as the week's forecast, the first
+// time that ISO week is seen only: a later call the same week (this same
+// process re-checking, or a restart) is a silent no-op, so the Monday
+// forecast is never overwritten once made.
+func (s *Store) InsertForecastPlan(isoYear, isoWeek int, weekStart time.Time, planTokens int64) error {
+	_, err := s.db.Exec(`
+INSERT INTO forecast_scores (iso_year, iso_week, week_start, plan_tokens)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (iso_year, iso_week) DO NOTHING`,
+		isoYear, isoWeek, weekStart.UTC().Format(time.RFC3339Nano), planTokens)
+	return err
+}
+
+// RecordForecastActual fills in a week's actual once it has fully elapsed,
+// only when it has not been recorded already (the WHERE guards against a
+// second scoring pass re-running the same week).
+func (s *Store) RecordForecastActual(isoYear, isoWeek int, actualTokens int64, scoredAt time.Time) error {
+	_, err := s.db.Exec(`
+UPDATE forecast_scores SET actual_tokens = ?, scored_at = ?
+WHERE iso_year = ? AND iso_week = ? AND actual_tokens IS NULL`,
+		actualTokens, scoredAt.UTC().Format(time.RFC3339Nano), isoYear, isoWeek)
+	return err
+}
+
+// DailyTokenTotal is one UTC calendar day's total tokens across every real
+// turn (the claude adapter's synthetic tool-only events excluded, same
+// condition as SessionTotals).
+type DailyTokenTotal struct {
+	Date   string // YYYY-MM-DD, UTC
+	Tokens int64
+}
+
+// DailyTokenTotals sums tokens per UTC calendar day for every real turn at
+// or after from, oldest first. F1's plan line (weekday-aware averages over
+// the last four weeks) and its actual/live totals are both built from this,
+// one query, rather than loading raw events into Go.
+func (s *Store) DailyTokenTotals(from time.Time) ([]DailyTokenTotal, error) {
+	rows, err := s.db.Query(`
+SELECT substr(at, 1, 10) AS day,
+	SUM(input + COALESCE(cache_write,0) + COALESCE(cache_read,0) + output) AS tokens
+FROM events
+WHERE at >= ? AND NOT (model = '' AND input = 0 AND output = 0)
+GROUP BY day
+ORDER BY day ASC`, from.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DailyTokenTotal
+	for rows.Next() {
+		var d DailyTokenTotal
+		if err := rows.Scan(&d.Date, &d.Tokens); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 func nullInt(p *int64) any {
 	if p == nil {
 		return nil

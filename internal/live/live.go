@@ -63,20 +63,6 @@ type Session struct {
 	Runway string `json:"runway"`
 }
 
-// ForecastDay is one day of the Now page's forecast placeholder.
-type ForecastDay struct {
-	Date   string  `json:"date"` // YYYY-MM-DD
-	Cost   float64 `json:"cost"`
-	Tokens int64   `json:"tokens"`
-}
-
-// Forecast is the Now page's forecast card: history only until a scored week
-// exists (v0.1 has none), per the spec's "no forecast without a scored week".
-type Forecast struct {
-	Message string        `json:"message"`
-	Days    []ForecastDay `json:"days"`
-}
-
 // TurnEvent is one real API-call turn inside the Now page's 30-minute
 // window, running session or not: the I3 turn ticker's one-line-per-turn
 // source, and the marker overlay's per-finding placement, both need every
@@ -118,7 +104,6 @@ type Snapshot struct {
 	WindowStart   string   `json:"window_start"`
 	BucketSeconds int      `json:"bucket_seconds"`
 	Chart         []Bucket `json:"chart"`
-	Forecast      Forecast `json:"forecast"`
 	// Turns is I3's turn ticker source: every real turn across every
 	// session in the chart window, newest first, capped at turnTickerCap.
 	Turns []TurnEvent `json:"turns"`
@@ -304,7 +289,6 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 		WindowStart:          windowStart.UTC().Format(time.RFC3339),
 		BucketSeconds:        BucketSeconds,
 		Chart:                buildChart(events, cfg, windowStart, now),
-		Forecast:             buildForecast(events, cfg, now),
 		Turns:                buildTurns(events, cfg, windowStart, now),
 	}
 }
@@ -535,49 +519,6 @@ func buildChart(events []schema.Event, cfg *pricing.Config, windowStart, now tim
 		b.Cost += turnCost(e, cfg)
 	}
 	return slots
-}
-
-// buildForecast sums every real turn's tokens and cost per UTC calendar day
-// for the last 7 days, history only: v0.1 has no scored week to project a
-// line from (see the spec's Step 3, "cache clock and turn ticker... if the
-// week allows" and the features note's forecast rule).
-func buildForecast(events []schema.Event, cfg *pricing.Config, now time.Time) Forecast {
-	today := now.UTC().Truncate(24 * time.Hour)
-	from := today.AddDate(0, 0, -6)
-	days := map[string]*ForecastDay{}
-	var order []string
-	for d := from; !d.After(today); d = d.AddDate(0, 0, 1) {
-		key := d.Format("2006-01-02")
-		days[key] = &ForecastDay{Date: key}
-		order = append(order, key)
-	}
-	for _, e := range events {
-		if !isTurn(e) || e.At.IsZero() {
-			continue
-		}
-		key := e.At.UTC().Format("2006-01-02")
-		d, ok := days[key]
-		if !ok {
-			continue
-		}
-		cw, cr := int64(0), int64(0)
-		if e.CacheWrite != nil {
-			cw = *e.CacheWrite
-		}
-		if e.CacheRead != nil {
-			cr = *e.CacheRead
-		}
-		d.Tokens += e.Input + cw + cr + e.Output
-		d.Cost += turnCost(e, cfg)
-	}
-	out := make([]ForecastDay, 0, len(order))
-	for _, k := range order {
-		out = append(out, *days[k])
-	}
-	return Forecast{
-		Message: "Needs one scored week before a forecast line; showing the last 7 days of history.",
-		Days:    out,
-	}
 }
 
 // ApplySessionTotals overwrites each running session's Start, TurnCount,

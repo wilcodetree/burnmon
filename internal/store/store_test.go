@@ -289,8 +289,8 @@ func TestFreshStoreAtHeadVersion(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version: %v", err)
 	}
-	if version != 4 {
-		t.Fatalf("schema_version = %d, want 4", version)
+	if version != 5 {
+		t.Fatalf("schema_version = %d, want 5", version)
 	}
 }
 
@@ -517,8 +517,8 @@ func TestMigrateRealV01Store(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version after migrate: %v", err)
 	}
-	if version != 4 {
-		t.Fatalf("schema_version after migrate = %d, want 4", version)
+	if version != 5 {
+		t.Fatalf("schema_version after migrate = %d, want 5", version)
 	}
 
 	got, err := st.AllEvents()
@@ -632,5 +632,99 @@ func TestSessionTotalsVendorQualified(t *testing.T) {
 	}
 	if rows[0].Vendor != "anthropic" || rows[0].Input != 100 || rows[0].Output != 10 {
 		t.Fatalf("want anthropic's own totals only (input=100 output=10), got %+v", rows[0])
+	}
+}
+
+// TestForecastScoresRoundTrip guards F1's store layer: InsertForecastPlan
+// never overwrites a week already on record, RecordForecastActual only
+// fills a week in once, and DailyTokenTotals buckets by UTC calendar day.
+func TestForecastScoresRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	ws := time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC) // Monday
+	isoYear, isoWeek := ws.ISOWeek()
+
+	if _, ok, err := st.ForecastScore(isoYear, isoWeek); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		t.Fatal("ForecastScore found a row before any was inserted")
+	}
+
+	if err := st.InsertForecastPlan(isoYear, isoWeek, ws, 4900); err != nil {
+		t.Fatal(err)
+	}
+	// A later call for the same week must not overwrite the plan already
+	// recorded ("the forecast made on Monday", never revised).
+	if err := st.InsertForecastPlan(isoYear, isoWeek, ws, 9999); err != nil {
+		t.Fatal(err)
+	}
+
+	sc, ok, err := st.ForecastScore(isoYear, isoWeek)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("ForecastScore: row not found after insert")
+	}
+	if sc.PlanTokens != 4900 {
+		t.Fatalf("PlanTokens = %d, want 4900 (second insert must not overwrite)", sc.PlanTokens)
+	}
+	if sc.ActualTokens != nil {
+		t.Fatalf("ActualTokens = %v, want nil before scoring", sc.ActualTokens)
+	}
+
+	scoredAt := ws.AddDate(0, 0, 8)
+	if err := st.RecordForecastActual(isoYear, isoWeek, 7000, scoredAt); err != nil {
+		t.Fatal(err)
+	}
+	// A second scoring pass over the same week must not change the actual
+	// already recorded.
+	if err := st.RecordForecastActual(isoYear, isoWeek, 1, scoredAt); err != nil {
+		t.Fatal(err)
+	}
+
+	scores, err := st.ForecastScores()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scores) != 1 {
+		t.Fatalf("len(ForecastScores) = %d, want 1", len(scores))
+	}
+	got := scores[0]
+	if got.ActualTokens == nil || *got.ActualTokens != 7000 {
+		t.Fatalf("ActualTokens = %v, want 7000", got.ActualTokens)
+	}
+	if got.ScoredAt == nil {
+		t.Fatal("ScoredAt = nil, want set")
+	}
+
+	events := []schema.Event{
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", RequestID: "r1",
+			Model: "m", At: ws.Add(9 * time.Hour), Input: 300},
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", RequestID: "r2",
+			Model: "m", At: ws.Add(20 * time.Hour), Input: 200},
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", RequestID: "r3",
+			Model: "m", At: ws.AddDate(0, 0, 1).Add(9 * time.Hour), Input: 50},
+	}
+	if err := st.UpsertEvents(events); err != nil {
+		t.Fatal(err)
+	}
+	daily, err := st.DailyTokenTotals(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(daily) != 2 {
+		t.Fatalf("len(DailyTokenTotals) = %d, want 2 (two distinct days)", len(daily))
+	}
+	if daily[0].Date != ws.Format("2006-01-02") || daily[0].Tokens != 500 {
+		t.Fatalf("day 0 = %+v, want {%s 500}", daily[0], ws.Format("2006-01-02"))
+	}
+	if daily[1].Tokens != 50 {
+		t.Fatalf("day 1 tokens = %d, want 50", daily[1].Tokens)
 	}
 }

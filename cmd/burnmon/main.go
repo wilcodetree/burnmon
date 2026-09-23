@@ -31,6 +31,7 @@ import (
 	"burnmon/internal/adapter/copilotcli"
 	"burnmon/internal/adapter/hermes"
 	"burnmon/internal/dataset"
+	"burnmon/internal/forecast"
 	"burnmon/internal/history"
 	"burnmon/internal/insight"
 	"burnmon/internal/live"
@@ -386,6 +387,18 @@ func main() {
 		return vendorstrip.Build(st, time.Now())
 	}); err != nil {
 		log.Println("could not bind bmVendorStrip:", err)
+	}
+
+	// bmForecast (F1): the Now page's forecast chart calls this from its own
+	// 1-minute timer, same reason as bmVendorStrip above; it also carries
+	// the scoring bookkeeping (EnsureScored), so a week's plan and actual
+	// get recorded even if the Now page forecast section is never scrolled
+	// to, as long as the app is open at least once a minute somewhere in
+	// that week.
+	if err := w.Bind("bmForecast", func() (forecast.Payload, error) {
+		return forecast.Build(st, time.Now())
+	}); err != nil {
+		log.Println("could not bind bmForecast:", err)
 	}
 
 	if err := w.Bind("ccSaveSettings", func(p settingsPayload) error {

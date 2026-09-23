@@ -21,6 +21,7 @@ var All = []Migration{
 	{2, "owner column on events (P6 owner split)", migration2},
 	{3, "tool_calls table (S2)", migration3},
 	{4, "tool_calls.path column (I3)", migration4},
+	{5, "forecast_scores table (F1)", migration5},
 }
 
 // migration1 records the v0.1 schema as version 1 without changing it: the
@@ -106,5 +107,27 @@ CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls (tool);
 // trail whose input shape was not recognised).
 func migration4(tx *sql.Tx) error {
 	_, err := tx.Exec(`ALTER TABLE tool_calls ADD COLUMN path TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+// migration5 adds F1's forecast_scores table: one row per ISO week, the
+// plan_tokens recorded the first time that week is seen (meant to be
+// Monday, but a store that starts scoring mid-week records it the first
+// time it runs instead of waiting for next Monday), actual_tokens and
+// scored_at filled in once, after that week has fully elapsed. A week
+// counts as scored (the forecast gate's condition) once both columns are
+// non-null.
+func migration5(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS forecast_scores (
+	iso_year      INTEGER NOT NULL,
+	iso_week      INTEGER NOT NULL,
+	week_start    TEXT NOT NULL,
+	plan_tokens   INTEGER NOT NULL,
+	actual_tokens INTEGER,
+	scored_at     TEXT,
+	PRIMARY KEY (iso_year, iso_week)
+);
+`)
 	return err
 }

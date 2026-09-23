@@ -196,6 +196,10 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 <section id="now">
   <p class="lede">Running Claude Code, Cowork and Codex sessions, live. Polls every 2 seconds while this window is open; a saved report has nothing to poll.</p>
   <div id="now_empty" class="note hidden"></div>
+
+  <h2>Live burn, last 30 minutes</h2>
+  <div class="chartbox"><canvas id="ch_now"></canvas></div>
+
   <div class="grid now-cards" id="now_cards"></div>
 
   <h2>Vendor strip</h2>
@@ -204,14 +208,13 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
     <th class="nosort">Vendor</th><th>Today</th><th>This week</th><th>This month</th>
   </tr></thead><tbody></tbody></table></div>
 
-  <h2>Live burn, last 30 minutes</h2>
-  <div class="chartbox"><canvas id="ch_now"></canvas></div>
-
   <h2>Turn ticker</h2>
   <p class="lede" style="margin-top:-8px">Newest first, capped at 50 lines. Click a line, or a marker on the chart above, for the full turn detail.</p>
   <div id="now_ticker"></div>
 
   <h2>Forecast</h2>
+  <div id="now_forecast_note" class="note hidden"></div>
+  <div class="chartbox" id="now_forecast_chartbox"><canvas id="ch_forecast"></canvas></div>
   <div class="card plain" id="now_forecast"></div>
 </section>
 
@@ -1270,19 +1273,106 @@ function sessionCardHTML(s, isSub){
     + '</div>';
 }
 
-function renderNowForecast(f){
-  var el = document.getElementById('now_forecast');
-  if(!el) return;
-  if(!f || !f.days || !f.days.length){
-    el.innerHTML = '<p class="small" style="margin:0">Forecast: needs one scored week, showing history.</p>';
+// drawForecastChart renders F1's plan-vs-live chart: a smooth plan line
+// (weekday-aware, last four weeks), a smooth live line (today's rate
+// continued), and the error band from every scored week so far shaded
+// around the live line. Tokens only, per the spec (euros are v0.3).
+function drawForecastChart(p){
+  var box = document.getElementById('now_forecast_chartbox');
+  if(typeof Chart === 'undefined'){ chartFallback('ch_forecast', 'Forecast'); return; }
+  if(!p || p.locked || !p.plan || !p.plan.length){
+    if(charts.forecast){ charts.forecast.destroy(); charts.forecast = null; }
+    if(box) box.style.display = 'none';
     return;
   }
-  var rows = f.days.map(function(d){
-    return '<tr><td>'+esc(d.date)+'</td><td>'+money(d.cost||0)+'</td><td>'+tok(d.tokens||0)+'</td></tr>';
-  }).join('');
-  el.innerHTML = '<p class="small" style="margin-top:0">'+esc(f.message||'Forecast: needs one scored week, showing history.')+'</p>'
-    + '<table><thead><tr><th class="nosort">Day</th><th>Cost</th><th>Tokens</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  if(box) box.style.display = '';
+  try {
+    var P = chartPalette();
+    var labels = p.plan.map(function(d){ return d.date; });
+    var planData = p.plan.map(function(d){ return d.tokens; });
+    var liveData = (p.live||[]).map(function(d){ return d.tokens; });
+    var band = p.error_band_pct || 0;
+    var bandHigh = liveData.map(function(v){ return Math.round(v*(1+band)); });
+    var bandLow = liveData.map(function(v){ return Math.round(v*(1-band)); });
+
+    var datasets = [
+      {label:'Error band', data:bandHigh, borderColor:'transparent', backgroundColor:P.blue3+'33',
+        fill:'+1', tension:0.4, pointRadius:0, order:3},
+      {label:'Error band (low)', data:bandLow, borderColor:'transparent', backgroundColor:'transparent',
+        fill:false, tension:0.4, pointRadius:0, order:3},
+      {label:'Plan (last 4 weeks)', data:planData, borderColor:P.muted, backgroundColor:'transparent',
+        borderDash:[5,4], fill:false, tension:0.4, pointRadius:0, order:2},
+      {label:'Live (current rate)', data:liveData, borderColor:P.accent, backgroundColor:'transparent',
+        fill:false, tension:0.4, borderWidth:2, pointRadius:0, order:1}
+    ];
+
+    if(!charts.forecast){
+      charts.forecast = new Chart(document.getElementById('ch_forecast'), {
+        type:'line',
+        data:{labels:labels, datasets:datasets},
+        options:{responsive:true, maintainAspectRatio:false, animation:{duration:250},
+          scales:{
+            x:{grid:{display:false}, ticks:{font:{size:10}}},
+            y:{beginAtZero:true, grid:{color:P.grid}, title:{display:true, text:'tokens'}}
+          },
+          plugins:{
+            legend:{position:'bottom', labels:{font:{size:10}, boxWidth:10,
+              filter:function(item){ return !item.text || item.text.indexOf('(low)') === -1; }}}
+          }}});
+    } else {
+      charts.forecast.data.labels = labels;
+      charts.forecast.data.datasets = datasets;
+      charts.forecast.update();
+    }
+  } catch(e){
+    chartFallback('ch_forecast', 'Forecast');
+  }
 }
+
+// renderNowForecast is bmForecast's one template branch (F1): the visible
+// gate ("forecast unlocks after the first scored week (week 46)") until one
+// scored week exists, otherwise the plan/live chart plus the end-of-day,
+// end-of-month and error-band figures in words.
+function renderNowForecast(p){
+  var note = document.getElementById('now_forecast_note');
+  var el = document.getElementById('now_forecast');
+  if(!note || !el) return;
+  drawForecastChart(p);
+  if(!p || p.locked){
+    note.classList.remove('hidden');
+    note.textContent = (p && p.message) || 'forecast unlocks after the first scored week (week 46)';
+    el.innerHTML = '';
+    return;
+  }
+  note.classList.add('hidden');
+  el.innerHTML = '<p class="small" style="margin:0">'
+    + 'End of day: ' + tok(p.end_of_day_tokens||0) + ' tokens &middot; '
+    + 'end of month: ' + tok(p.end_of_month_tokens||0) + ' tokens &middot; '
+    + 'error band &plusmn;' + Math.round((p.error_band_pct||0)*100) + '% from '
+    + n(p.scored_weeks||0) + ' scored week' + (p.scored_weeks===1?'':'s') + '.</p>';
+}
+
+function pollForecast(){
+  var note = document.getElementById('now_forecast_note');
+  if(typeof window.bmForecast !== 'function'){
+    if(note){
+      note.classList.remove('hidden');
+      note.textContent = 'Forecast is only available in the BurnMon app window, not in a saved report.';
+    }
+    return;
+  }
+  Promise.resolve(window.bmForecast()).then(renderNowForecast).catch(function(e){
+    if(note){
+      note.classList.remove('hidden');
+      note.textContent = 'Could not load the forecast: ' + (e && e.message ? e.message : String(e));
+    }
+  });
+}
+
+var fcTimer = null;
+pollForecast();
+if(fcTimer) clearInterval(fcTimer);
+fcTimer = setInterval(pollForecast, 60000);
 
 // localHMS renders an RFC3339 (UTC) timestamp as HH:MM:SS in the viewer's
 // own local time zone (F3: the axis previously showed e.At.UTC(), which read
@@ -1421,14 +1511,16 @@ function drawNowChart(chart, sessions, turns){
     var P = chartPalette();
     var colors = [P.accent, P.blue2, P.blue3, P.muted, '#C77DFF', '#FFB84D'];
 
+    // Per-line peak, not a stacked sum: each session is now its own smooth
+    // line rather than a bar in a shared stack, so the token axis tracks
+    // whichever single line runs highest, not their total.
     var tokenPeak = 0;
     chart.forEach(function(b){
-      var total = 0;
       Object.keys(b.by_session||{}).forEach(function(id){
         var v = b.by_session[id];
-        total += v.fresh + v.cache_write + v.cache_read + v.output;
+        var total = v.fresh + v.cache_write + v.cache_read + v.output;
+        if(total > tokenPeak) tokenPeak = total;
       });
-      if(total > tokenPeak) tokenPeak = total;
     });
     var costPeak = 0;
     chart.forEach(function(b){ var c = (b.cost||0)*rate(); if(c > costPeak) costPeak = c; });
@@ -1442,13 +1534,17 @@ function drawNowChart(chart, sessions, turns){
 
     // Decided (grill, question 12): grows instantly to a new peak, decays
     // 5% per poll once that peak has left the window, so the scale itself
-    // never jumps, only the bars move (by the chart's own animation).
+    // never jumps, only the lines move (by the chart's own animation).
     // Tokens carry a 10K floor so a near-idle chart does not zoom in on
     // noise; cost has no such floor, it settles toward zero with no spend.
     nowChart.tokenMax = Math.max(tokenPeak*1.1, nowChart.tokenMax*0.95, 10000);
     nowChart.costMax = Math.max(costPeak*1.1, nowChart.costMax*0.95);
 
-    var barDatasets = sessionIds.map(function(id){
+    // Smooth, moving lines, not bars: each session is its own line, tension
+    // rounds the per-bucket steps into a curve, and only the actual data
+    // (the window sliding one bucket every 10s) makes anything move, never
+    // a resize/rebuild jump.
+    var lineDatasets = sessionIds.map(function(id){
       var s = byId[id];
       var data = chart.map(function(b){
         var v = (b.by_session||{})[id];
@@ -1460,15 +1556,17 @@ function drawNowChart(chart, sessions, turns){
       if(ds){
         ds.data = data; ds.classBreakdown = classBreakdown; ds.label = label;
       } else {
-        ds = {type:'bar', label: label, stack:'tokens', yAxisID:'y', sessionId: id,
-          data: data, classBreakdown: classBreakdown, backgroundColor: nowChart.colorBySession[id]};
+        ds = {type:'line', label: label, yAxisID:'y', sessionId: id,
+          data: data, classBreakdown: classBreakdown,
+          borderColor: nowChart.colorBySession[id], backgroundColor: nowChart.colorBySession[id],
+          fill:false, tension:0.4, cubicInterpolationMode:'monotone', borderWidth:2, pointRadius:0};
         nowChart.datasetById[id] = ds;
       }
       return ds;
     });
     // A session that fell out of the 30-minute window stops holding a
-    // dataset, so the legend and stack do not accumulate every session
-    // seen since the page loaded.
+    // dataset, so the legend does not accumulate every session seen since
+    // the page loaded.
     Object.keys(nowChart.datasetById).forEach(function(id){
       if(sessionIds.indexOf(id) === -1) delete nowChart.datasetById[id];
     });
@@ -1477,11 +1575,14 @@ function drawNowChart(chart, sessions, turns){
     if(nowChart.costDataset){
       nowChart.costDataset.data = costData;
     } else {
+      // Hidden by default (v0.2 is tokens-only, cost stays an opt-in legend
+      // toggle here): click "Cost/10s" in the legend to show it.
       nowChart.costDataset = {type:'line', label:'Cost/10s', yAxisID:'cost', sessionId: null,
-        data: costData, borderColor: P.blue3, backgroundColor:'transparent', tension:0.25, pointRadius:0};
+        data: costData, borderColor: P.blue3, backgroundColor:'transparent',
+        tension:0.4, cubicInterpolationMode:'monotone', pointRadius:0, hidden:true};
     }
     var markerDatasets = findingMarkerDatasets(chart, turns);
-    var datasets = barDatasets.concat([nowChart.costDataset]).concat(markerDatasets);
+    var datasets = lineDatasets.concat([nowChart.costDataset]).concat(markerDatasets);
 
     // One label per 5 minutes, on the round minute, so only the edge label
     // changes as the window drifts (decided, grill question 12); every
@@ -1496,16 +1597,14 @@ function drawNowChart(chart, sessions, turns){
     };
 
     var afterLabel = function(ctx){
-      if(ctx.dataset.type !== 'bar') return [];
+      var cc = ctx.dataset.classBreakdown && ctx.dataset.classBreakdown[ctx.dataIndex];
+      if(!cc) return [];
       var lines = [];
       if(ctx.dataset.sessionId) lines.push('id: '+ctx.dataset.sessionId);
-      var cc = ctx.dataset.classBreakdown && ctx.dataset.classBreakdown[ctx.dataIndex];
-      if(cc){
-        // Token class split inside a bar is tooltip-only in v0.1.1 (F3): a
-        // per-class toggle on the bars themselves is v0.2.
-        lines.push('fresh '+tok(cc.fresh)+', cache write '+tok(cc.cache_write)
-          +', cache read '+tok(cc.cache_read)+', output '+tok(cc.output));
-      }
+      // Token class split inside a line is tooltip-only in v0.1.1 (F3): a
+      // per-class toggle on the lines themselves is v0.2.
+      lines.push('fresh '+tok(cc.fresh)+', cache write '+tok(cc.cache_write)
+        +', cache read '+tok(cc.cache_read)+', output '+tok(cc.output));
       return lines;
     };
 
@@ -1513,9 +1612,15 @@ function drawNowChart(chart, sessions, turns){
       charts.now = new Chart(document.getElementById('ch_now'), {
         data:{labels:labels, datasets:datasets},
         options:{responsive:true, maintainAspectRatio:false,
+          // Smooth, right-to-left only: no growing/shrinking transition on
+          // the values themselves, just the window sliding one bucket at a
+          // time (F1 follow-up). A short line-drawing duration keeps a
+          // freshly-appearing point from popping in.
+          animation:{duration:250, easing:'linear'},
+          interaction:{mode:'index', intersect:false},
           scales:{
-            x:{stacked:true, grid:{display:false}, ticks:{font:{size:10}, maxRotation:0, autoSkip:false, callback: tickCallback}},
-            y:{stacked:true, beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}},
+            x:{grid:{display:false}, ticks:{font:{size:10}, maxRotation:0, autoSkip:false, callback: tickCallback}},
+            y:{beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}},
             cost:{position:'right', beginAtZero:true, max: nowChart.costMax || undefined, grid:{display:false}}
           },
           plugins:{
@@ -1549,7 +1654,6 @@ function renderNow(snap){
     cards.innerHTML = snap.sessions.map(function(s){ return sessionCardHTML(s, false); }).join('');
   }
   if(currentTab() === 'now') drawNowChart(snap && snap.chart, snap && snap.sessions, snap && snap.turns);
-  renderNowForecast(snap && snap.forecast);
   renderNowTicker(snap && snap.turns);
 }
 

@@ -2,6 +2,45 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, 44B: forecast chart and gate (F1), Now-chart smoothing
+
+Built F1 in tokens, per spec section 2.4: migration 5 adds `forecast_scores`
+(iso_year, iso_week, week_start, plan_tokens, actual_tokens, scored_at; a
+week counts as scored once both are set), plus store methods
+`InsertForecastPlan` (writes only the first time a week is seen, so the
+Monday forecast is never revised), `RecordForecastActual` (writes only
+once, guarded by `WHERE actual_tokens IS NULL`), `ForecastScore(s)` and
+`DailyTokenTotals` (per-UTC-day sums via one SQL query). New package
+`internal/forecast` builds the payload: `EnsureScored` records the current
+week's plan and fills in any past week's actual once it has fully elapsed;
+`Build` is locked (history only, the fixed text "forecast unlocks after the
+first scored week (week 46)") until one scored week exists, otherwise it
+returns the weekday-aware plan line (last 4 weeks' averages), the live line
+(today's own rate held flat for the rest of the week, plus end-of-day and
+end-of-month projections), and an error band (mean absolute percentage
+error across every scored week). Scoring starts this session: the first
+`bmForecast` call in the current ISO week writes that week's plan. Wired as
+`bmForecast`, its own 1-minute timer mirroring `bmVendorStrip`'s pattern
+rather than the 2-second `bmLive` poll, since every query here scans the
+whole store; the Now page's Forecast card now draws a Chart.js line chart
+(plan dashed, live solid, error band shaded around the live line) instead
+of the old always-history table, with the gate text shown in place of the
+chart while locked. Mid-turn, Wilco also asked for the existing 30-minute
+"Live burn" chart to move to the top of the Now page, its cost line off by
+default (click the legend to show it, tokens-only per v0.2), and to become
+smooth per-session lines instead of stacked bars, animated only by the
+window itself sliding right to left rather than any grow/shrink transition.
+Tests: `internal/forecast/forecast_test.go` covers the plan line's weekday
+averages against a four-week fixture, zero scored weeks showing the gate,
+and one scored week (driven across two real calendar weeks, the way
+scoring actually runs) unlocking a non-zero error band; `TestFreshStoreAtHeadVersion`
+and `TestMigrateRealV01Store` in `internal/store` bumped from schema
+version 4 to 5, and a new `TestForecastScoresRoundTrip` covers the
+insert-once/update-once store semantics directly. `go test ./... -count=1`
+and `.\build.ps1` both green; `node --check` on every extracted `<script>`
+block in template.html also passes. `C:\dev\Work` untouched; no open call
+was hit that needed stopping to ask.
+
 ## 2026-09-23, 44A: Sessions tab findings (I3)
 
 Added the Sessions tab half of I3 the spec left open: a Findings column (count
