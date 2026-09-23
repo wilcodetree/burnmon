@@ -13,9 +13,12 @@ Priority order lives here and only here.
    only, owner split, insight package (re-prefill, compaction, runway, spike drawer),
    forecast behind a visible gate, Hermes and Copilot CLI adapters, Copilot VS Code OTel
    check. Spec: `2026-09-22_v0.2_spec.md`. Session prompts, one per session, with the
-   checklist: `2026-09-22_v0.2_session_prompts.md`. Grilled 2026-09-22.
-4. v0.3 (2026-12-12): per-vendor cost and credits, dev and business switch (moved from v0.2,
-   ships complete), full client map, active time, export and merge, macOS and Linux builds.
+   checklist: `2026-09-22_v0.2_session_prompts.md`. Grilled 2026-09-22. **DONE 2026-09-23,
+   tagged `v0.2.0`, all sixteen spec items shipped, release-candidate Done-when and VERIFY
+   pass clean (46A), no fails carried into the tag.**
+4. v0.3 (2026-12-12), next: per-vendor cost and credits, dev and business switch (moved from
+   v0.2, ships complete), full client map, active time, export and merge, macOS and Linux
+   builds.
 5. Decision 2026-12-19.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.

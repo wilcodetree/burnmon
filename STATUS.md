@@ -1,8 +1,9 @@
 # BurnMon, status
 
-What is true at this commit (2026-09-23, after 44B: forecast chart and gate), on the way
-to the `v0.2.0` tag due 2026-11-14. Spec: `02_roadmap\2026-09-22_v0.2_spec.md`. Build
-order: week 45, session A (this pass: README, STATUS, docs, buffer).
+What is true at this commit (2026-09-23, 46B): **v0.2.0 shipped**, all sixteen spec items
+built, the release-candidate Done-when and VERIFY pass (46A) clean with no fails. Spec:
+`02_roadmap\2026-09-22_v0.2_spec.md`. Next: v0.3 (2026-12-12), per-vendor cost and
+credits, dev/business switch, full client map, macOS and Linux builds.
 
 ## What it is
 
@@ -101,5 +102,5 @@ empty.
 
 ## Next
 
-Release candidate week 46: Valona and Talon check, tag `v0.2.0`, 2026-11-14. Full plan:
-`02_roadmap\2026-09-22_v0.2_spec.md` section 4 (build order) and section 5 (done when).
+v0.3 (2026-12-12): per-vendor cost and credits, dev and business switch, full client map
+(active time, export, merge), macOS and Linux builds. Plan: `02_roadmap\roadmap.md` item 4.

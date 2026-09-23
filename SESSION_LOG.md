@@ -2,6 +2,29 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, 46B: tag v0.2.0
+
+Read the 46A entry above (rc.1 results, tag `v0.2.0-rc.1`, commit `541c6f2`) and spec
+section 5: 46A found zero failing Done-when or VERIFY items ("No failure found this pass,
+so nothing was fixed"), so this session's own instruction to "fix the fails listed for
+rc.1 if Wilco confirmed them" had nothing to apply to; no source code changed. Set version
+constants to `0.2.0` in both binaries (`cmd\burnmon-cli\main.go:35`, `cmd\burnmon\main.go:47`,
+both previously `0.1.2`). Updated `STATUS.md` (header and "Next" section now describe the
+shipped v0.2.0 state, pointing at v0.3 rather than the release-candidate week),
+`DEADLINES.md` (the 2026-11-14 v0.2 row marked "DONE 2026-09-23, tagged `v0.2.0`"), and the
+project `02_roadmap\roadmap.md` (item 3, v0.2, marked done with the 46A rc-pass result;
+item 4, v0.3, marked next). `go test ./... -count=1` green across every package
+(`cmd\burnmon`, `cmd\burnmon-cli`, every `internal\...` package with test files); one
+`unlinkat ... Access is denied` line after the last `ok` is Windows temp-file cleanup on a
+completed test binary, not a test failure. `.\build.ps1` green, producing both exes. No
+open choice was hit that needed stopping to ask: the fails-list step resolved to an empty
+set by reading 46A's own record, and the docs/roadmap edits were mechanical, not judgment
+calls. `C:\dev\Work` untouched. Hub brief written as
+`04_assets\hub_agent_update_2026-09-23_46b_v0.2_ship.md`, real date, not the session
+prompt's literal `2026-11-14` placeholder, matching 46A's own precedent in this folder and
+the house date-prefix rule. Not committed or tagged; commit and tag commands for `v0.2.0`
+printed for Wilco, per the session prompt's own stop-before-tagging instruction.
+
 ## 2026-09-23, 46A: release candidate, Done-when and VERIFY pass
 
 Ran with two Claude Code sessions, one Cowork session and two Codex sessions genuinely
