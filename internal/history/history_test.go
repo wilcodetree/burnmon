@@ -82,11 +82,19 @@ func TestBuildWeekAndMonth(t *testing.T) {
 		if row.Tokens != wantTokens {
 			t.Errorf("week %s: tokens = %d, want %d", row.Key, row.Tokens, wantTokens)
 		}
-		if row.CostNote != "tokens only until v0.3" {
-			t.Errorf("week %s: cost_note = %q, want the v0.3 note (vendor=All never shows cost)", row.Key, row.CostNote)
+		// V3-1's headline cost function sums every covered vendor present,
+		// not just a single vendor filter (C3/K3: replaces v0.2's "tokens
+		// only until v0.3" All-vendor gate). claude-sonnet-5's book: in 2.0,
+		// out 10.0; gpt-6-astra's book: in 10.0, out 50.0, USD/MTok.
+		wantWeekCost := (1000.0*2.0+200.0*10.0)/1e6 + (500.0*10.0+100.0*50.0)/1e6
+		if row.CostNote != "" {
+			t.Errorf("week %s: cost_note = %q, want none (both vendors are covered)", row.Key, row.CostNote)
 		}
-		if row.CostUSD != nil {
-			t.Errorf("week %s: cost_usd = %v, want nil when vendor is All", row.Key, *row.CostUSD)
+		if row.CostUSD == nil {
+			t.Fatalf("week %s: cost_usd is nil, want %v", row.Key, wantWeekCost)
+		}
+		if diff := *row.CostUSD - wantWeekCost; diff > 1e-9 || diff < -1e-9 {
+			t.Errorf("week %s: cost_usd = %v, want %v", row.Key, *row.CostUSD, wantWeekCost)
 		}
 	}
 	if payload.Totals.Sessions != 6 {
@@ -105,8 +113,9 @@ func TestBuildWeekAndMonth(t *testing.T) {
 	if claudeOnly.Totals.CostUSD == nil {
 		t.Fatal("claude-code totals: cost_usd is nil, want a figure (anthropic is a covered vendor)")
 	}
-	// sonnet: in 3.0, out 15.0 USD/Mtok; one call/week x 3 weeks, 1000 input + 200 output.
-	wantCostPerCall := (1000.0*3.0 + 200.0*15.0) / 1e6
+	// claude-sonnet-5 book: in 2.0, out 10.0 USD/Mtok; one call/week x 3
+	// weeks, 1000 input + 200 output.
+	wantCostPerCall := (1000.0*2.0 + 200.0*10.0) / 1e6
 	wantTotalCost := wantCostPerCall * 3
 	if diff := *claudeOnly.Totals.CostUSD - wantTotalCost; diff > 1e-9 || diff < -1e-9 {
 		t.Errorf("claude-code total cost_usd = %v, want %v", *claudeOnly.Totals.CostUSD, wantTotalCost)
@@ -153,5 +162,73 @@ func TestBuildOwnerFilter(t *testing.T) {
 	}
 	if len(payload.Owners) != 2 || payload.Owners[0] != "Valona" || payload.Owners[1] != "ZND" {
 		t.Errorf("owners = %+v, want [Valona ZND] (every owner seen, unfiltered)", payload.Owners)
+	}
+}
+
+// TestBuildNoBookVendorIsTokensOnly guards the replacement text (K3/C3: "or
+// 'tokens only' for vendors without a book"): Hermes ("nous") has no price
+// book at all, so both the note and the fallback text read "tokens only",
+// never the stale v0.2 "until v0.3" placeholder.
+func TestBuildNoBookVendorIsTokensOnly(t *testing.T) {
+	cfg := pricing.Defaults()
+	at := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
+	events := []schema.Event{
+		{Vendor: "nous", Agent: "hermes", SessionID: "h1", RequestID: "r1", At: at, Model: "hermes-1", Input: 100, Output: 50},
+	}
+	payload := Build(events, &cfg, Filter{Period: "day", From: "2026-09-01", To: "2026-09-30"})
+	if payload.Totals.CostUSD != nil {
+		t.Fatalf("Totals.CostUSD = %v, want nil (no vendor covered)", *payload.Totals.CostUSD)
+	}
+	if payload.Totals.CostNote != "tokens only" {
+		t.Errorf("Totals.CostNote = %q, want %q", payload.Totals.CostNote, "tokens only")
+	}
+	if len(payload.Rows) != 1 || payload.Rows[0].CostNote != "tokens only" {
+		t.Errorf("Rows = %+v, want one row noted %q", payload.Rows, "tokens only")
+	}
+}
+
+// TestBuildClientFilterAndRows guards K3's client filter (narrows Totals the
+// same way Owner does) and ClientRows (the per-client table, unaffected by
+// the client filter itself, so both clients stay visible for comparison).
+func TestBuildClientFilterAndRows(t *testing.T) {
+	cfg := pricing.Defaults()
+	at := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
+	events := []schema.Event{
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", RequestID: "r1", At: at, Model: "claude-sonnet-5", Input: 1000, Output: 200, Client: "Talon"},
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s2", RequestID: "r2", At: at.Add(time.Hour), Model: "claude-sonnet-5", Input: 500, Output: 100, Client: "OtherCo"},
+	}
+	filter := Filter{Period: "day", Client: "Talon", From: "2026-09-01", To: "2026-09-30"}
+	payload := Build(events, &cfg, filter)
+
+	if payload.Totals.Sessions != 1 {
+		t.Fatalf("Totals.Sessions = %d, want 1 (client filter must exclude OtherCo's session)", payload.Totals.Sessions)
+	}
+	if len(payload.Clients) != 2 || payload.Clients[0] != "OtherCo" || payload.Clients[1] != "Talon" {
+		t.Errorf("Clients = %+v, want [OtherCo Talon] (every client seen, unfiltered by Filter.Client)", payload.Clients)
+	}
+	if len(payload.ClientRows) != 2 {
+		t.Fatalf("ClientRows = %+v, want 2 (both clients, the row table ignores Filter.Client)", payload.ClientRows)
+	}
+	byClient := map[string]ClientRow{}
+	for _, r := range payload.ClientRows {
+		byClient[r.Client] = r
+	}
+	talon := byClient["Talon"]
+	if talon.Sessions != 1 {
+		t.Errorf("Talon row sessions = %d, want 1", talon.Sessions)
+	}
+	if talon.Tokens != 1200 {
+		t.Errorf("Talon row tokens = %d, want 1200", talon.Tokens)
+	}
+	if talon.CostUSD == nil {
+		t.Fatal("Talon row cost_usd is nil, want a figure (anthropic is covered)")
+	}
+	wantCost := (1000.0*2.0 + 200.0*10.0) / 1e6
+	if diff := *talon.CostUSD - wantCost; diff > 1e-9 || diff < -1e-9 {
+		t.Errorf("Talon row cost_usd = %v, want %v", *talon.CostUSD, wantCost)
+	}
+	other := byClient["OtherCo"]
+	if other.Sessions != 1 || other.Tokens != 600 {
+		t.Errorf("OtherCo row = %+v, want sessions=1 tokens=600", other)
 	}
 }

@@ -246,3 +246,34 @@ func TestLoadV02ConfigWithOwnersOnlyIsUnchanged(t *testing.T) {
 		t.Fatalf("ClientFor = %q, want unassigned (no client set on any v0.2 rule)", got)
 	}
 }
+
+// TestLoadModeAndCopilotPlan guards C3/K3's two new burnmon.json fields:
+// "mode" (the header toggle's start state) and "copilot_plan" (which of the
+// credit book's tiers the account is actually on).
+func TestLoadModeAndCopilotPlan(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "burnmon.json")
+	j := `{"mode": "business", "copilot_plan": "Pro"}`
+	if err := os.WriteFile(path, []byte(j), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.BusinessMode() {
+		t.Error("BusinessMode() = false, want true with mode:\"business\"")
+	}
+	if cfg.CopilotPlan != "Pro" {
+		t.Errorf("CopilotPlan = %q, want %q", cfg.CopilotPlan, "Pro")
+	}
+}
+
+// TestDefaultsAreDevMode guards the default: no "mode" key at all means dev,
+// same as an explicit "dev".
+func TestDefaultsAreDevMode(t *testing.T) {
+	cfg := Defaults()
+	if cfg.BusinessMode() {
+		t.Error("BusinessMode() = true for compiled-in defaults, want false (dev is the default)")
+	}
+}

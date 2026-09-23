@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"burnmon/internal/pricing"
 	"burnmon/internal/store"
 )
 
@@ -32,11 +33,25 @@ type Row struct {
 	Month      int64  `json:"month"`
 }
 
+// CreditsLeft is C3/K3's account-wide "credits left" figure, present only
+// when Config.CopilotPlan names a plan the credit book covers.
+type CreditsLeft struct {
+	Plan           string  `json:"plan"`
+	MonthlyCredits float64 `json:"monthly_credits"`
+	Left           float64 `json:"left"`
+}
+
 // Payload is bmVendorStrip's return value.
 type Payload struct {
 	GeneratedAt string `json:"generated_at"`
 	Rows        []Row  `json:"rows"`
 	Total       Row    `json:"total"`
+	// CopilotCreditsLeft is refreshed on the same 1-minute cadence as the
+	// rest of this payload (rather than bmLive's 2-second poll, or a fourth
+	// backend call the business-mode card would otherwise need): an
+	// account-wide plan balance does not need sub-minute freshness. nil when
+	// Config.CopilotPlan is unset or unknown.
+	CopilotCreditsLeft *CreditsLeft `json:"copilot_credits_left,omitempty"`
 }
 
 // dayStart, weekStart and monthStart are UTC calendar boundaries: dayStart is
@@ -63,8 +78,9 @@ func monthStart(now time.Time) time.Time {
 
 // Build runs store.VendorStripTotals (one SQL query, grouped by agent) and
 // shapes it into Payload, sorted by AgentLabel and with the total row summed
-// across every vendor.
-func Build(st *store.Store, now time.Time) (Payload, error) {
+// across every vendor. cfg (added C3/K3) is only used for CopilotCreditsLeft
+// below; the token totals themselves are unaffected by it.
+func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error) {
 	totals, err := st.VendorStripTotals(dayStart(now), weekStart(now), monthStart(now))
 	if err != nil {
 		return Payload{}, err
@@ -86,9 +102,34 @@ func Build(st *store.Store, now time.Time) (Payload, error) {
 
 	sort.Slice(rows, func(i, j int) bool { return rows[i].AgentLabel < rows[j].AgentLabel })
 
-	return Payload{
+	p := Payload{
 		GeneratedAt: now.UTC().Format(time.RFC3339),
 		Rows:        rows,
 		Total:       total,
-	}, nil
+	}
+	if cl, ok := creditsLeftForMonth(st, cfg, now); ok {
+		p.CopilotCreditsLeft = &cl
+	}
+	return p, nil
+}
+
+// creditsLeftForMonth re-reads this calendar month's events (a second query
+// beyond VendorStripTotals: the credits calculation needs cache-write/read
+// splits per event, which the token-sum SQL aggregate above does not carry)
+// and runs cfg.CopilotCreditsLeft over them. Only called at all when
+// Config.CopilotPlan is set, so a burnmon.json with no Copilot plan
+// configured never pays this extra query.
+func creditsLeftForMonth(st *store.Store, cfg *pricing.Config, now time.Time) (CreditsLeft, bool) {
+	if cfg == nil || cfg.CopilotPlan == "" {
+		return CreditsLeft{}, false
+	}
+	events, err := st.EventsSince(monthStart(now))
+	if err != nil {
+		return CreditsLeft{}, false
+	}
+	left, plan, ok := cfg.CopilotCreditsLeft(events)
+	if !ok {
+		return CreditsLeft{}, false
+	}
+	return CreditsLeft{Plan: cfg.CopilotPlan, MonthlyCredits: plan.MonthlyCredits, Left: left}, true
 }

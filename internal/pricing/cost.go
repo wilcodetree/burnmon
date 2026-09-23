@@ -20,12 +20,16 @@ const (
 
 // BasisCost is one cost figure on one Basis. Credits is only meaningful when
 // Basis is BasisCredits (the same total, expressed in the vendor's own
-// credit unit rather than USD).
+// credit unit rather than USD). JSON tags added in v0.3 C3 (live.Session's
+// BusinessCost is the first field to carry this over the wire to the
+// template): every other exported struct in this codebase uses explicit
+// snake_case tags, so this matches rather than falling back to Go's default
+// capitalised field names.
 type BasisCost struct {
-	Basis   Basis
-	Label   string
-	USD     float64
-	Credits float64
+	Basis   Basis   `json:"basis"`
+	Label   string  `json:"label"`
+	USD     float64 `json:"usd"`
+	Credits float64 `json:"credits,omitempty"`
 }
 
 // VendorCost is CostForEvents' per-vendor result: every basis that vendor's
@@ -34,9 +38,9 @@ type BasisCost struct {
 // book at all covers the vendor ("tokens only": Hermes today, and any future
 // vendor with no book).
 type VendorCost struct {
-	Vendor   string
-	Bases    []BasisCost
-	Headline *BasisCost
+	Vendor   string      `json:"vendor"`
+	Bases    []BasisCost `json:"bases"`
+	Headline *BasisCost  `json:"headline,omitempty"`
 }
 
 // SubscriptionConfigured reports whether Subscription carries a real
@@ -222,6 +226,27 @@ func (c *Config) copilotCreditCostUSD(events []schema.Event) float64 {
 			float64(e.Output)*rate.Out) / 1e6
 	}
 	return total
+}
+
+// CopilotCreditsLeft is C3/K3's "credits left where the book knows them":
+// Config.CopilotPlan's monthly credit allotment (CreditPlan.MonthlyCredits)
+// minus the credits already spent across every github-vendor event in
+// monthEvents (normally the current calendar month's events, any vendor:
+// copilotCreditCostUSD itself ignores non-github events). ok is false, and
+// left/plan are zero, when CopilotPlan is unset or names a tier the book
+// does not carry: the caller shows no line at all rather than a guessed
+// number, per the decision this session (SESSION_LOG.md).
+func (c *Config) CopilotCreditsLeft(monthEvents []schema.Event) (left float64, plan CreditPlan, ok bool) {
+	if c.CopilotPlan == "" {
+		return 0, CreditPlan{}, false
+	}
+	plan, ok = c.CopilotCredits.Plans[c.CopilotPlan]
+	if !ok {
+		return 0, CreditPlan{}, false
+	}
+	usedUSD := c.copilotCreditCostUSD(monthEvents)
+	usedCredits := usedUSD / c.CopilotCredits.creditUSD()
+	return plan.MonthlyCredits - usedCredits, plan, true
 }
 
 func (b CreditBook) creditUSD() float64 {

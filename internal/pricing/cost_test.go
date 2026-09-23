@@ -191,6 +191,59 @@ func TestCostForEvents_UnknownModelPricesZero(t *testing.T) {
 	}
 }
 
+// TestCopilotCreditsLeft_NoPlanConfigured guards the "no guessed number"
+// rule: CopilotPlan unset means ok=false regardless of events.
+func TestCopilotCreditsLeft_NoPlanConfigured(t *testing.T) {
+	cfg := Defaults()
+	_, _, ok := cfg.CopilotCreditsLeft([]schema.Event{copilotEvent("claude-sonnet-5")})
+	if ok {
+		t.Fatal("CopilotCreditsLeft ok = true with no CopilotPlan configured, want false")
+	}
+}
+
+// TestCopilotCreditsLeft_UnknownPlan guards a CopilotPlan naming a tier the
+// book does not carry (a typo, or a plan since retired): ok=false, not a
+// panic or a zero-vs-unset ambiguity.
+func TestCopilotCreditsLeft_UnknownPlan(t *testing.T) {
+	cfg := Defaults()
+	cfg.CopilotPlan = "Nonexistent"
+	_, _, ok := cfg.CopilotCreditsLeft([]schema.Event{copilotEvent("claude-sonnet-5")})
+	if ok {
+		t.Fatal("CopilotCreditsLeft ok = true for an unknown plan, want false")
+	}
+}
+
+// TestCopilotCreditsLeft_Configured guards the real calculation: the
+// configured plan's MonthlyCredits minus this month's github-vendor spend
+// (1470 credits, per TestCostForEvents_CopilotCreditsBasis's own fixture),
+// non-github events in the same slice contributing nothing.
+func TestCopilotCreditsLeft_Configured(t *testing.T) {
+	cfg := Defaults()
+	planName := ""
+	var wantMonthly float64
+	for name, p := range cfg.CopilotCredits.Plans {
+		planName, wantMonthly = name, p.MonthlyCredits
+		break
+	}
+	if planName == "" {
+		t.Skip("no Copilot plan in the compiled-in book to test against")
+	}
+	cfg.CopilotPlan = planName
+
+	events := []schema.Event{copilotEvent("claude-sonnet-5"), anthropicEvent("claude-sonnet-5")}
+	left, plan, ok := cfg.CopilotCreditsLeft(events)
+	if !ok {
+		t.Fatal("CopilotCreditsLeft ok = false with a configured, known plan")
+	}
+	if plan.MonthlyCredits != wantMonthly {
+		t.Fatalf("plan.MonthlyCredits = %v, want %v", plan.MonthlyCredits, wantMonthly)
+	}
+	wantLeft := wantMonthly - 1470.0
+	if diff := left - wantLeft; diff > 1e-6 || diff < -1e-6 {
+		t.Fatalf("left = %v, want %v", left, wantLeft)
+	}
+}
+
 func hasBasis(vcs []VendorCost, vendor string, basis Basis) (BasisCost, bool) {
 	for _, vc := range vcs {
 		if vc.Vendor != vendor {

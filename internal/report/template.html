@@ -98,6 +98,10 @@ tr.flag td:first-child{border-left:3px solid var(--sun)}
 .note{font-size:12.5px;color:var(--muted);background:var(--merc-l);border-left:3px solid var(--pine-40);padding:11px 14px;border-radius:0 6px 6px 0;margin:14px 0}
 .note.warn{border-left-color:var(--sun);background:var(--sun-20);color:var(--ink)}
 .note b{color:var(--ink)}
+/* U2 (v0.3): a chartbox's own loading overlay, shown until the first poll
+   resolves, removed by JS on first successful draw. */
+.chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--muted);background:var(--merc-l);border-radius:10px}
+.skeleton-card{background:var(--merc-l);border:1px solid var(--merc);border-radius:10px;padding:14px;color:var(--muted);font-size:12.5px}
 .pill{display:inline-block;font-family:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--merc);color:var(--muted);white-space:nowrap}
 .pill.sun{background:var(--sun);color:var(--accent-ink)}
 .pill.lav{background:var(--lav-l);color:var(--ink)}
@@ -193,6 +197,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   </div>
   <div class="topright">
     <div class="topctrls">
+      <button id="btn_mode" class="tglbtn" type="button" title="Dev or business view">Dev</button>
       <button id="btn_theme" class="tglbtn" type="button" title="Theme">Dark</button>
     </div>
     <div class="stamp" id="stamp"></div>
@@ -211,27 +216,30 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 <div class="wrap">
 
 <section id="now">
-  <p class="lede">Running Claude Code, Cowork and Codex sessions, live. Polls every 2 seconds while this window is open; a saved report has nothing to poll.</p>
-  <div id="now_empty" class="note hidden"></div>
+  <div id="now_empty" class="note">Loading&hellip;</div>
 
   <h2>Live burn, last 30 minutes</h2>
-  <div class="chartbox"><canvas id="ch_now"></canvas></div>
+  <div class="chartbox"><div class="chart-loading" id="ch_now_loading">Loading&hellip;</div><canvas id="ch_now"></canvas></div>
+  <!-- U1 (v0.3): the "no running sessions" notice lives here, one small
+       line under the chart, not a panel above it. -->
+  <div id="now_no_sessions" class="small hidden" style="margin:6px 0 0;color:var(--muted)"></div>
 
-  <div class="grid now-cards" id="now_cards"></div>
+  <div class="grid now-cards" id="now_cards"><div class="skeleton-card">Loading sessions&hellip;</div></div>
 
   <h2>Vendor strip</h2>
-  <div id="vs_empty" class="note hidden"></div>
+  <div id="vs_empty" class="note">Loading&hellip;</div>
   <div class="scroll"><table id="t_vendorstrip"><thead><tr>
     <th class="nosort">Vendor</th><th>Today</th><th>This week</th><th>This month</th>
   </tr></thead><tbody></tbody></table></div>
+  <div id="vs_credits_left" class="small hidden" style="margin-top:6px"></div>
 
   <h2>Turn ticker</h2>
   <p class="lede" style="margin-top:-8px">Newest first, capped at 50 lines. Click a line, or a marker on the chart above, for the full turn detail.</p>
   <div id="now_ticker"></div>
 
   <h2>Forecast</h2>
-  <div id="now_forecast_note" class="note hidden"></div>
-  <div class="chartbox" id="now_forecast_chartbox"><canvas id="ch_forecast"></canvas></div>
+  <div id="now_forecast_note" class="note">Loading&hellip;</div>
+  <div class="chartbox" id="now_forecast_chartbox"><div class="chart-loading" id="ch_forecast_loading">Loading&hellip;</div><canvas id="ch_forecast"></canvas></div>
   <div class="card plain" id="now_forecast"></div>
 </section>
 
@@ -255,6 +263,9 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
       <label style="margin-left:6px">To</label><input type="date" id="h_to"></div>
     <div><label>Vendor</label><select id="h_vendor"><option value="">All</option></select></div>
     <div id="h_owner_wrap" class="hidden"><label>Owner</label><select id="h_owner"><option value="">All</option></select></div>
+    <!-- K3 (v0.3): client filter next to owner, hidden while no client rule
+         exists, same convention as h_owner_wrap. -->
+    <div id="h_client_wrap" class="hidden"><label>Client</label><select id="h_client"><option value="">All</option></select></div>
   </div>
 
   <div id="h_empty" class="note hidden"></div>
@@ -267,6 +278,15 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   <div class="scroll"><table id="t_history"><thead><tr>
     <th class="nosort">Period</th><th>Sessions</th><th>Turns</th><th>Tokens</th><th>Cost</th>
   </tr></thead><tbody></tbody></table></div>
+
+  <!-- K3 (v0.3): per-client table, business mode only, hidden while no
+       client rule exists. -->
+  <div id="h_clients_wrap" class="hidden">
+    <h2>Per client</h2>
+    <div class="scroll"><table id="t_history_clients"><thead><tr>
+      <th class="nosort">Client</th><th>Tokens</th><th>Headline cost</th><th>Active time</th><th>Sessions</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
 </section>
 
 <!-- Overview is no longer on the tab bar (v0.2 P1); its markup and render functions
@@ -324,6 +344,7 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
     <div><label>Search title</label><input type="text" id="f_q" placeholder="e.g. hub, sprint, invoice" style="width:200px"></div>
     <div><label>Only marathon sessions</label><select id="f_long"><option value="">No</option><option value="1">Yes</option></select></div>
     <div id="f_owner_wrap" class="hidden"><label>Owner</label><select id="f_owner"><option value="">All</option></select></div>
+    <div id="f_client_wrap" class="hidden"><label>Client</label><select id="f_client"><option value="">All</option></select></div>
     <div style="flex:1"></div>
     <div class="small" id="s_count"></div>
   </div>
@@ -331,7 +352,8 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
     <th data-s="start">Started</th><th data-s="title">What it was</th><th data-s="surface">Surface</th>
     <th class="nosort">Models</th><th data-s="calls">Calls</th><th data-s="tokens">Tokens</th>
     <th data-s="cost_per_call">Per call</th><th data-s="cost">Cost</th>
-    <th data-s="owner" class="col-owner hidden">Owner</th><th class="nosort">Findings</th>
+    <th data-s="owner" class="col-owner hidden">Owner</th>
+    <th data-s="client" class="col-client hidden">Client</th><th class="nosort">Findings</th>
   </tr></thead><tbody></tbody><tfoot></tfoot></table></div>
 </section>
 
@@ -345,6 +367,11 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 </section>
 
 <section id="about" class="hidden">
+  <h2>The Now page</h2>
+  <!-- U1 (v0.3): moved off the Now tab itself, which no longer carries an
+       intro paragraph above the chart. -->
+  <p class="lede">Running Claude Code, Cowork and Codex sessions, live. Polls every 2 seconds while this window is open; a saved report has nothing to poll.</p>
+
   <h2>How Claude is paid for, in plain words</h2>
   <p class="lede">Anthropic explains this in about six different places and never all at once. Here it is in one go. Nothing below is specific to you, so it is safe to share.</p>
 
@@ -491,16 +518,31 @@ catch(e){ document.querySelector('.wrap').innerHTML =
   '<div class="note warn" style="margin-top:20px"><b>No usage data embedded.</b> Run the extract script and republish.</div>'; return; }
 
 var LS = 'claude-cost-user-v1';
-var UI = {cur:'eur', fx:0.92, basis:'sub', sort:'start', dir:-1, theme:'dark', f:{surface:'',month:'',q:'',long:'',owner:''}};
+// UI.mode (C3): starts from D.mode (burnmon.json's "mode", Talon's config),
+// "business" or anything else meaning "dev"; a persisted per-machine choice
+// below overrides that start state on every later load, the same pattern
+// UI.theme already uses.
+var UI = {cur:'eur', fx:0.92, basis:'sub', sort:'start', dir:-1, theme:'dark',
+  mode:(D.mode === 'business' ? 'business' : 'dev'),
+  f:{surface:'',month:'',q:'',long:'',owner:'',client:''}};
 try { var st = JSON.parse(localStorage.getItem(LS)||'null');
   if(st){ UI.cur = st.cur||UI.cur; UI.fx = st.fx>0?st.fx:UI.fx; UI.basis = st.basis||UI.basis;
-    UI.theme = st.theme||UI.theme; } } catch(e){}
+    UI.theme = st.theme||UI.theme; UI.mode = st.mode||UI.mode; } } catch(e){}
 function persist(){ try{ localStorage.setItem(LS, JSON.stringify(
-  {cur:UI.cur, fx:UI.fx, basis:UI.basis, theme:UI.theme})); }catch(e){} }
+  {cur:UI.cur, fx:UI.fx, basis:UI.basis, theme:UI.theme, mode:UI.mode})); }catch(e){} }
+// isBusiness (C3): the one place every business-mode branch below reads
+// from, so "Every number on the Now page flips" is one boolean, not a
+// scattered string compare.
+function isBusiness(){ return UI.mode === 'business'; }
 var SUB = D.subscription || {};
 
 var SL = D.surface_labels || {};
 var charts = {};
+// LAST_NOW_SNAP, LAST_VENDOR_STRIP and LAST_FORECAST cache each poll's own
+// payload (C3): toggling the mode button re-renders instantly from whatever
+// last arrived instead of waiting up to a full poll cycle (2s/60s/60s) for
+// the numbers to flip.
+var LAST_NOW_SNAP = null, LAST_VENDOR_STRIP = null, LAST_FORECAST = null, LAST_HISTORY = null;
 // nowChart holds drawNowChart's state across polls (F8, SESSION_LOG.md,
 // v0.1.2): the Now chart is one Chart.js instance for the life of the page,
 // so per-session dataset objects, colors and the smoothed axis maxima have
@@ -653,6 +695,9 @@ function tok(v){
 // keeps using tok() unchanged.
 function tokPrecise(v){
   v = v||0;
+  // U2 (v0.3): an empty axis tick used to read "0.00K" (fell through to the
+  // K branch below); zero is its own case now, same as tok()'s.
+  if(v === 0) return '0';
   if(v>=1e9) return (v/1e9).toFixed(2)+'B';
   if(v>=1e6) return (v/1e6).toFixed(2)+'M';
   return (v/1e3).toFixed(2)+'K';
@@ -660,6 +705,23 @@ function tokPrecise(v){
 function n(v){ return (v||0).toLocaleString('en-GB'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){
   return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+// waitForBinding (U2, v0.3): go-webview2 injects window.bm* bound functions
+// asynchronously, after this script has already started running; pollNow,
+// pollVendorStrip and pollForecast used to check "typeof window.bmX ===
+// 'function'" exactly once, immediately, so the very first poll in the real
+// app window (not just a saved report) routinely lost that race and showed
+// "only available in the BurnMon app window, not in a saved report" for a
+// moment on every startup. Retries every 150ms for up to 6s before finally
+// calling notFound(): long enough for WebView2's own binding injection,
+// short enough that a genuine saved report (bindings that will never
+// appear) still resolves to that text at a reasonable time.
+function waitForBinding(name, ready, notFound, attempt){
+  attempt = attempt || 0;
+  if(typeof window[name] === 'function'){ ready(); return; }
+  if(attempt >= 40){ notFound(); return; }
+  setTimeout(function(){ waitForBinding(name, ready, notFound, attempt+1); }, 150);
+}
 function monthLabel(k){
   var p = k.split('-'), names = MONTH_NAMES.en;
   return names[parseInt(p[1],10)-1] + ' ' + p[0];
@@ -961,6 +1023,7 @@ function renderSessions(){
     if(f.month && !(s.start.slice(0,7) <= f.month && f.month <= s.end.slice(0,7))) return false;
     if(f.long && !s.long) return false;
     if(f.owner && s.owner !== f.owner) return false;
+    if(f.client && s.client !== f.client) return false;
     if(f.q && s.title.toLowerCase().indexOf(f.q.toLowerCase()) === -1) return false;
     return true;
   });
@@ -995,18 +1058,19 @@ function renderSessions(){
       + '<td>'+money(pickCall(s),3)+'</td>'
       + '<td><b>'+money(pick(s),2)+'</b></td>'
       + '<td class="col-owner hidden">'+esc(s.owner||'')+'</td>'
+      + '<td class="col-client hidden">'+esc(s.client||'')+'</td>'
       + '<td class="col-findings" data-session="'+esc(s.session_id)+'"><span class="small">&hellip;</span></td>';
     tb.appendChild(tr);
 
     var dr = document.createElement('tr');
     dr.className = 'finding-row hidden';
     dr.setAttribute('data-session', s.session_id);
-    dr.innerHTML = '<td colspan="10" class="small">Loading findings&hellip;</td>';
+    dr.innerHTML = '<td colspan="11" class="small">Loading findings&hellip;</td>';
     tb.appendChild(dr);
   });
-  if(!ss.length) tb.innerHTML = '<tr><td colspan="10" class="small">'+t('no_sessions_match')+'</td></tr>';
+  if(!ss.length) tb.innerHTML = '<tr><td colspan="11" class="small">'+t('no_sessions_match')+'</td></tr>';
   document.querySelector('#t_sessions tfoot').innerHTML = ss.length
-    ? '<tr><td>'+t('sessions_count',{n:ss.length})+'</td><td></td><td></td><td></td><td>'+n(tcalls)+'</td><td>'+tok(tt)+'</td><td>'+(tcalls?money(tc/tcalls,3):'n/a')+'</td><td>'+money(tc)+'</td><td class="col-owner hidden"></td><td></td></tr>' : '';
+    ? '<tr><td>'+t('sessions_count',{n:ss.length})+'</td><td></td><td></td><td></td><td>'+n(tcalls)+'</td><td>'+tok(tt)+'</td><td>'+(tcalls?money(tc/tcalls,3):'n/a')+'</td><td>'+money(tc)+'</td><td class="col-owner hidden"></td><td class="col-client hidden"></td><td></td></tr>' : '';
   document.getElementById('s_count').textContent = t('sessions_shown', {shown: ss.length, total: (D.sessions||[]).length});
   applyOwnerColumnVisibility();
   // A page load (every Refresh, tick or Settings save reloads the page)
@@ -1173,15 +1237,23 @@ function applyOwnerColumnVisibility(){
     el.classList.toggle('hidden', !hasOwner);
   });
   document.getElementById('f_owner_wrap').classList.toggle('hidden', !hasOwner);
+  // K3: the client column and filter follow the same "hidden while no rule
+  // exists" convention as owner, above.
+  var hasClient = (D.sessions||[]).some(function(s){ return !!s.client; });
+  document.querySelectorAll('#t_sessions .col-client').forEach(function(el){
+    el.classList.toggle('hidden', !hasClient);
+  });
+  document.getElementById('f_client_wrap').classList.toggle('hidden', !hasClient);
 }
 
 function buildFilters(){
-  var surfaces = {}, months = {}, owners = {};
+  var surfaces = {}, months = {}, owners = {}, clients = {};
   // A long-running session should offer every month it touched, not just the
   // one it started in, so the Month filter matches renderSessions' span test.
   (D.sessions||[]).forEach(function(s){
     surfaces[s.surface] = 1;
     if(s.owner) owners[s.owner] = 1;
+    if(s.client) clients[s.client] = 1;
     var a = s.start.slice(0,7), b = s.end.slice(0,7) || a;
     var y = +a.slice(0,4), mo = +a.slice(5,7);
     for(var guard=0; guard<120; guard++){
@@ -1200,9 +1272,12 @@ function buildFilters(){
   var fo = document.getElementById('f_owner');
   Object.keys(owners).sort().forEach(function(k){
     fo.insertAdjacentHTML('beforeend', '<option value="'+esc(k)+'">'+esc(k)+'</option>'); });
+  var fc = document.getElementById('f_client');
+  Object.keys(clients).sort().forEach(function(k){
+    fc.insertAdjacentHTML('beforeend', '<option value="'+esc(k)+'">'+esc(k)+'</option>'); });
   applyOwnerColumnVisibility();
 
-  ['f_surface','f_month','f_long','f_owner'].forEach(function(id){
+  ['f_surface','f_month','f_long','f_owner','f_client'].forEach(function(id){
     document.getElementById(id).addEventListener('change', function(){
       UI.f[id.slice(2)] = this.value; renderSessions(); });
   });
@@ -1304,7 +1379,9 @@ function gaugeColor(pct){
   return 'var(--sun)';
 }
 
-function sessionCardHTML(s, isSub){
+// sessionCardDevBody is the Now card's dev-mode body (C3's table: "context
+// fill, tokens, cache hit ratio"), unchanged from before v0.3.
+function sessionCardDevBody(s){
   // F5: never clamp. A known window with actual context past it means the
   // book is stale or wrong for this model, and that must stay visible, not
   // be hidden behind a false 100%.
@@ -1321,18 +1398,47 @@ function sessionCardHTML(s, isSub){
     gaugeHtml = '<div class="gauge"><i style="width:'+pct.toFixed(0)+'%;background:'+gaugeColor(pct)+'"></i></div>'
       + '<div class="small">'+tok(s.context)+' / '+tok(s.context_window)+' tokens ('+pct.toFixed(0)+'%)</div>';
   }
+  return gaugeHtml
+    + '<div class="small">'+tok(s.tokens)+' tokens this session &middot; '+money(s.cost||0)+' &middot; cache hit '+Math.round((s.cache_hit_ratio||0)*100)+'%</div>'
+    + '<div class="small">turn '+n(s.turn_count||0)+' &middot; last turn '+relTimeFrom(s.last_turn)+'</div>'
+    + '<div class="small">'+esc(s.runway||'runway unknown')+'</div>';
+}
+
+// sessionCardBusinessBody is C3's business-mode card body (the table's other
+// column: "cost so far, plan credits left, client"): the headline basis in
+// euros with its basis named next to it, GitHub Copilot's account-wide
+// credits left when a plan is configured (module-scope LAST_VENDOR_STRIP,
+// refreshed on vendorstrip's own 1-minute poll), and the client.
+function sessionCardBusinessBody(s){
+  var costHtml;
+  if(s.business_cost){
+    costHtml = '<div class="v" style="font-size:15px">'+money(s.business_cost.usd||0)+'</div>'
+      + '<div class="small">'+esc(s.business_cost.label||'')+'</div>';
+  } else {
+    costHtml = '<div class="small">tokens only</div>';
+  }
+  var creditsHtml = '';
+  var cl = LAST_VENDOR_STRIP && LAST_VENDOR_STRIP.copilot_credits_left;
+  if(cl && s.vendor === 'github'){
+    creditsHtml = '<div class="small">'+n(Math.round(cl.left))+' of '+n(Math.round(cl.monthly_credits))
+      + ' credits left ('+esc(cl.plan)+')</div>';
+  }
+  var clientHtml = s.client ? '<div class="small">Client: '+esc(s.client)+'</div>' : '';
+  return costHtml + creditsHtml + clientHtml
+    + '<div class="small">turn '+n(s.turn_count||0)+' &middot; last turn '+relTimeFrom(s.last_turn)+'</div>';
+}
+
+function sessionCardHTML(s, isSub){
   var subHtml = '';
   if(s.subagents && s.subagents.length){
     subHtml = '<div class="sub-cards">' + s.subagents.map(function(sub){ return sessionCardHTML(sub, true); }).join('') + '</div>';
   }
+  var body = isBusiness() ? sessionCardBusinessBody(s) : sessionCardDevBody(s);
   return '<div class="card plain now-card"'+(isSub?' style="padding:10px 12px"':'')+'>'
     + '<div class="k">'+esc(s.agent||'')+' &middot; '+esc(s.surface||'')+'</div>'
     + '<div class="v" style="font-size:15px">'+esc(s.model||'')+'</div>'
     + '<div class="small">'+esc(baseName(s.project))+'</div>'
-    + gaugeHtml
-    + '<div class="small">'+tok(s.tokens)+' tokens this session &middot; '+money(s.cost||0)+' &middot; cache hit '+Math.round((s.cache_hit_ratio||0)*100)+'%</div>'
-    + '<div class="small">turn '+n(s.turn_count||0)+' &middot; last turn '+relTimeFrom(s.last_turn)+'</div>'
-    + '<div class="small">'+esc(s.runway||'runway unknown')+'</div>'
+    + body
     + subHtml
     + '</div>';
 }
@@ -1343,6 +1449,8 @@ function sessionCardHTML(s, isSub){
 // around the live line. Tokens only, per the spec (euros are v0.3).
 function drawForecastChart(p){
   var box = document.getElementById('now_forecast_chartbox');
+  var loading = document.getElementById('ch_forecast_loading');
+  if(loading) loading.classList.add('hidden');
   if(typeof Chart === 'undefined'){ chartFallback('ch_forecast', 'Forecast'); return; }
   if(!p || p.locked || !p.plan || !p.plan.length){
     if(charts.forecast){ charts.forecast.destroy(); charts.forecast = null; }
@@ -1398,6 +1506,7 @@ function drawForecastChart(p){
 // scored week exists, otherwise the plan/live chart plus the end-of-day,
 // end-of-month and error-band figures in words.
 function renderNowForecast(p){
+  LAST_FORECAST = p;
   var note = document.getElementById('now_forecast_note');
   var el = document.getElementById('now_forecast');
   if(!note || !el) return;
@@ -1409,26 +1518,39 @@ function renderNowForecast(p){
     return;
   }
   note.classList.add('hidden');
+  // C3: business mode shows the same forecast in euros (cost_covered), with
+  // a "tokens only" fallback when no vendor in the window has a price book,
+  // same rule as History and Sessions.
+  var eodHtml, eomHtml;
+  if(isBusiness() && p.cost_covered){
+    eodHtml = 'End of day: ' + money(p.end_of_day_cost_usd||0);
+    eomHtml = 'end of month: ' + money(p.end_of_month_cost_usd||0);
+  } else if(isBusiness()){
+    eodHtml = 'End of day: tokens only';
+    eomHtml = 'end of month: tokens only';
+  } else {
+    eodHtml = 'End of day: ' + tok(p.end_of_day_tokens||0) + ' tokens';
+    eomHtml = 'end of month: ' + tok(p.end_of_month_tokens||0) + ' tokens';
+  }
   el.innerHTML = '<p class="small" style="margin:0">'
-    + 'End of day: ' + tok(p.end_of_day_tokens||0) + ' tokens &middot; '
-    + 'end of month: ' + tok(p.end_of_month_tokens||0) + ' tokens &middot; '
+    + eodHtml + ' &middot; ' + eomHtml + ' &middot; '
     + 'error band &plusmn;' + Math.round((p.error_band_pct||0)*100) + '% from '
     + n(p.scored_weeks||0) + ' scored week' + (p.scored_weeks===1?'':'s') + '.</p>';
 }
 
 function pollForecast(){
   var note = document.getElementById('now_forecast_note');
-  if(typeof window.bmForecast !== 'function'){
+  waitForBinding('bmForecast', function(){
+    Promise.resolve(window.bmForecast()).then(renderNowForecast).catch(function(e){
+      if(note){
+        note.classList.remove('hidden');
+        note.textContent = 'Could not load the forecast: ' + (e && e.message ? e.message : String(e));
+      }
+    });
+  }, function(){
     if(note){
       note.classList.remove('hidden');
       note.textContent = 'Forecast is only available in the BurnMon app window, not in a saved report.';
-    }
-    return;
-  }
-  Promise.resolve(window.bmForecast()).then(renderNowForecast).catch(function(e){
-    if(note){
-      note.classList.remove('hidden');
-      note.textContent = 'Could not load the forecast: ' + (e && e.message ? e.message : String(e));
     }
   });
 }
@@ -1570,6 +1692,8 @@ function nowChartOnClick(evt, elements, chart){
 }
 
 function drawNowChart(chart, sessions, turns){
+  var loading = document.getElementById('ch_now_loading');
+  if(loading) loading.classList.add('hidden');
   if(typeof Chart === 'undefined'){ chartFallback('ch_now', 'Live burn'); return; }
   chart = chart || [];
   try {
@@ -1671,6 +1795,13 @@ function drawNowChart(chart, sessions, turns){
           backgroundColor: color, borderColor: color, borderWidth:0};
         nowChart.datasetById[id] = ds;
       }
+      // C3: business mode hides the per-session token bars (a dev-mode
+      // detail) and shows the cost line below instead, "Live chart unit:
+      // ... euros per minute" per the dev/business table. Set on every draw,
+      // deliberately overriding a manual per-poll legend toggle: the mode
+      // switch is meant to flip this immediately, not wait for the viewer
+      // to re-click it.
+      ds.hidden = isBusiness();
       return ds;
     });
     // A session that fell out of the 30-minute window stops holding a
@@ -1684,12 +1815,15 @@ function drawNowChart(chart, sessions, turns){
     if(nowChart.costDataset){
       nowChart.costDataset.data = costData;
     } else {
-      // Hidden by default (v0.2 is tokens-only, cost stays an opt-in legend
-      // toggle here): click "Cost/min" in the legend to show it.
       nowChart.costDataset = {type:'line', label:'Cost/min', yAxisID:'cost', sessionId: null,
         data: costData, borderColor: P.blue3, backgroundColor:'transparent',
-        tension:0.4, cubicInterpolationMode:'monotone', pointRadius:0, hidden:true};
+        tension:0.4, cubicInterpolationMode:'monotone', pointRadius:0};
     }
+    // C3: dev mode keeps the cost line as an opt-in legend toggle (v0.2
+    // behaviour, tokens are the headline); business mode shows it by
+    // default and hides the token bars above, same override reasoning as
+    // ds.hidden.
+    nowChart.costDataset.hidden = !isBusiness();
     var datasets = barDatasets.concat([nowChart.costDataset]);
 
     // W7 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md): every
@@ -1713,7 +1847,7 @@ function drawNowChart(chart, sessions, turns){
     // "label: formattedValue" line, unchanged from before this rewrite.
     var tooltipLabel = function(ctx){
       if(ctx.dataset.yAxisID === 'y') return ctx.dataset.label + ': ' + tokPrecise(ctx.parsed.y);
-      return ctx.dataset.label + ': ' + ctx.formattedValue;
+      return ctx.dataset.label + ': ' + sym() + ctx.formattedValue;
     };
     var afterLabel = function(ctx){
       var cc = ctx.dataset.classBreakdown && ctx.dataset.classBreakdown[ctx.dataIndex];
@@ -1740,7 +1874,7 @@ function drawNowChart(chart, sessions, turns){
           interaction:{mode:'index', intersect:false},
           scales:{
             x:{grid:{display:true, color:P.grid}, ticks:{font:{size:11}, minRotation:tickRotation, maxRotation:tickRotation, autoSkip:false, callback: tickCallback}},
-            y:{beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}, ticks:{callback: function(v){ return tokPrecise(v); }}},
+            y:{display: !isBusiness(), beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}, ticks:{callback: function(v){ return tokPrecise(v); }}},
             // W8 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md):
             // display:'auto' is Chart.js's own built-in "show this axis
             // only while a visible dataset actually uses it" mode, so the
@@ -1761,6 +1895,7 @@ function drawNowChart(chart, sessions, turns){
       charts.now.options.scales.x.ticks.minRotation = tickRotation;
       charts.now.options.scales.x.ticks.maxRotation = tickRotation;
       charts.now.options.scales.y.max = nowChart.tokenMax;
+      charts.now.options.scales.y.display = !isBusiness();
       charts.now.options.scales.cost.max = nowChart.costMax || undefined;
       // F8: update('none') so a poll never plays a transition, only the
       // window sliding and bar heights change.
@@ -1772,15 +1907,25 @@ function drawNowChart(chart, sessions, turns){
 }
 
 function renderNow(snap){
+  LAST_NOW_SNAP = snap;
   var empty = document.getElementById('now_empty');
+  var noSessions = document.getElementById('now_no_sessions');
   var cards = document.getElementById('now_cards');
   if(!empty || !cards) return;
+  // Data arrived: whether or not there are running sessions, this is no
+  // longer the loading state or an error, so now_empty (U2's loading/error
+  // note) always clears here.
+  empty.classList.add('hidden');
   if(!snap || !snap.sessions || !snap.sessions.length){
-    empty.classList.remove('hidden');
-    empty.textContent = 'No running sessions. Start Claude Code or Codex and this page fills within two seconds.';
+    // U1: the "no running sessions" notice is one small line under the
+    // chart, not a panel above it.
+    if(noSessions){
+      noSessions.classList.remove('hidden');
+      noSessions.textContent = 'No running sessions. Start Claude Code or Codex and this page fills within two seconds.';
+    }
     cards.innerHTML = '';
   } else {
-    empty.classList.add('hidden');
+    if(noSessions) noSessions.classList.add('hidden');
     cards.innerHTML = snap.sessions.map(function(s){ return sessionCardHTML(s, false); }).join('');
   }
   if(currentTab() === 'now') drawNowChart(snap && snap.chart, snap && snap.sessions, snap && snap.turns);
@@ -1921,20 +2066,23 @@ function renderTurnDrawer(d){
 
 function pollNow(){
   var empty = document.getElementById('now_empty');
-  if(typeof window.bmLive !== 'function'){
+  // U2: wait for window.bmLive to actually exist before deciding this is a
+  // saved report; go-webview2 injects it asynchronously, after this script
+  // has already started running.
+  waitForBinding('bmLive', function(){
+    Promise.resolve(window.bmLive()).then(renderNow).catch(function(e){
+      if(empty){
+        empty.classList.remove('hidden');
+        empty.textContent = 'Could not read live sessions: ' + (e && e.message ? e.message : String(e));
+      }
+    });
+  }, function(){
     if(empty){
       empty.classList.remove('hidden');
       empty.textContent = 'Live view is only available in the BurnMon app window, not in a saved report.';
     }
     var cards = document.getElementById('now_cards');
     if(cards) cards.innerHTML = '';
-    return;
-  }
-  Promise.resolve(window.bmLive()).then(renderNow).catch(function(e){
-    if(empty){
-      empty.classList.remove('hidden');
-      empty.textContent = 'Could not read live sessions: ' + (e && e.message ? e.message : String(e));
-    }
   });
 }
 
@@ -1979,44 +2127,62 @@ function vsCell(tok_, agent, period){
 }
 
 function renderVendorStrip(payload){
+  LAST_VENDOR_STRIP = payload;
   var empty = document.getElementById('vs_empty');
   var tb = document.querySelector('#t_vendorstrip tbody');
+  var creditsEl = document.getElementById('vs_credits_left');
   if(!empty || !tb) return;
   var rows = (payload && payload.rows) || [];
   if(!rows.length){
     empty.classList.remove('hidden');
     empty.textContent = 'No vendor activity recorded yet.';
     tb.innerHTML = '';
-    return;
-  }
-  empty.classList.add('hidden');
-  var body = rows.map(function(r){
-    return '<tr><td>'+esc(r.agent_label||r.agent||'')+'</td>'
-      + vsCell(r.today, r.agent, 'day') + vsCell(r.week, r.agent, 'week') + vsCell(r.month, r.agent, 'month')
+  } else {
+    empty.classList.add('hidden');
+    var body = rows.map(function(r){
+      return '<tr><td>'+esc(r.agent_label||r.agent||'')+'</td>'
+        + vsCell(r.today, r.agent, 'day') + vsCell(r.week, r.agent, 'week') + vsCell(r.month, r.agent, 'month')
+        + '</tr>';
+    }).join('');
+    var total = payload.total || {};
+    body += '<tr class="total"><td>'+esc(total.agent_label||'Total')+'</td>'
+      + vsCell(total.today, '', 'day') + vsCell(total.week, '', 'week') + vsCell(total.month, '', 'month')
       + '</tr>';
-  }).join('');
-  var total = payload.total || {};
-  body += '<tr class="total"><td>'+esc(total.agent_label||'Total')+'</td>'
-    + vsCell(total.today, '', 'day') + vsCell(total.week, '', 'week') + vsCell(total.month, '', 'month')
-    + '</tr>';
-  tb.innerHTML = body;
+    tb.innerHTML = body;
+  }
+  // C3/K3: the account-wide Copilot credits balance, business mode only,
+  // shown once here rather than repeated per-vendor since it is the same
+  // figure on every github-vendor session card.
+  var cl = payload && payload.copilot_credits_left;
+  if(creditsEl){
+    if(isBusiness() && cl){
+      creditsEl.classList.remove('hidden');
+      creditsEl.textContent = 'GitHub Copilot: ' + n(Math.round(cl.left)) + ' of ' + n(Math.round(cl.monthly_credits))
+        + ' credits left this month (' + cl.plan + ' plan).';
+    } else {
+      creditsEl.classList.add('hidden');
+    }
+  }
+  // The Now cards read LAST_VENDOR_STRIP for the same figure; refresh them
+  // in place rather than waiting for bmLive's own 2-second poll.
+  if(isBusiness() && LAST_NOW_SNAP) renderNow(LAST_NOW_SNAP);
 }
 
 function pollVendorStrip(){
   var empty = document.getElementById('vs_empty');
-  if(typeof window.bmVendorStrip !== 'function'){
+  waitForBinding('bmVendorStrip', function(){
+    Promise.resolve(window.bmVendorStrip()).then(renderVendorStrip).catch(function(e){
+      if(empty){
+        empty.classList.remove('hidden');
+        empty.textContent = 'Could not read the vendor strip: ' + (e && e.message ? e.message : String(e));
+      }
+    });
+  }, function(){
     if(empty){
       empty.classList.remove('hidden');
       empty.textContent = 'Vendor strip is only available in the BurnMon app window, not in a saved report.';
     }
     document.querySelector('#t_vendorstrip tbody').innerHTML = '';
-    return;
-  }
-  Promise.resolve(window.bmVendorStrip()).then(renderVendorStrip).catch(function(e){
-    if(empty){
-      empty.classList.remove('hidden');
-      empty.textContent = 'Could not read the vendor strip: ' + (e && e.message ? e.message : String(e));
-    }
   });
 }
 
@@ -2029,7 +2195,7 @@ vsTimer = setInterval(pollVendorStrip, 60000);
 // one page, one bound Go-side call per filter change, never the page
 // aggregating raw events itself.
 var AGENT_LABELS = {'claude-code':'Claude Code', 'cowork':'Cowork', 'codex':'Codex', 'hermes':'Hermes', 'copilot-cli':'Copilot CLI'};
-var UI_HIST = {period:'week', range:'30', from:'', to:'', vendor:'', owner:''};
+var UI_HIST = {period:'week', range:'30', from:'', to:'', vendor:'', owner:'', client:''};
 var histFiltersBuilt = false;
 
 function isoDate(d){ return d.toISOString().slice(0,10); }
@@ -2062,6 +2228,7 @@ function parseHistHash(){
     else if(k === 'to') UI_HIST.to = v;
     else if(k === 'vendor') UI_HIST.vendor = v;
     else if(k === 'owner') UI_HIST.owner = v;
+    else if(k === 'client') UI_HIST.client = v;
   });
 }
 
@@ -2074,6 +2241,7 @@ function writeHistHash(){
   }
   if(UI_HIST.vendor) parts.push('vendor='+encodeURIComponent(UI_HIST.vendor));
   if(UI_HIST.owner) parts.push('owner='+encodeURIComponent(UI_HIST.owner));
+  if(UI_HIST.client) parts.push('client='+encodeURIComponent(UI_HIST.client));
   try{ window.history.replaceState(null, '', '#history?'+parts.join('&')); }catch(e){}
 }
 
@@ -2088,6 +2256,9 @@ function applyHistControlsFromState(){
   }
   if(UI_HIST.owner && document.querySelector('#h_owner option[value="'+UI_HIST.owner+'"]')){
     document.getElementById('h_owner').value = UI_HIST.owner;
+  }
+  if(UI_HIST.client && document.querySelector('#h_client option[value="'+UI_HIST.client+'"]')){
+    document.getElementById('h_client').value = UI_HIST.client;
   }
 }
 
@@ -2111,6 +2282,17 @@ function buildHistFilterOptions(payload){
       oSel.appendChild(opt);
     });
   }
+  // K3: client filter, same "hidden while no rule exists" convention as
+  // owner above.
+  if(payload.clients && payload.clients.length){
+    document.getElementById('h_client_wrap').classList.remove('hidden');
+    var cSel = document.getElementById('h_client');
+    payload.clients.forEach(function(c){
+      var opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      cSel.appendChild(opt);
+    });
+  }
   histFiltersBuilt = true;
   applyHistControlsFromState();
 }
@@ -2124,7 +2306,7 @@ function histPeriodLabel(period, key){
 function renderHistTotals(totals){
   var costHtml = totals.cost_usd != null
     ? money(totals.cost_usd)
-    : '<span class="small">'+esc(totals.cost_note || 'tokens only until v0.3')+'</span>';
+    : '<span class="small">'+esc(totals.cost_note || 'tokens only')+'</span>';
   document.getElementById('h_totals').innerHTML =
     '<div class="card pine"><div class="k">Tokens</div><div class="v">'+tok(totals.tokens)+'</div>'
       + '<div class="sub">fresh '+tok(totals.fresh)+' &middot; cache write '+tok(totals.cache_w)
@@ -2159,9 +2341,34 @@ function renderHistTable(rows, period, showCost){
   var tb = document.querySelector('#t_history tbody');
   if(!rows.length){ tb.innerHTML = '<tr><td colspan="5" class="small">'+t('nothing_in_period')+'</td></tr>'; return; }
   tb.innerHTML = rows.slice().reverse().map(function(r){
-    var cost = showCost ? money(r.cost_usd||0) : '<span class="small">'+esc(r.cost_note||'tokens only until v0.3')+'</span>';
+    var cost = showCost ? money(r.cost_usd||0) : '<span class="small">'+esc(r.cost_note||'tokens only')+'</span>';
     return '<tr><td>'+esc(histPeriodLabel(period, r.key))+'</td><td>'+n(r.sessions)+'</td>'
       + '<td>'+n(r.turns)+'</td><td>'+tok(r.tokens)+'</td><td>'+cost+'</td></tr>';
+  }).join('');
+}
+
+// renderHistClients is K3's per-client table, business mode only, hidden
+// while no client rule exists (payload.clients empty) exactly like the
+// filter dropdown above it.
+function renderHistClients(payload){
+  var wrap = document.getElementById('h_clients_wrap');
+  if(!wrap) return;
+  var clients = payload.clients || [];
+  if(!isBusiness() || !clients.length){
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+  var rows = payload.client_rows || [];
+  var tb = document.querySelector('#t_history_clients tbody');
+  if(!rows.length){
+    tb.innerHTML = '<tr><td colspan="5" class="small">'+t('nothing_in_period')+'</td></tr>';
+    return;
+  }
+  tb.innerHTML = rows.map(function(r){
+    var cost = r.cost_usd != null ? money(r.cost_usd) : '<span class="small">'+esc(r.cost_note||'tokens only')+'</span>';
+    return '<tr><td>'+esc(r.client)+'</td><td>'+tok(r.tokens)+'</td><td>'+cost+'</td>'
+      + '<td>'+Math.round(r.active_minutes||0)+' min</td><td>'+n(r.sessions)+'</td></tr>';
   }).join('');
 }
 
@@ -2194,18 +2401,20 @@ function renderHistory(){
   }
   empty.classList.add('hidden');
   var range = histRangeDates();
-  var filter = {period: UI_HIST.period, from: range.from, to: range.to, vendor: UI_HIST.vendor, owner: UI_HIST.owner};
+  var filter = {period: UI_HIST.period, from: range.from, to: range.to, vendor: UI_HIST.vendor, owner: UI_HIST.owner, client: UI_HIST.client};
   var reqID = 'h' + (++HIST_REQ_SEQ);
   HIST_LATEST_REQ = reqID;
   new Promise(function(resolve){
     HIST_PENDING[reqID] = {resolve: resolve};
     window.bmHistory(reqID, filter);
   }).then(function(payload){
+    LAST_HISTORY = payload;
     buildHistFilterOptions(payload);
     var showCost = payload.totals.cost_usd != null;
     renderHistTotals(payload.totals);
     drawHistoryChart(payload.rows||[], UI_HIST.period, showCost);
     renderHistTable(payload.rows||[], UI_HIST.period, showCost);
+    renderHistClients(payload);
     writeHistHash();
   }).catch(function(e){
     empty.classList.remove('hidden');
@@ -2213,7 +2422,7 @@ function renderHistory(){
   });
 }
 
-['h_period','h_range','h_vendor','h_owner'].forEach(function(id){
+['h_period','h_range','h_vendor','h_owner','h_client'].forEach(function(id){
   var el = document.getElementById(id);
   if(!el) return;
   el.addEventListener('change', function(){
@@ -2221,6 +2430,7 @@ function renderHistory(){
     UI_HIST.range = document.getElementById('h_range').value;
     UI_HIST.vendor = document.getElementById('h_vendor').value;
     UI_HIST.owner = document.getElementById('h_owner').value;
+    UI_HIST.client = document.getElementById('h_client').value;
     document.getElementById('h_custom_wrap').classList.toggle('hidden', UI_HIST.range !== 'custom');
     renderHistory();
   });
@@ -2348,6 +2558,32 @@ document.getElementById('btn_theme').addEventListener('click', function(){
   UI.theme = UI.theme === 'light' ? 'dark' : 'light'; persist();
   applyTheme(); renderAll();
 });
+
+// C3: the dev/business toggle. Re-renders every already-loaded payload in
+// place (Now's cards/chart/forecast, the vendor strip's credits line,
+// History, Sessions) from its own cached copy, so the numbers flip
+// immediately rather than waiting for each one's own poll interval.
+function applyModeLabel(){
+  document.getElementById('btn_mode').textContent = isBusiness() ? 'Business' : 'Dev';
+}
+function applyMode(){
+  applyModeLabel();
+  if(LAST_NOW_SNAP) renderNow(LAST_NOW_SNAP);
+  if(LAST_VENDOR_STRIP) renderVendorStrip(LAST_VENDOR_STRIP);
+  if(LAST_FORECAST) renderNowForecast(LAST_FORECAST);
+  // History's totals/rows cost figures are not mode-dependent (already
+  // computed server-side either way); only ClientRows' visibility is, so a
+  // mode flip re-renders that table from the cached payload rather than
+  // re-querying bmHistory.
+  if(LAST_HISTORY) renderHistClients(LAST_HISTORY);
+  renderSessions();
+}
+applyModeLabel();
+document.getElementById('btn_mode').addEventListener('click', function(){
+  UI.mode = isBusiness() ? 'dev' : 'business'; persist();
+  applyMode();
+});
+
 buildFilters(); bindTitleTip(); bindRefresh(); renderPrices(); startNowPolling();
 try { renderAll(); } catch(e){
   document.getElementById('verdict').innerHTML = '<b style="color:var(--warn)">'+esc(t('render_error',{msg:e.message}))+'</b>';

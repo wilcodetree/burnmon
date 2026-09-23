@@ -492,7 +492,10 @@ func main() {
 	// windowed read.
 	if err := w.Bind("bmVendorStrip", func() (vendorstrip.Payload, error) {
 		callStart := time.Now()
-		payload, err := vendorstrip.Build(st, time.Now())
+		a.mu.Lock()
+		cfg := a.cfg
+		a.mu.Unlock()
+		payload, err := vendorstrip.Build(st, &cfg, time.Now())
 		if elapsed := time.Since(callStart); elapsed > 50*time.Millisecond {
 			log.Printf("bound bmVendorStrip: %v total, %v waiting for the store", elapsed, elapsed)
 		}
@@ -509,7 +512,10 @@ func main() {
 	// that week.
 	if err := w.Bind("bmForecast", func() (forecast.Payload, error) {
 		callStart := time.Now()
-		payload, err := forecast.Build(st, time.Now())
+		a.mu.Lock()
+		cfg := a.cfg
+		a.mu.Unlock()
+		payload, err := forecast.Build(st, &cfg, time.Now())
 		if elapsed := time.Since(callStart); elapsed > 50*time.Millisecond {
 			log.Printf("bound bmForecast: %v total, %v waiting for the store", elapsed, elapsed)
 		}

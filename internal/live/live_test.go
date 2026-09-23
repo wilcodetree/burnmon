@@ -54,6 +54,62 @@ func TestBuildSnapshot_RunningVsStale(t *testing.T) {
 	}
 }
 
+// TestBuildSnapshot_ClientAndBusinessCost guards C3/K3's two new Session
+// fields: Client (K1's client map result, carried on the event) and
+// BusinessCost (the vendor's headline basis from cfg.CostForEvents, the same
+// function every other page uses).
+func TestBuildSnapshot_ClientAndBusinessCost(t *testing.T) {
+	now := time.Now().UTC()
+	events := []schema.Event{
+		{
+			Vendor: "anthropic", Agent: "claude-code", Surface: "cli",
+			SessionID: "running", RequestID: "r1", Model: "claude-sonnet-5", Client: "Talon",
+			At: now.Add(-30 * time.Second), Input: 1_000_000, Output: 1_000_000,
+		},
+	}
+	snap := BuildSnapshot(events, testConfig(), now)
+	if len(snap.Sessions) != 1 {
+		t.Fatalf("want 1 running session, got %d", len(snap.Sessions))
+	}
+	s := snap.Sessions[0]
+	if s.Client != "Talon" {
+		t.Fatalf("Client = %q, want %q", s.Client, "Talon")
+	}
+	if s.BusinessCost == nil {
+		t.Fatal("BusinessCost = nil, want a headline basis for anthropic")
+	}
+	// claude-sonnet-5, no subscription configured: headline is API list
+	// (upper bound), 1M input at $2/MTok + 1M output at $10/MTok = 12.
+	want := 12.0
+	if diff := s.BusinessCost.USD - want; diff > 1e-9 || diff < -1e-9 {
+		t.Fatalf("BusinessCost.USD = %v, want %v", s.BusinessCost.USD, want)
+	}
+	if s.BusinessCost.Basis != pricing.BasisAPIList {
+		t.Fatalf("BusinessCost.Basis = %v, want %v", s.BusinessCost.Basis, pricing.BasisAPIList)
+	}
+}
+
+// TestBuildSnapshot_BusinessCostNilForNoBookVendor guards Hermes ("nous")
+// and any other vendor with no price book: BusinessCost stays nil, "tokens
+// only", exactly like CostForEvents' own VendorCost.Headline.
+func TestBuildSnapshot_BusinessCostNilForNoBookVendor(t *testing.T) {
+	now := time.Now().UTC()
+	events := []schema.Event{
+		{
+			Vendor: "nous", Agent: "hermes", Surface: "unknown",
+			SessionID: "running", RequestID: "r1", Model: "hermes-1",
+			At: now.Add(-30 * time.Second), Input: 1000, Output: 1000,
+		},
+	}
+	snap := BuildSnapshot(events, testConfig(), now)
+	if len(snap.Sessions) != 1 {
+		t.Fatalf("want 1 running session, got %d", len(snap.Sessions))
+	}
+	if snap.Sessions[0].BusinessCost != nil {
+		t.Fatalf("BusinessCost = %+v, want nil for a no-book vendor", snap.Sessions[0].BusinessCost)
+	}
+}
+
 func TestBuildSnapshot_UnknownModelHasNoWindow(t *testing.T) {
 	now := time.Now().UTC()
 	events := []schema.Event{

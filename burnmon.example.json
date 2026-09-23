@@ -28,6 +28,10 @@
       "claude-sonnet-5": {"label": "Claude Sonnet 5", "in": 2.0, "cache_write_5m": 2.50, "cache_write_1h": 4.0, "cache_read": 0.20, "out": 10.0}
     }
   },
+  "_comment_mode": "v0.3 C3. \"dev\" (default, or leave this key out) or \"business\": the header toggle's start state. Talon's config sets \"business\" here so the Now page opens showing euros, credits and client instead of tokens and context. The toggle still flips it live in the running window either way.",
+  "mode": "business",
+  "_comment_copilot_plan": "v0.3 C3/K3. Names the account's real GitHub Copilot plan tier, a key into copilot_credits.plans (see books/copilot_credits.json for the compiled-in tiers: Free, Pro, Pro+, Max). Only set once the account is actually on that plan; leave this key out to omit the \"credits left\" line entirely rather than guess a tier.",
+  "copilot_plan": "Pro",
   "_comment_owners": "v0.2 P6, the light client map, extended in v0.3 K1 with an optional client and remote per rule. Empty (shown here) is the default: one owner, no owner or client column shown anywhere. Ordered rules, first match wins for owner (path only, unchanged since v0.2); client is resolved separately, a remote rule first (matched against the project's git origin remote, a case-insensitive substring of its URL), then a path rule, else \"unassigned\". Example: \"owners\": [{\"match\": \"C:\\\\dev\\\\Work\\\\*\", \"owner\": \"Valona\"}, {\"match\": \"C:\\\\ZND\\\\projects\\\\dsi\\\\*\", \"owner\": \"ZND\", \"client\": \"Talon\", \"remote\": \"github.com/multica-ai/dsi\"}]. Applied at ingest; after changing the rules, re-apply them to sessions already in the store with `burnmon-cli reown`.",
   "owners": [],
   "_comment_wsl": "wsl_scan, extra_sources and wsl_interval_hours are new in v0.7.0. The three values below are shown at their defaults (auto-scan, nothing extra, 4-hour WSL cadence), so leaving this block out entirely is equivalent. Set wsl_scan to \"off\" if you do not want the app touching a WSL distro at all.",

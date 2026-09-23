@@ -13,6 +13,8 @@ package forecast
 import (
 	"time"
 
+	"burnmon/internal/pricing"
+	"burnmon/internal/schema"
 	"burnmon/internal/store"
 )
 
@@ -48,6 +50,24 @@ type Payload struct {
 	// actual across every scored week, e.g. 0.18 for +/-18%.
 	ErrorBandPct float64 `json:"error_band_pct,omitempty"`
 	ScoredWeeks  int     `json:"scored_weeks"`
+
+	// EndOfDayCostUSD and EndOfMonthCostUSD are C3's business-mode forecast:
+	// the same end-of-day/end-of-month extrapolation as the token figures
+	// above, run on cost (cfg.CostForEvents' headline basis per vendor)
+	// instead of raw tokens, so a mixed-vendor month with two different
+	// price books still converts correctly. Deliberately USD, not EUR
+	// ("forecast in euros" per the spec): every cost figure this codebase
+	// hands the template is USD (business_cost.usd, History and Sessions'
+	// cost_usd), and the template's own money() helper is what applies the
+	// viewer's chosen currency and FX rate; converting here too would double
+	// it. CostCovered is false, and both figures are zero, when not one
+	// vendor in today's or this month's events has any price book at all
+	// ("tokens only", e.g. a Hermes-only store): the business page then
+	// falls back to the token figures with a "tokens only" note, same as
+	// History and Sessions.
+	CostCovered       bool    `json:"cost_covered"`
+	EndOfDayCostUSD   float64 `json:"end_of_day_cost_usd,omitempty"`
+	EndOfMonthCostUSD float64 `json:"end_of_month_cost_usd,omitempty"`
 }
 
 func dayStart(t time.Time) time.Time {
@@ -73,8 +93,8 @@ func dateKey(t time.Time) string { return t.Format("2006-01-02") }
 // Build is bmForecast's implementation: runs EnsureScored first so the
 // current week always has a plan on record and any week that just elapsed
 // gets its actual filled in, then reads the gate state and, once unlocked,
-// the plan, live and error-band figures.
-func Build(st *store.Store, now time.Time) (Payload, error) {
+// the plan, live and error-band figures, plus (C3) their euro equivalent.
+func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error) {
 	if err := EnsureScored(st, now); err != nil {
 		return Payload{}, err
 	}
@@ -121,7 +141,83 @@ func Build(st *store.Store, now time.Time) (Payload, error) {
 	byDay := dailyMap(planDaily)
 	p.Plan = planLine(byDay, ws)
 	p.Live, p.EndOfDayTokens, p.EndOfMonthTokens = liveLine(byDay, ws, now)
+	if err := addCostForecast(&p, st, cfg, now); err != nil {
+		return Payload{}, err
+	}
 	return p, nil
+}
+
+// headlineCostUSD sums cfg.CostForEvents' Headline basis across every vendor
+// present in events, the same helper internal/history uses: covered is false
+// only when not one event's vendor has any price book at all.
+func headlineCostUSD(events []schema.Event, cfg *pricing.Config) (usd float64, covered bool) {
+	for _, vc := range cfg.CostForEvents(events) {
+		if vc.Headline != nil {
+			usd += vc.Headline.USD
+			covered = true
+		}
+	}
+	return usd, covered
+}
+
+// addCostForecast is C3's business-mode forecast: the same end-of-day/
+// end-of-month extrapolation liveLine runs on tokens, run here on headline
+// cost instead, since a mixed-vendor month cannot be converted from a token
+// total alone (different vendors and models carry different rates).
+// Deliberately a second, independent pass over today's and this month's
+// events rather than reusing liveLine's token maths: cost is not a fixed
+// multiple of tokens. Leaves p.CostCovered false (its zero value) when
+// neither window has any vendor with a price book, so the business page can
+// fall back to the token figures with a "tokens only" note, same as History
+// and Sessions.
+func addCostForecast(p *Payload, st *store.Store, cfg *pricing.Config, now time.Time) error {
+	today := dayStart(now)
+	elapsed := now.Sub(today)
+	if elapsed <= 0 {
+		elapsed = time.Minute
+	}
+	fracDay := elapsed.Seconds() / (24 * time.Hour).Seconds()
+
+	todayEvents, err := st.EventsSince(today)
+	if err != nil {
+		return err
+	}
+	todayUSD, todayCovered := headlineCostUSD(todayEvents, cfg)
+
+	ms := monthStart(now)
+	monthEvents, err := st.EventsSince(ms)
+	if err != nil {
+		return err
+	}
+	monthUSD, monthCovered := headlineCostUSD(monthEvents, cfg)
+
+	if !todayCovered && !monthCovered {
+		return nil
+	}
+	p.CostCovered = true
+
+	eodUSD := todayUSD
+	if fracDay > 0 {
+		eodUSD = todayUSD / fracDay
+	}
+	if eodUSD < todayUSD {
+		eodUSD = todayUSD
+	}
+
+	daysElapsedMonth := today.Sub(ms).Hours()/24 + fracDay
+	nextMonth := time.Date(ms.Year(), ms.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0)
+	daysInMonth := nextMonth.AddDate(0, 0, -1).Day()
+	eomUSD := monthUSD
+	if daysElapsedMonth > 0 {
+		eomUSD = monthUSD / daysElapsedMonth * float64(daysInMonth)
+	}
+	if eomUSD < monthUSD {
+		eomUSD = monthUSD
+	}
+
+	p.EndOfDayCostUSD = eodUSD
+	p.EndOfMonthCostUSD = eomUSD
+	return nil
 }
 
 func dailyMap(daily []store.DailyTokenTotal) map[string]int64 {

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
 	"burnmon/internal/store"
 )
@@ -49,9 +50,13 @@ func TestBuildTwoVendors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	payload, err := Build(st, now)
+	cfg := pricing.Defaults()
+	payload, err := Build(st, &cfg, now)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if payload.CopilotCreditsLeft != nil {
+		t.Fatalf("CopilotCreditsLeft = %+v, want nil with no CopilotPlan configured", payload.CopilotCreditsLeft)
 	}
 	if len(payload.Rows) != 2 {
 		t.Fatalf("rows = %d, want 2, got %+v", len(payload.Rows), payload.Rows)
@@ -95,5 +100,54 @@ func TestBuildTwoVendors(t *testing.T) {
 	}
 	if payload.Total.AgentLabel != "Total" {
 		t.Errorf("total label = %q, want %q", payload.Total.AgentLabel, "Total")
+	}
+}
+
+// TestBuildCopilotCreditsLeft guards C3/K3's account-wide balance: present
+// only once Config.CopilotPlan names a known plan, computed from this
+// calendar month's github-vendor events.
+func TestBuildCopilotCreditsLeft(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	now := time.Date(2026, 9, 23, 15, 0, 0, 0, time.UTC)
+	cw, cr := int64(0), int64(0)
+	events := []schema.Event{{
+		Vendor: "github", Agent: "copilot-cli", SessionID: "g1", RequestID: "g1-1",
+		At: now, Model: "claude-sonnet-5", Input: 1_000_000, Output: 1_000_000,
+		CacheWrite: &cw, CacheRead: &cr,
+	}}
+	if err := st.UpsertEvents(events); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := pricing.Defaults()
+	var planName string
+	var monthly float64
+	for name, p := range cfg.CopilotCredits.Plans {
+		planName, monthly = name, p.MonthlyCredits
+		break
+	}
+	if planName == "" {
+		t.Skip("no Copilot plan in the compiled-in book to test against")
+	}
+	cfg.CopilotPlan = planName
+
+	payload, err := Build(st, &cfg, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.CopilotCreditsLeft == nil {
+		t.Fatal("CopilotCreditsLeft = nil, want a value with CopilotPlan configured")
+	}
+	if payload.CopilotCreditsLeft.Plan != planName {
+		t.Errorf("Plan = %q, want %q", payload.CopilotCreditsLeft.Plan, planName)
+	}
+	if payload.CopilotCreditsLeft.MonthlyCredits != monthly {
+		t.Errorf("MonthlyCredits = %v, want %v", payload.CopilotCreditsLeft.MonthlyCredits, monthly)
 	}
 }

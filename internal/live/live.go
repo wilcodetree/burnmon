@@ -43,6 +43,10 @@ type Session struct {
 	Surface       string     `json:"surface"`
 	Model         string     `json:"model"`
 	Project       string     `json:"project"`
+	// Client is K1's client map result for this session's project, "" when
+	// no owner/client rules are configured (mirrors scan.Session.Client;
+	// C3's business-mode card shows it, dev mode does not).
+	Client        string     `json:"client,omitempty"`
 	Start         string     `json:"start"`     // RFC3339
 	LastTurn      string     `json:"last_turn"` // RFC3339
 	TurnCount     int        `json:"turn_count"`
@@ -50,6 +54,12 @@ type Session struct {
 	ContextWindow int64      `json:"context_window,omitempty"` // 0 means unknown
 	Tokens        int64      `json:"tokens"`                   // whole session
 	Cost          float64    `json:"cost"`
+	// BusinessCost is C3's headline-basis figure for this session's own
+	// events (pricing.Config.CostForEvents' Headline for this vendor): the
+	// euro figure the business-mode card shows, with the basis named next to
+	// it. nil for a vendor with no price book at all ("tokens only", e.g.
+	// Hermes).
+	BusinessCost  *pricing.BasisCost `json:"business_cost,omitempty"`
 	CacheHitRatio float64    `json:"cache_hit_ratio"` // last turn: cache_read / (fresh + cache_read)
 	Subagents     []*Session `json:"subagents,omitempty"`
 	// Findings is I3's marker source: insight.Analyze run on this session's
@@ -245,6 +255,7 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 			Surface:       last.Surface,
 			Model:         last.Model,
 			Project:       firstNonEmptyProject(turns),
+			Client:        firstNonEmptyClient(turns),
 			Start:         turns[0].At.UTC().Format(time.RFC3339),
 			LastTurn:      last.At.UTC().Format(time.RFC3339),
 			TurnCount:     len(turns),
@@ -252,6 +263,7 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 			ContextWindow: window,
 			Tokens:        tokens,
 			Cost:          cost,
+			BusinessCost:  headlineForEvents(turns, cfg),
 			CacheHitRatio: hitRatio,
 		}
 		s.Findings = insight.Analyze(turns, cfg)
@@ -485,6 +497,26 @@ func firstNonEmptyProject(events []schema.Event) string {
 	return ""
 }
 
+func firstNonEmptyClient(events []schema.Event) string {
+	for _, e := range events {
+		if e.Client != "" {
+			return e.Client
+		}
+	}
+	return ""
+}
+
+// headlineForEvents runs cfg.CostForEvents over events (all one vendor,
+// since callers group by vendor+session first) and returns that one
+// vendor's Headline, or nil for a vendor with no price book at all.
+func headlineForEvents(events []schema.Event, cfg *pricing.Config) *pricing.BasisCost {
+	vcs := cfg.CostForEvents(events)
+	if len(vcs) == 0 {
+		return nil
+	}
+	return vcs[0].Headline
+}
+
 // buildChart returns chartSlots (180) dense 10-second buckets covering
 // [windowStart, windowStart+ChartWindow), every slot present and
 // zero-valued when no turn landed in it (F3): the frontend must never
@@ -553,6 +585,14 @@ func ApplySessionTotals(sessions []*Session, st *store.Store, cfg *pricing.Confi
 			var tokens, turns int64
 			var cost float64
 			var start time.Time
+			// synth rebuilds one schema.Event per (vendor, session, model)
+			// group from the SQL-aggregated totals, so BusinessCost below can
+			// run the same cfg.CostForEvents every other page uses instead of
+			// a second, dev-only cost formula: CostForEvents' per-basis
+			// arithmetic is linear in each token class, so summing rates over
+			// these aggregated totals gives the same lifetime figure as
+			// summing over the individual events would.
+			var synth []schema.Event
 			for _, r := range grp {
 				tokens += r.Input + r.CacheWrite + r.CacheRead + r.Output
 				turns += r.Count
@@ -565,9 +605,15 @@ func ApplySessionTotals(sessions []*Session, st *store.Store, cfg *pricing.Confi
 				} else {
 					cost += cfg.CallCostSubUSD(cfg.ModelFamily(r.Model), r.Input, r.Output)
 				}
+				cw, cr := r.CacheWrite, r.CacheRead
+				synth = append(synth, schema.Event{
+					Vendor: r.Vendor, Model: r.Model,
+					Input: r.Input, CacheWrite: &cw, CacheRead: &cr, Output: r.Output,
+				})
 			}
 			s.Tokens = tokens
 			s.Cost = cost
+			s.BusinessCost = headlineForEvents(synth, cfg)
 			s.TurnCount = int(turns)
 			if !start.IsZero() {
 				s.Start = start.UTC().Format(time.RFC3339)

@@ -5,9 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
 	"burnmon/internal/store"
 )
+
+func testConfig() *pricing.Config {
+	cfg := pricing.Defaults()
+	return &cfg
+}
 
 func mkEvent(vendor, agent, id string, at time.Time, tokens int64) schema.Event {
 	return schema.Event{
@@ -60,7 +66,7 @@ func TestBuildLockedWithZeroScoredWeeks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := Build(st, now)
+	p, err := Build(st, testConfig(), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +116,7 @@ func TestBuildOneScoredWeekShowsBand(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p1, err := Build(st, week1)
+	p1, err := Build(st, testConfig(), week1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +135,16 @@ func TestBuildOneScoredWeekShowsBand(t *testing.T) {
 	}
 
 	week2 := week1.AddDate(0, 0, 7)
-	p2, err := Build(st, week2)
+	// A real, priced model (mkEvent's "m" has no book entry, so its own
+	// events price at 0): gives the business-mode cost assertions below a non-zero
+	// figure to check against.
+	if err := st.UpsertEvents([]schema.Event{{
+		Vendor: "anthropic", Agent: "claude-code", SessionID: "priced", RequestID: "priced-1",
+		At: week2, Model: "claude-sonnet-5", Input: 100_000, Output: 50_000,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	p2, err := Build(st, testConfig(), week2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,5 +160,55 @@ func TestBuildOneScoredWeekShowsBand(t *testing.T) {
 	}
 	if len(p2.Plan) != 7 || len(p2.Live) != 7 {
 		t.Errorf("Plan/Live should be populated once unlocked, got plan=%d live=%d", len(p2.Plan), len(p2.Live))
+	}
+	if !p2.CostCovered {
+		t.Error("CostCovered = false, want true (anthropic has a price book)")
+	}
+	if p2.EndOfMonthCostUSD <= 0 {
+		t.Errorf("EndOfMonthCostUSD = %v, want a positive figure once unlocked", p2.EndOfMonthCostUSD)
+	}
+}
+
+// TestBuildCostForecastUncoveredVendor guards the "tokens only" fallback:
+// Hermes ("nous") has no price book, so CostCovered stays false and both USD
+// figures stay zero, even once a week is scored.
+func TestBuildCostForecastUncoveredVendor(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	week1 := time.Date(2026, 8, 31, 9, 0, 0, 0, time.UTC)
+	var seed []schema.Event
+	for w := 1; w <= 4; w++ {
+		for i := 0; i < 7; i++ {
+			d := week1.AddDate(0, 0, i-7*w)
+			seed = append(seed, mkEvent("nous", "hermes", "seed", d, 700))
+		}
+	}
+	if err := st.UpsertEvents(seed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Build(st, testConfig(), week1); err != nil {
+		t.Fatal(err)
+	}
+	var actual []schema.Event
+	for i := 0; i < 7; i++ {
+		actual = append(actual, mkEvent("nous", "hermes", "actual", week1.AddDate(0, 0, i), 1000))
+	}
+	if err := st.UpsertEvents(actual); err != nil {
+		t.Fatal(err)
+	}
+	p2, err := Build(st, testConfig(), week1.AddDate(0, 0, 7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2.CostCovered {
+		t.Error("CostCovered = true, want false (Hermes has no price book)")
+	}
+	if p2.EndOfDayCostUSD != 0 || p2.EndOfMonthCostUSD != 0 {
+		t.Errorf("USD figures = %v/%v, want 0/0 with no covered vendor", p2.EndOfDayCostUSD, p2.EndOfMonthCostUSD)
 	}
 }

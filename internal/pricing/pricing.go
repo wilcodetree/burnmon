@@ -219,6 +219,27 @@ type Config struct {
 	// finding. Zero or absent means the compiled-in 20,000-token default
 	// (the spec's "cache write in a turn exceeds 20K tokens").
 	ReprefillCacheWriteThreshold int64 `json:"reprefill_cache_write_threshold"`
+
+	// Mode is C3's dev/business start state: "" or "dev" (the default) shows
+	// tokens, context and cache classes; "business" shows euros on the
+	// headline basis, credits left, client and the forecast in euros. This
+	// only sets the page's *start* state (Talon's config): the header toggle
+	// still flips it live in the running window regardless of this value.
+	Mode string `json:"mode"`
+
+	// CopilotPlan names the account's actual GitHub Copilot plan tier (a key
+	// into CopilotCredits.Plans, e.g. "Pro" or "Max"), the same role
+	// Subscription.YourSeat plays for the Anthropic subscription share.
+	// Empty (the default) means no plan is configured: CopilotCreditsLeft
+	// always reports ok=false, so the business-mode card omits the "credits
+	// left" line rather than guessing which tier applies.
+	CopilotPlan string `json:"copilot_plan,omitempty"`
+}
+
+// BusinessMode reports whether Mode is set to "business"; any other value
+// (including "" and "dev") means dev.
+func (c *Config) BusinessMode() bool {
+	return c.Mode == "business"
 }
 
 // DefaultClaudeCodeCacheTTLMinutes is the compiled-in cache-lifetime

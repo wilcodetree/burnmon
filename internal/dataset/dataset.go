@@ -106,6 +106,10 @@ type Payload struct {
 	Months           map[string]*agg.Bucket `json:"months"`
 	Days             map[string]*agg.Bucket `json:"days"`
 	Sessions         []*scan.Session        `json:"sessions"`
+	// Mode is C3's dev/business start state ("" or "dev" means dev),
+	// straight from pricing.Config.Mode: the header toggle's default before
+	// any per-machine choice is remembered.
+	Mode string `json:"mode,omitempty"`
 }
 
 func round4(x float64) float64 { return math.Round(x*1e4) / 1e4 }
@@ -179,6 +183,7 @@ func BuildPayload(cfg *pricing.Config, seat string, cutoff, today time.Time,
 		Months:           months,
 		Days:             days,
 		Sessions:         kept,
+		Mode:             cfg.Mode,
 	}
 }
 

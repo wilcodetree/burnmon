@@ -2,6 +2,88 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.3 V3-3: dev/business switch (C3), client view (K3), Now page fixes and loading states (U1, U2)
+
+Read `02_roadmap\2026-09-23_v0.3_spec.md` sections 2.1 C3, 2.2 K3, 2.5 U1/U2 and
+`04_assets\2026-09-22_burnmon_now_page_features.md` section 4 before touching the template. C3: a
+`btn_mode` toggle in the header, dev by default; start state reads `pricing.Config.Mode` ("mode" in
+`burnmon.json`, exposed to the page as `D.mode` via a new field on `dataset.Payload`), a per-machine
+choice persisted in `localStorage` afterward overrides it on later loads, same pattern as the theme
+toggle. Business mode flips the Now page in place from cached poll payloads (`LAST_NOW_SNAP`,
+`LAST_VENDOR_STRIP`, `LAST_FORECAST`, `LAST_HISTORY`), no extra backend call on toggle: session cards
+show the vendor's headline basis in euros with the basis named (`sessionCardBusinessBody`, fed by a new
+`live.Session.BusinessCost *pricing.BasisCost`, computed via `cfg.CostForEvents` on the session's own
+turns, and recomputed the same way from `ApplySessionTotals`'s SQL-aggregated lifetime totals via
+synthetic per-model events so the lifetime figure agrees with the windowed one), the client
+(`live.Session.Client`, the same `firstNonEmptyProject`-style pull K1 already carries on
+`schema.Event`), and GitHub Copilot credits left where a plan is configured; the live chart hides the
+per-session token bars and shows the existing (previously opt-in-only) `Cost/min` line by default,
+token y-axis hidden via `display:!isBusiness()`; the forecast text shows `end_of_day_cost_usd` /
+`end_of_month_cost_usd` instead of token counts. "Credits left" needed a decision the spec itself
+did not resolve (no account-wide credits-consumed tracking existed, and no field named which Copilot
+plan tier the account is actually on): asked Wilco, recommendation taken, a new `Config.CopilotPlan`
+field (mirrors `Subscription.YourSeat`'s pattern) names a key into the compiled-in
+`CopilotCredits.Plans` table; `pricing.CopilotCreditsLeft` subtracts this calendar month's
+github-vendor credits spend (from `cfg.CopilotCreditsLeft`, `internal/vendorstrip.Build`'s own extra
+`EventsSince(monthStart)` query, gated so it never runs at all with no plan configured) from that
+plan's `MonthlyCredits`, surfaced once on the vendor strip and read by every github-vendor session
+card from that one cached figure rather than repeated per card. K3: History gains a client filter
+(`h_client`, same "hidden while no client rule exists" convention as owner) and, in business mode, a
+per-client table (`history.ClientRow`: tokens, headline cost, active time via
+`dataset.SessionsFromEvents`/`ActiveMinutesByClient`, sessions), built from events matching
+period/range/vendor/owner but deliberately not the client filter itself, so every client stays
+comparable side by side even with one selected above; Sessions gains a client column and filter, same
+hidden-until-configured convention, `applyOwnerColumnVisibility` extended to a client twin. Along the
+way, replaced History's whole cost computation: it used to gate on a hardcoded
+anthropic/openai-only `coveredVendorForAgent` and only show a figure at all when narrowed to one
+vendor; now `headlineCostUSD` sums `cfg.CostForEvents`'s headline basis across every vendor present
+(github and any future book included), so an "All vendors" view shows real cost too, not just a
+single-vendor one, a real behaviour change from v0.2, not just a relabel, confirmed by hand-computing
+the new numbers and updating `TestBuildWeekAndMonth`'s and `TestBuildOneScoredWeekShowsBand`'s own
+expected figures (book prices, not the old family-generic ones) rather than leaving them silently
+wrong. Every literal "tokens only until v0.3" string (`internal/history`, two spots in
+`template.html`) is now "tokens only" or a real figure, per the spec's own instruction, since v0.3
+is what shipped the cost function that string was waiting on. `pricing.BasisCost`/`VendorCost` had no
+JSON tags at all (a V3-1 gap that never mattered until this session put `BasisCost` on the wire as
+`business_cost`): added explicit snake_case tags matching every other exported struct in this codebase,
+caught before it shipped a `Basis`/`Label`/`USD` capitalised-field payload to the template. A second,
+independent USD pass (`forecast.addCostForecast`, `EventsSince` on today and this month, headline
+basis, the same end-of-day/end-of-month extrapolation `liveLine` already runs on tokens) backs the
+business-mode forecast text; deliberately left in USD (`end_of_day_cost_usd`), not pre-converted to
+EUR, since the template's own `money()` already applies the viewer's currency and FX rate everywhere
+else, converting twice was caught and reverted before it shipped. U1: the Now page's intro paragraph
+moved to a new "The Now page" section at the top of About; the "no running sessions" notice moved from
+a panel above the chart to one small line (`now_no_sessions`) underneath it. U2: found the vendor strip
+empty-after-startup bug: `pollVendorStrip()`/`pollForecast()` ran at module-scope, and
+`startNowPolling()` ran at the very end of the same synchronous script, all checking `typeof
+window.bmX === 'function'` exactly once, immediately, go-webview2 injects its bindings asynchronously
+after the script has already started running, so the very first poll in the real app window routinely
+lost that race and showed the "only available ... not in a saved report" text (or an empty header with
+no rows) for a moment on every startup, not just in an actual saved report. Fixed with one shared
+`waitForBinding` retry helper (150ms x 40 = 6s budget) used by all three pollers; confirmed fixed
+against the real window (`tools\uicheck\check_v3.go`, new "v3" check): `now_empty`/`vs_empty`/
+`now_forecast_note` all read "Loading..." or a real value at startup, never the saved-report text, once
+`scripts\uicheck.ps1`'s own wait for the first Collect log line has passed. Added loading states
+throughout: `now_empty`, `vs_empty` and `now_forecast_note` default to visible "Loading..." text in the
+markup itself rather than hidden, `now_cards` gets a skeleton placeholder, both chartboxes get a
+`.chart-loading` overlay cleared on each chart's first successful draw. Also fixed, same U2 item:
+`tokPrecise(0)` fell through to the K-suffix branch and printed "0.00K" for an empty axis tick; now
+returns "0" explicitly, the same case `tok()` already handled. Real-window check: `scripts\uicheck.ps1
+v3` (new check, `tools\uicheck\check_v3.go`) against the actual running exe with a live Claude Code
+session: startup state asserted via the dev eval channel (never the saved-report text, `btn_mode` reads
+"Dev"), a real `SendInput` click (not an eval `.click()`) flips it to "Business" (chart axis, cost line
+and card content all confirmed switched, in both a DOM read and a screenshot after a settle delay, the
+first screenshot attempt landed before DWM had repainted, 300ms was not enough, 1000ms was), a second
+real click reverts to "Dev". Screenshots: `testdata\uicheck\out\v3-startup-dev.png`, `v3-business.png`,
+`v3-back-to-dev.png`. Not verified live (no client rules or Copilot plan configured on this laptop):
+the client filter/column, the per-client table, and the credits-left line all render correctly against
+synthetic fixtures in `internal\history\history_test.go`/`internal\vendorstrip\vendorstrip_test.go` but
+have not been seen populated in the real window; worth a spot-check once a real `burnmon.json` with an
+`owners` rule and a `copilot_plan` exists. `go vet ./...`, `go test ./... -count=1` (every package
+green, including new tests in `internal/pricing`, `internal/live`, `internal/history`,
+`internal/forecast`, `internal/vendorstrip`), `.\build.ps1` and `node --check` (both inline `<script>`
+blocks) all green.
+
 ## 2026-09-23, v0.3 V3-2: client map (K1), active time (K2)
 
 Read `02_roadmap\2026-09-23_v0.3_spec.md` section 2.2 K1/K2. K1: `OwnerRule` gains optional
