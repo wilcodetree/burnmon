@@ -2,6 +2,52 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, 45B: buffer, Done-when run, scoring week check
+
+Checklist showed 39B through 45A all ticked, so this buffer session ran the section 5
+Done-when list from `02_roadmap\2026-09-22_v0.2_spec.md` against the built exe, with this
+Claude Code session and (per `burnmon-cli live --json`'s own window) two real Codex CLI
+sessions genuinely running concurrently. Results, one line per item: (1) pass, tab
+routing defaults an empty/unknown hash to `now` (`template.html` line 2072) and the live
+window at run time held 4 real running sessions (2 Claude Code, 2 Codex) with the vendor
+strip returning honest per-agent totals for all five agents (`vendorstrip.Build` run
+directly against `%LOCALAPPDATA%\burnmon\burnmon.db`); a re-prefill finding with cause
+"first turn after resume" fired on this very session's own turn 1, confirmed via
+`burnmon-cli live --json`; the Now chart's own drawing code (`drawNowChart`) is unchanged
+since 44B's own 5-minute live check, so that verification still holds and was not
+repeated. (2) pass, `history.Build` run directly with `{period: week, vendor: codex}`
+against the real store returned a real total (62,901,057 tokens, 30 sessions, 695 turns)
+in one query, matching the History page's one-call design; the Done-when phrasing "for
+ZND" is descriptive, not a literal filter, since History has no project-level filter,
+only vendor/period/owner, and owner rules are not configured on this laptop. (3) pass,
+`TestMigrateRealV01Store` already covers this and passed; the real store's own migration
+this session (schema 4 to 5, on first CLI run after the rebuild) additionally confirmed
+it live, no event dropped (the "dropped 4 duplicate session(s)" log line is
+`dataset.go`'s pre-existing report-level dedup, unrelated to the events table). (4) pass,
+Hermes and Copilot CLI both have real events in the store (4 and 24 respectively) and
+both resolve through `history.AgentLabel`/`vendorstrip.AgentLabel` to "Hermes" and
+"Copilot CLI", never a raw agent key. (5) pass, `forecast.Build` run directly against the
+real store returned the locked gate message verbatim ("forecast unlocks after the first
+scored week (week 46)") with zero scored weeks. (6) pass, no Dutch giveaway word found in
+the generated report HTML. Forecast scoring: real wall-clock ISO week is 2026-W39 (Sep
+21 to 27), not week 45; the session prompts' week numbers are session/build-order labels,
+not calendar weeks, and the whole 39A-45A sequence ran inside two real days
+(2026-09-22/23), so no real ISO week has elapsed yet for scoring to advance past week 39.
+This session's `forecast.Build` call was itself the first real invocation against the
+production store (`bmForecast` only fires from the live webview, never from CLI report
+generation) and correctly wrote week 39's plan (1,422,554,946 tokens) as a live, working
+first write; scoring cannot reach week 45 until six more real weeks pass. Flagging this
+now rather than fixing anything: this is a real-time constraint, not a bug. One real bug
+found and fixed: the Sessions tab footer's average-cost-per-call cell used a bare em dash
+placeholder (`template.html` line 983) when no calls matched a filter, a live user-facing
+house-rule violation; replaced with `n/a`. One item left OPEN rather than silently
+decided: the About page still reads "the Overview tab" twice (explaining the personal-cost
+widget), a leftover from the tab removed in 40B; 45A already flagged this as a known gap
+and chose not to fix it, and this session leaves that choice in place since rewriting the
+copy is a judgment call about what the About section should say now, not a Done-when
+failure. `go test ./... -count=1` and `.\build.ps1` both green after the fix.
+`C:\dev\Work` untouched.
+
 ## 2026-09-23, 45A: README, STATUS, docs pass
 
 Rewrote README.md for BurnMon v0.2 as scoped: what it reads (Claude Code, Cowork, Codex,

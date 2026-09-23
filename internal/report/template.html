@@ -980,7 +980,7 @@ function renderSessions(){
   });
   if(!ss.length) tb.innerHTML = '<tr><td colspan="10" class="small">'+t('no_sessions_match')+'</td></tr>';
   document.querySelector('#t_sessions tfoot').innerHTML = ss.length
-    ? '<tr><td>'+t('sessions_count',{n:ss.length})+'</td><td></td><td></td><td></td><td>'+n(tcalls)+'</td><td>'+tok(tt)+'</td><td>'+(tcalls?money(tc/tcalls,3):'—')+'</td><td>'+money(tc)+'</td><td class="col-owner hidden"></td><td></td></tr>' : '';
+    ? '<tr><td>'+t('sessions_count',{n:ss.length})+'</td><td></td><td></td><td></td><td>'+n(tcalls)+'</td><td>'+tok(tt)+'</td><td>'+(tcalls?money(tc/tcalls,3):'n/a')+'</td><td>'+money(tc)+'</td><td class="col-owner hidden"></td><td></td></tr>' : '';
   document.getElementById('s_count').textContent = t('sessions_shown', {shown: ss.length, total: (D.sessions||[]).length});
   applyOwnerColumnVisibility();
   ss.forEach(function(s){
