@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	version        = "0.2.2"
+	version        = "0.2.3"
 	windowTitle    = "BurnMon"
 	mutexName      = `Local\burnmon-app`
 	minInterval    = 5 * time.Minute
@@ -254,28 +254,28 @@ func main() {
 		w.SetHtml(warmingPageHTML())
 	}
 
-	// F2: seed native roots and start the live watcher now, ahead of the
-	// initial full backfill below, instead of only after it returns. Before
-	// this fix, startLiveWatch ran after a.rebuild(true, ...) completed, so
-	// on a laptop with a large existing Codex history (many large
-	// rollouts), the watcher plus RootsByAdapter (needed to classify a
-	// Codex path instead of falling back to the claude adapter) did not
-	// exist yet for however long that first full pass took; a live turn
-	// landing during that window queued behind it instead of appearing
-	// within 2 seconds. See SESSION_LOG.md, v0.1.1 F2.
-	nativeClaudeRoots := scan.DefaultSourcesWithOptions(false)
-	nativeCodexRoots := codex.NativeSources()
-	a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)
-	a.startLiveWatch(nativeClaudeRoots, nativeCodexRoots)
-	startHermesPoll(a, st)
-	startCopilotCLIPoll(a, st)
-
-	// First collection happens off the UI goroutine so the page already on
-	// screen (warming or the stale dashboard) can paint immediately. With a
-	// warm store this finishes in seconds, well before anyone digs
-	// into a tab. Startup always does a full pass, WSL included: see "Two
-	// refresh cadences" in docs/2026-08-17_wsl-source-detection-design.md.
+	// W1 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md): everything
+	// from here down used to run synchronously on this goroutine, which is
+	// the UI thread w.Run() below pumps messages on (runtime.LockOSThread
+	// in this file's init). w.SetHtml/w.Navigate above only queue a
+	// navigation; nothing paints until the message loop is actually
+	// running, so scan.DefaultSourcesWithOptions and codex.NativeSources
+	// (both walk the filesystem) blocked the very first paint, reading as a
+	// blank, "Not Responding" window until they and the first collection
+	// below finished. Moving it all into the same startup goroutine that
+	// already did the first collection fixes this: w.Run() starts pumping
+	// messages immediately after this call, so the warming/stale page paints
+	// first and everything else happens behind it. F2 (SESSION_LOG.md,
+	// v0.1.1) still holds: the live watcher is registered before Collect is
+	// called below, in the same order as before, just one goroutine later.
 	go func() {
+		nativeClaudeRoots := scan.DefaultSourcesWithOptions(false)
+		nativeCodexRoots := codex.NativeSources()
+		a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)
+		a.startLiveWatch(nativeClaudeRoots, nativeCodexRoots)
+		startHermesPoll(a, st)
+		startCopilotCLIPoll(a, st)
+
 		if _, err := a.rebuild(true, progressReporter(w)); err != nil {
 			log.Println("initial collection failed:", err)
 			if !hadDashboard {
@@ -517,6 +517,8 @@ func main() {
 	}); err != nil {
 		log.Println("could not bind bmForecast:", err)
 	}
+
+	startUICheckServer(w)
 
 	if err := w.Bind("ccSaveSettings", func(p settingsPayload) error {
 		if err := a.applySettings(p); err != nil {

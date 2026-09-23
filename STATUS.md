@@ -1,11 +1,16 @@
 # BurnMon, status
 
-What is true at this commit (2026-09-23): **v0.2.2 committed locally, tag not yet pushed**,
-the Now page patch from Wilco's live review (turn drawer close, the clustered per-minute
-chart, chart-to-cards spacing, vendor strip link styling, the context-window book, the Codex
-"model unknown" card); v0.2.1 (the Refresh hang patch) and v0.2.0 (all sixteen v0.2 spec
+What is true at this commit (2026-09-23): **v0.2.3 committed locally, tag not yet pushed**,
+the real-window-check patch (a Win32+eval harness in `tools\uicheck` that drives the actual
+running window instead of a proxy check; the startup blank/Not Responding window; the turn
+drawer's Close button and overlay click, both broken by an inline `onclick` attribute
+resolving in the wrong JS scope; a horizontal scrollbar on long unbroken paths in the drawer;
+duplicate/generic legend entries for a session that just went idle; legend order; repeating
+Now-chart axis ticks; skipped X-axis minute labels; the cost axis not hiding with its series).
+v0.2.2 (the Now page patch), v0.2.1 (the Refresh hang patch) and v0.2.0 (all sixteen v0.2 spec
 items) shipped before it. Specs: `02_roadmap\2026-09-22_v0.2_spec.md`,
-`02_roadmap\2026-09-23_v0.2.1_hang_patch.md`, `02_roadmap\2026-09-23_v0.2.2_now_page_patch.md`.
+`02_roadmap\2026-09-23_v0.2.1_hang_patch.md`, `02_roadmap\2026-09-23_v0.2.2_now_page_patch.md`,
+`02_roadmap\2026-09-23_v0.2.3_window_check_patch.md`.
 Next: v0.3 (2026-10-09), per-vendor cost and credits, dev/business switch, full client map,
 macOS and Linux builds.
 

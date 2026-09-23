@@ -130,7 +130,17 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 .ticker-line .finding{color:var(--sun);font-weight:600}
 #turn_drawer_overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center}
 #turn_drawer_overlay:not(.hidden){display:flex}
-#turn_drawer{position:relative;background:var(--pine);color:var(--ink);border-radius:10px;padding:22px 26px;width:560px;max-width:92vw;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+#turn_drawer{position:relative;background:var(--pine);color:var(--ink);border-radius:10px;padding:22px 26px;width:560px;max-width:92vw;max-height:86vh;overflow-y:auto;overflow-x:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+/* W3 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md): the tool-call
+   table's Path column and the files-read list can hold a long, unbroken
+   string (a deep Windows path, a WSL path with no spaces) that plain
+   white-space:normal will not break, overflowing the drawer's 560px width
+   into a horizontal scrollbar. table-layout:fixed keeps the table itself
+   within the drawer's own width regardless of content, and
+   overflow-wrap:anywhere lets a cell or list item break an unbroken run
+   wherever it needs to, instead of growing past its column. */
+#turn_drawer table{table-layout:fixed}
+#turn_drawer td,#turn_drawer ul.tight li{overflow-wrap:anywhere;word-break:break-word}
 #turn_drawer_close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer}
 #turn_drawer h3{margin:0 0 4px}
 #turn_drawer h4{margin:16px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
@@ -225,9 +235,9 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
   <div class="card plain" id="now_forecast"></div>
 </section>
 
-<div id="turn_drawer_overlay" class="hidden" onclick="if(event.target===this) closeTurnDrawer()">
+<div id="turn_drawer_overlay" class="hidden">
   <div id="turn_drawer">
-    <button id="turn_drawer_close" type="button" title="Close" aria-label="Close" onclick="closeTurnDrawer()">&times;</button>
+    <button id="turn_drawer_close" type="button" title="Close" aria-label="Close">&times;</button>
     <div id="turn_drawer_body"></div>
   </div>
 </div>
@@ -635,6 +645,17 @@ function tok(v){
   if(v>=1e6) return Math.round(v/1e6).toLocaleString('en-GB')+'M';
   if(v>=1e3) return Math.round(v/1e3)+'K';
   return String(Math.round(v||0));
+}
+// tokPrecise: W6 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md).
+// tok()'s whole-number rounding repeats consecutive axis ticks on the Now
+// chart ("3M, 3M, 2M, 2M"); this two-decimal variant is scoped to that
+// chart's own axis ticks and tooltip only, everywhere else on the page
+// keeps using tok() unchanged.
+function tokPrecise(v){
+  v = v||0;
+  if(v>=1e9) return (v/1e9).toFixed(2)+'B';
+  if(v>=1e6) return (v/1e6).toFixed(2)+'M';
+  return (v/1e3).toFixed(2)+'K';
 }
 function n(v){ return (v||0).toLocaleString('en-GB'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){
@@ -1563,6 +1584,26 @@ function drawNowChart(chart, sessions, turns){
     chart.forEach(function(b){
       Object.keys(b.by_session||{}).forEach(function(id){ if(sessionIds.indexOf(id)===-1) sessionIds.push(id); });
     });
+    // W5 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md): legend order
+    // is vendor, then client type (surface: CLI, desktop, VS Code), then
+    // model, then project, alphabetical inside each level; Object.keys on
+    // a Go map's JSON (by_session above) has no defined order at all, so
+    // without this the legend's order was really just whatever order the
+    // backend happened to serialise sessions in. A session missing from
+    // byId (W4's idle-but-still-charted case) sorts by its own fallback
+    // label, after every session vendor/surface/model/project can place.
+    sessionIds.sort(function(idA, idB){
+      var a = byId[idA], b = byId[idB];
+      if(!a && !b) return idA.slice(0,8) < idB.slice(0,8) ? -1 : 1;
+      if(!a) return 1;
+      if(!b) return -1;
+      var ka = [a.vendor||'', a.surface||'', a.model||'', a.project||''];
+      var kb = [b.vendor||'', b.surface||'', b.model||'', b.project||''];
+      for(var i=0;i<ka.length;i++){
+        if(ka[i] !== kb[i]) return ka[i] < kb[i] ? -1 : 1;
+      }
+      return 0;
+    });
     var P = chartPalette();
 
     // Per-bar peak, not a stacked sum: bars cluster side by side rather
@@ -1611,7 +1652,14 @@ function drawNowChart(chart, sessions, turns){
         return v ? (v.fresh + v.cache_write + v.cache_read + v.output) : 0;
       });
       var classBreakdown = chart.map(function(b){ return (b.by_session||{})[id] || null; });
-      var label = s ? sessionChartLabel(s) : 'recent session';
+      // W4 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md): a session
+      // that just went idle keeps its bars for the rest of the chart's
+      // 30-minute window (live.BuildSnapshot's own runningWindow is
+      // shorter than that), so byId[id] can miss even though id is a real,
+      // distinct session; the id's own first 8 characters, unlike the old
+      // fixed literal "recent session", still tells two such sessions
+      // apart in the legend instead of showing as identical duplicates.
+      var label = s ? sessionChartLabel(s) : id.slice(0, 8);
       var color = nowChart.colorBySession[id].color;
       var ds = nowChart.datasetById[id];
       if(ds){
@@ -1644,26 +1692,27 @@ function drawNowChart(chart, sessions, turns){
     }
     var datasets = barDatasets.concat([nowChart.costDataset]);
 
-    // N2: a tick and a light gridline every minute (autoSkip:false plus
-    // grid.display:true draws one at every slot regardless of its label),
-    // the label text itself only every minute when there is room (>=40px
-    // per label, this.width comes from Chart.js binding the callback to
-    // the scale instance) else every 5 minutes; never rotated.
+    // W7 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md): every
+    // minute gets its own label, none skipped (replaces v0.2.2's "every 5
+    // minutes under 40px" rule); labels rotate 45 degrees only once the
+    // chart is narrower than 36px per minute, so they stay readable
+    // without needing to skip any.
     var tickCallback = function(value, index){
       var b = chart[index];
       if(!b) return '';
       var d = new Date(b.at);
       if(isNaN(d.getTime())) return '';
-      var pxPerLabel = this && this.width ? this.width / chart.length : 0;
-      var everyN = pxPerLabel >= 40 ? 1 : 5;
-      return (d.getMinutes() % everyN === 0) ? localHMS(b.at).slice(0,5) : '';
+      return localHMS(b.at).slice(0,5);
     };
+    var canvasEl = document.getElementById('ch_now');
+    var pxPerMinute = canvasEl && canvasEl.clientWidth ? canvasEl.clientWidth / chart.length : 0;
+    var tickRotation = pxPerMinute > 0 && pxPerMinute < 36 ? 45 : 0;
 
     // N2: the tooltip's main line matches the left axis's K/M/B token
     // format (tok()); the cost line keeps Chart.js's own default
     // "label: formattedValue" line, unchanged from before this rewrite.
     var tooltipLabel = function(ctx){
-      if(ctx.dataset.yAxisID === 'y') return ctx.dataset.label + ': ' + tok(ctx.parsed.y);
+      if(ctx.dataset.yAxisID === 'y') return ctx.dataset.label + ': ' + tokPrecise(ctx.parsed.y);
       return ctx.dataset.label + ': ' + ctx.formattedValue;
     };
     var afterLabel = function(ctx){
@@ -1690,9 +1739,15 @@ function drawNowChart(chart, sessions, turns){
           animation:false,
           interaction:{mode:'index', intersect:false},
           scales:{
-            x:{grid:{display:true, color:P.grid}, ticks:{font:{size:10}, maxRotation:0, autoSkip:false, callback: tickCallback}},
-            y:{beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}, ticks:{callback: function(v){ return tok(v); }}},
-            cost:{position:'right', beginAtZero:true, max: nowChart.costMax || undefined, grid:{display:false}}
+            x:{grid:{display:true, color:P.grid}, ticks:{font:{size:11}, minRotation:tickRotation, maxRotation:tickRotation, autoSkip:false, callback: tickCallback}},
+            y:{beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}, ticks:{callback: function(v){ return tokPrecise(v); }}},
+            // W8 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md):
+            // display:'auto' is Chart.js's own built-in "show this axis
+            // only while a visible dataset actually uses it" mode, so the
+            // legend's default hide/show click handling (already toggling
+            // costDataset.hidden, unchanged here) is all that is needed to
+            // drive it, cost hidden by default per its own dataset.
+            cost:{position:'right', display:'auto', beginAtZero:true, max: nowChart.costMax || undefined, grid:{display:false}}
           },
           plugins:{
             legend:{position:'bottom', labels:{font:{size:10}, boxWidth:10}},
@@ -1703,6 +1758,8 @@ function drawNowChart(chart, sessions, turns){
       charts.now.data.labels = labels;
       charts.now.data.datasets = datasets;
       charts.now.options.scales.x.ticks.callback = tickCallback;
+      charts.now.options.scales.x.ticks.minRotation = tickRotation;
+      charts.now.options.scales.x.ticks.maxRotation = tickRotation;
       charts.now.options.scales.y.max = nowChart.tokenMax;
       charts.now.options.scales.cost.max = nowChart.costMax || undefined;
       // F8: update('none') so a poll never plays a transition, only the
@@ -1798,6 +1855,19 @@ function closeTurnDrawer(){
   var overlay = document.getElementById('turn_drawer_overlay');
   if(overlay) overlay.classList.add('hidden');
 }
+
+// W2 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md): the Close
+// button and overlay-click used to call closeTurnDrawer via an inline
+// onclick="..." HTML attribute, which resolves in global scope; this
+// whole script is one IIFE (opens near the top of this script block),
+// so closeTurnDrawer is not a global and those attributes silently threw
+// a ReferenceError on every click, never closing the drawer. Escape
+// already worked, since its own handler (below) is registered from
+// inside this same closure via addEventListener, exactly like these two.
+document.getElementById('turn_drawer_close').addEventListener('click', closeTurnDrawer);
+document.getElementById('turn_drawer_overlay').addEventListener('click', function(e){
+  if(e.target === this) closeTurnDrawer();
+});
 
 // N1 (v0.2.2): Esc closes the drawer from anywhere on the page, matching
 // the overlay-click and Close-button paths, without needing focus inside

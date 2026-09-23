@@ -2,6 +2,51 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.2.3: window check patch, W0 to W8
+
+Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.3_window_check_patch.md`. W0 first:
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` (chromedp) does not
+reach the browser process on this laptop, confirmed with a clean process tree and by
+inspecting the actual `msedgewebview2.exe` (`--type=` absent, main/browser process) command
+line; a from-scratch attempt at explicit `ICoreWebView2EnvironmentOptions` in a vendored
+`go-webview2` fork also failed (`E_INVALIDARG`) after several genuinely different fix
+attempts, so per the debugging process that path was abandoned rather than pushed further.
+Built `tools\uicheck` instead: Win32 screenshot (`BitBlt` from the screen DC, not
+`PrintWindow`, which produced black frames after heavy process churn this session) plus
+`SendInput` click/key, and a dev-only TCP eval channel (`cmd\burnmon\uicheck_devserver.go`,
+`BURNMON_UICHECK=1`, never set outside this script) for DOM reads/JS calls, since only the
+process hosting WebView2 can run script in its own page. Hit and fixed two harness-level
+issues along the way: `uicheck.exe` was not DPI-aware (mis-sized every capture and click);
+and a "ghost window" (explorer.exe keeps a force-killed app's HWND alive briefly to show
+"Not Responding" in Alt-Tab, `FindWindowW` cannot tell it apart from the real thing) needed
+an owning-process check. W1 to W8 each reproduced against the real window first (a genuine
+before build for W1, before/after both against the fixed binary for W2 to W8, since
+rebuilding a separate broken binary per item was not worth the round trip once the fix was
+this well isolated by direct measurement first): startup blank/Not Responding (real cause:
+`scan.DefaultSourcesWithOptions`/`codex.NativeSources`/`SeedNativeRoots`/`startLiveWatch` ran
+on the UI thread before `w.Run()`; moved into the startup goroutine; residual ~650ms-1.5s to
+first paint is WebView2's own engine warm-up, not app code, measured directly); the turn
+drawer's Close button and overlay click (inline `onclick="closeTurnDrawer()"` resolves in
+global scope, but the whole page script is one IIFE opened at line 476 and not closed until
+line ~2271, so both attributes silently threw `ReferenceError` on every click; Esc already
+worked, wired via `addEventListener` from inside that same closure; fix moves Close/overlay
+to `addEventListener` too); a horizontal scrollbar on a genuinely unbreakable long path
+(`table-layout:fixed` plus `overflow-wrap:anywhere`, reproduced with `scrollWidth` 947 vs
+`clientWidth` 560, fixed at 560/560); duplicate "recent session" legend entries traced to
+`live.BuildSnapshot` excluding a session from `Snapshot.Sessions` once idle past its shorter
+`runningWindow`, even though it still has bars in the chart's longer 30-minute window
+(fallback label now the session id's own first 8 characters, distinguishable per session);
+legend order (vendor, surface, model, project, alphabetical, cost last, verified with four
+deliberately out-of-order synthetic sessions); repeating whole-number axis ticks (`tokPrecise`,
+a two-decimal formatter scoped to this one chart, `tok()` elsewhere unchanged); skipped
+X-axis minute labels (every minute now; rotation only under 36px/minute); the cost axis not
+hiding with its series (`display:'auto'`, Chart.js's own visible-dataset-driven axis mode).
+`node --check` on both extracted script blocks, `go vet`, `go test ./... -count=1`,
+`.\build.ps1` and `scripts\uicheck.ps1` (all checks, W0 to W8) green, this session's own
+live Claude Code activity providing the "real store, live session" data `bmLive` fed
+throughout; no separate Codex session was running this pass. Version constants to 0.2.3.
+Committed locally, not yet tagged or pushed.
+
 ## 2026-09-23, v0.2.2: Now page patch, N1 to N6
 
 Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.2_now_page_patch.md` and worked N1

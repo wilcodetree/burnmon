@@ -38,12 +38,29 @@ Priority order lives here and only here.
    model forward the same way it already did for surface and cwd. Spec:
    `2026-09-23_v0.2.2_now_page_patch.md`. **DONE 2026-09-23, committed locally, tag `v0.2.2`
    not yet pushed, see SESSION_LOG.md for the commands.**
-6. v0.3 (2026-10-09, moved from 2026-12-12), next, one release, two sessions a week: price
+6. v0.2.3 patch: v0.2.1 and v0.2.2 were both verified by proxy (no session could see or
+   click the real WebView2 window); W0 built a real harness instead (`tools\uicheck`, Win32
+   screenshot/click/key plus a dev-only eval channel `cmd\burnmon\uicheck_devserver.go`
+   opens under `BURNMON_UICHECK=1`), then W1 to W8 reproduced and fixed against the real
+   window: startup blank/Not Responding (unbounded filesystem scan ran before `w.Run()`,
+   moved into the startup goroutine); the turn drawer's Close button and overlay click
+   (inline `onclick="closeTurnDrawer()"` resolving in the wrong scope, the whole page script
+   is one IIFE; Esc already worked via `addEventListener`); a horizontal scrollbar on long
+   unbroken paths in the drawer (table-layout:fixed plus overflow-wrap:anywhere); duplicate
+   "recent session" legend entries for a session that went idle within the chart's 30-minute
+   window but outside `live.BuildSnapshot`'s shorter running window (id-prefix fallback
+   label instead); legend order (vendor, surface, model, project, alphabetical, cost last);
+   repeating Now-chart axis ticks (a two-decimal `tokPrecise`, scoped to that chart only);
+   skipped X-axis minute labels (every minute now, rotate only under 36px/minute); the cost
+   axis not hiding with its series (`display:'auto'`). Spec:
+   `2026-09-23_v0.2.3_window_check_patch.md`. **DONE 2026-09-23, committed locally, tag
+   `v0.2.3` not yet pushed, see SESSION_LOG.md for the commands.**
+7. v0.3 (2026-10-09, moved from 2026-12-12), next, one release, two sessions a week: price
    books, per-vendor cost, dev and business switch, client map (owner then client), active
    time, export and merge, Copilot VS Code (OTel file), macOS and Linux in browser mode.
    Slip order: platforms, then Copilot VS Code. Spec: `2026-09-23_v0.3_spec.md`. Session
    prompts with the checklist: `2026-09-23_v0.3_session_prompts.md`. Grilled 2026-09-23.
-7. Decision 2026-12-19.
+8. Decision 2026-12-19.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.
 Architecture (decided): `..\04_assets\2026-09-22_token_monitor_architecture.md`.
