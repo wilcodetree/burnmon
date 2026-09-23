@@ -502,6 +502,8 @@ body.monitor-mode.monitor-dev #monitor_text_view{display:block}
     <p style="margin-bottom:0"><b>Nothing here is money you owe.</b> Your seat is a flat fee. These figures show what your work costs the organisation, and what it would cost if it were metered. Both are for deciding things, not for settling up.</p>
   </div>
 
+  <div class="note" style="margin-top:16px"><b>macOS and Linux builds are untested.</b> Both platforms build and run in browser mode (no app window, since WebView2 is Windows-only), but neither has been run on real hardware. Report anything odd.</div>
+
   <h2>The two cost bases</h2>
   <div class="card plain">
     <p style="margin-top:0"><b>Subscription, what we pay.</b> The default. Your usage as a share of what the organisation actually pays Anthropic each month. Every euro of the invoice is allocated by consumption, so all the personal dashboards together add up to the real invoice and nothing more.</p>
@@ -2393,7 +2395,7 @@ vsTimer = setInterval(pollVendorStrip, 60000);
 // Vendor-agnostic replacement for the old Months/Weeks/Days tabs (41A):
 // one page, one bound Go-side call per filter change, never the page
 // aggregating raw events itself.
-var AGENT_LABELS = {'claude-code':'Claude Code', 'cowork':'Cowork', 'codex':'Codex', 'hermes':'Hermes', 'copilot-cli':'Copilot CLI'};
+var AGENT_LABELS = {'claude-code':'Claude Code', 'cowork':'Cowork', 'codex':'Codex', 'hermes':'Hermes', 'copilot-cli':'Copilot CLI', 'copilot-vscode':'Copilot (VS Code)'};
 var UI_HIST = {period:'week', range:'30', from:'', to:'', vendor:'', owner:'', client:''};
 var histFiltersBuilt = false;
 

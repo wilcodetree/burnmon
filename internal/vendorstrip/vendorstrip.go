@@ -13,15 +13,16 @@ import (
 	"burnmon/internal/store"
 )
 
-// AgentLabel mirrors internal/history.AgentLabel: the same five display
-// names, since the strip's rows and History's vendor filter must read as
-// the same vocabulary.
+// AgentLabel mirrors internal/history.AgentLabel: the same display names,
+// since the strip's rows and History's vendor filter must read as the same
+// vocabulary.
 var AgentLabel = map[string]string{
-	"claude-code": "Claude Code",
-	"cowork":      "Cowork",
-	"codex":       "Codex",
-	"hermes":      "Hermes",
-	"copilot-cli": "Copilot CLI",
+	"claude-code":    "Claude Code",
+	"cowork":         "Cowork",
+	"codex":          "Codex",
+	"hermes":         "Hermes",
+	"copilot-cli":    "Copilot CLI",
+	"copilot-vscode": "Copilot (VS Code)",
 }
 
 // Row is one vendor's (or, as Total, every vendor's) token totals.

@@ -39,6 +39,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -47,19 +48,46 @@ import (
 )
 
 // DefaultDBPath is %LOCALAPPDATA%\Hermes\state.db on Windows, where every
-// Hermes install on this laptop has been found. Empty (not an error) when
-// LOCALAPPDATA is unset or the file does not exist, so a caller can treat
-// "no Hermes installed" the same as "no roots" elsewhere in burnmon.
+// Hermes install on this laptop has been found. B1 (v0.3, 2.4): macOS and
+// Linux default roots, VERIFY (no Hermes documentation confirms either;
+// these follow the same per-OS app-data convention store.DefaultPath
+// already uses): ~/Library/Application Support/Hermes/state.db on darwin,
+// $XDG_DATA_HOME/Hermes/state.db (or ~/.local/share/Hermes/state.db) on
+// linux. Empty (not an error) when the path cannot be resolved or the file
+// does not exist, so a caller can treat "no Hermes installed" the same as
+// "no roots" elsewhere in burnmon.
 func DefaultDBPath() string {
-	lad := os.Getenv("LOCALAPPDATA")
-	if lad == "" {
+	dir := defaultDataDir()
+	if dir == "" {
 		return ""
 	}
-	p := filepath.Join(lad, "Hermes", "state.db")
+	p := filepath.Join(dir, "Hermes", "state.db")
 	if _, err := os.Stat(p); err != nil {
 		return ""
 	}
 	return p
+}
+
+func defaultDataDir() string {
+	switch runtime.GOOS {
+	case "windows":
+		return os.Getenv("LOCALAPPDATA")
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			return ""
+		}
+		return filepath.Join(home, "Library", "Application Support")
+	default: // linux and anything else pure-Go builds target
+		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+			return xdg
+		}
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			return ""
+		}
+		return filepath.Join(home, ".local", "share")
+	}
 }
 
 // surfaceOf maps a Hermes sessions.source value to burnmon's surface

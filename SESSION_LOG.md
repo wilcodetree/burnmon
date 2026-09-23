@@ -2,6 +2,97 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.3 V3-5: Copilot in VS Code and macOS/Linux builds (A4, B1)
+
+Read `02_roadmap\2026-09-23_v0.3_spec.md` sections 2.3 A4/2.4 B1 and the A3 correction entry
+below before touching anything. The prompt's own precondition ("Before this session Wilco
+copies his real Copilot VS Code OTel span file ... into `testdata\copilotvsc\`") had not
+happened: no such folder existed. The live file the A3 correction session used was still on
+disk at `%LOCALAPPDATA%\Temp\copilot-otel.jsonl` (1,793 lines, 14.7MB, last written
+2026-09-23 04:39), so this session read it directly rather than waiting, and built the
+fixture from it itself. Real attribute names, read before writing the parser as the prompt
+asked: log records mix two shapes, `attributes["event.name"]` values
+`copilot_chat.session.start` (carries its own `session.id`, distinct from the constant
+resource-level `session.id` every line in the file shares for the VS Code window's whole
+life), `gen_ai.client.inference.operation.details` (one LLM call: `gen_ai.request.model`,
+`gen_ai.response.model`, `gen_ai.response.id`, `gen_ai.usage.input_tokens`,
+`gen_ai.usage.output_tokens`), `copilot_chat.tool.call` and `copilot_chat.agent.turn` (a
+per-turn rollup this adapter deliberately does not read, since its own input/output totals
+already include every inference call inside that turn and reading both would double-count).
+Two findings worth carrying: no attribute value over 200 bytes exists anywhere in the file
+(checked programmatically across every attribute on every line), so "fixture ... stripped of
+prompt text" was already true of the source and nothing needed removing; and no
+workspace/folder/cwd attribute of any kind exists either, so "project from a workspace
+attribute where present" has nothing to read today (VERIFY per spec section 6, a
+`workspaceAttrCandidates` best-effort list kept in `internal/adapter/copilotvsc/copilotvsc.go`
+for if GitHub adds one later). One `gen_ai.response.id` real dedup case was caught directly in
+the file: `dc0615ba-...` appears on four separate lines with growing input tokens (60281,
+91502, 95281, 103664) and non-monotonic output tokens (434, 369, 256, 1197), read as the same
+in-flight multi-step agent turn being re-emitted as it grows; "last write wins per request"
+(spec's own phrase) is implemented as keyed-by-response-id overwrite in file order, not
+largest-output, so this case resolves to the last line (103664/1197) regardless of which
+value happens to be biggest. `PollOnce` is a plain 5-second poll of the whole file every
+time (like Hermes/Copilot CLI, not an incremental tail: no prompt text anywhere means no
+line-size reason to avoid re-reading it, and `UpsertEvents`' own largest-output-per-RequestID
+dedup already makes a repeat read of unchanged lines a no-op), wired as
+`startCopilotVSCPoll` alongside the other two pollers, config-gated on a new
+`pricing.Config.CopilotVSCodeOtelFile` (`copilot_vscode_otel_file` in `burnmon.json`; no
+fixed default path exists anywhere to auto-detect, unlike Hermes/Copilot CLI, since VS
+Code's own `otel.outfile` setting is user-chosen). Vendor/agent/surface `github`/
+`copilot-vscode`/`vscode`, label "Copilot (VS Code)" added to both Go-side maps
+(`internal/vendorstrip`, `internal/history`) and the template's own `AGENT_LABELS`. Fixture:
+`testdata\copilotvsc\copilotvsc_fixture.jsonl`, the file's own 29 attribute-bearing lines
+(every `session.start`/inference/tool.call/agent.turn line), no synthetic data.
+`TestPollOnce_Fixture` asserts the exact numbers above; `go test ./internal/adapter/copilotvsc/...`
+green. Real-window check (never a proxy check alone): pointed a scratch `burnmon.json`'s
+`copilot_vscode_otel_file` at the real live file, ran `burnmon.exe` for real with
+`BURNMON_UICHECK=1`, and read the actual running DOM over the dev eval channel:
+`#t_vendorstrip` shows a real "Copilot (VS Code)" row, `0 / 412K / 412K` (today/week/month),
+confirming the whole path (config -> poll -> `cfg.OwnerFor`/`ClientFor` -> `UpsertEvents` ->
+vendor strip -> template label) works end to end against real data, not just the fixture;
+`go test ./...` stayed green afterward (this real ingestion did not disturb
+`TestMigrateRealV01Store` the way V3-4's real `reown` run once did, since it only adds new
+rows under a vendor no existing test snapshots).
+
+B1: the whole `cmd\burnmon` package was Windows-only (`//go:build windows` on the single
+`main.go`, `go-webview2` imported unconditionally), so darwin/linux did not merely lack a
+window, they did not compile at all. Split into `app.go` (no build tag: the `app` struct,
+`rebuild`, live/poll wiring including the new `startCopilotVSCPoll`, Settings, and the HTML
+chrome `rebuild` injects — none of it touches a Windows API), `main.go` (unchanged
+`//go:build windows`, now only the WebView2 window itself, its `w.Bind` calls, and the
+single-instance/WebView2-missing-fallback Win32 bits), and a new `main_other.go`
+(`//go:build !windows`): per decision #3 of the grill ("macOS and Linux: Pure-Go builds,
+browser mode, no cgo, labelled untested"), this collects once, writes `dashboard.html`, opens
+it in the OS default browser (`open` on darwin, `xdg-open` on linux), then keeps rewriting
+that same file on `-interval` in the background since there is no bound-JS live-update path
+outside a WebView2 window (a saved report already falls back to its own "only available in
+the BurnMon app window" text for anything live, which U2 anticipated as the correct case, not
+a bug, for exactly this situation). `internal/scan/wsl_other.go` gained a `WSLDistroNames`
+stub (`app.go`'s `rebuild` called the real one unconditionally; the cross-platform build
+would not link without it) and `internal/adapter/hermes.DefaultDBPath` gained darwin/linux
+default paths (`~/Library/Application Support/Hermes/state.db`,
+`$XDG_DATA_HOME/Hermes/state.db` else `~/.local/share/Hermes/state.db`), both VERIFY, no
+Hermes documentation confirms either; Codex (`NativeSources`), Claude
+(`scan.DefaultSourcesWithOptions`) and Copilot CLI (`copilotcli.DefaultDBPath`) already used
+`os.UserHomeDir()` and needed no change. Verified for real, not just read: cross-compiled
+`burnmon`/`burnmon-cli` for darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, all four
+with `CGO_ENABLED=0`, all eight binaries produced with zero build errors. `.github\workflows\release.yml`
+added: on a `v*` tag push, builds all four darwin/linux combinations on `ubuntu-latest`
+(pure cross-compilation, no need for a macOS/Linux runner) and attaches every binary to that
+tag's GitHub release via `softprops/action-gh-release`; Windows builds stay `build.ps1`'s own
+job (go-winres icons, WebView2), not duplicated here, matching B1's own wording ("builds
+burnmon and burnmon-cli for darwin and linux"). README gained the two VS Code settings, a
+default-transcript-roots table by OS (VERIFY rows named), a macOS/Linux section labelled
+untested, and the About tab (`internal/report/template.html`) gained its own "macOS and Linux
+builds are untested" note, confirmed present in the real running window over the dev eval
+channel above, not just read from the template source. `go vet ./...`, `go test ./...
+-count=1` (Windows), `node --check` on all three of `template.html`'s extracted `<script>`
+blocks, and `.\build.ps1` all green; `scripts\uicheck.ps1 w0` passed against the rebuilt
+`burnmon.exe`. `C:\dev\Work` untouched. No open call was hit that needed stopping to ask;
+the "two VS Code settings" vs. the four the A3 correction actually used was the one
+judgement call made without asking (documented above, not treated as open, since it was a
+README-wording question, not a behaviour decision).
+
 ## 2026-09-23, v0.3 V3-4: export and merge (K4, K5)
 
 Read `02_roadmap\2026-09-23_v0.3_spec.md` section 2.2 K4/K5 and the v0.2 spec's P6 wall rule

@@ -20,11 +20,21 @@ renamed and extended from v0.2 onward. Repo:
 - **Hermes**: its local SQLite `messages` database, polled every 5 seconds.
 - **GitHub Copilot CLI**: session totals, read at shutdown, so a Copilot CLI session's
   numbers appear once it closes, not while it runs.
+- **GitHub Copilot Chat in VS Code**: the JSON file its own OpenTelemetry export writes,
+  polled every 5 seconds. Off by default: VS Code sends no telemetry anywhere until you
+  turn these two settings on yourself, in `settings.json`:
 
-Coverage is these five. `claude.ai` in the browser, and GitHub Copilot in VS Code, keep no
-local transcript BurnMon can read, so neither appears here (checked directly for Copilot
-VS Code: it can emit OpenTelemetry to a local file, but that path is not wired into
-BurnMon yet, see "Not yet there" below).
+      "github.copilot.chat.otel.enabled": true,
+      "github.copilot.chat.otel.outfile": "C:\\path\\to\\copilot-otel.jsonl"
+
+  Then point `burnmon.json`'s `copilot_vscode_otel_file` at that same path, and reload the
+  VS Code window once (a setting change alone does not start the exporter; the extension
+  host needs a fresh start). No workspace/folder attribute has been seen on any span
+  emitted by the extension so far, so every event's client shows as "unassigned" until
+  GitHub adds one; token counts and model are read regardless.
+
+Coverage is these six. `claude.ai` in the browser keeps no local transcript BurnMon can
+read, so it does not appear here.
 
 ## The five tabs
 
@@ -112,6 +122,18 @@ nothing already stored is ever dropped). Click the gear icon to edit subscriptio
 numbers, seat counts and seat prices from inside the window; saving re-reads everything,
 since cached sessions carry costs computed with the old numbers.
 
+### macOS and Linux: untested
+
+`burnmon` and `burnmon-cli` also build for darwin and linux (amd64 and arm64,
+`CGO_ENABLED=0`, pure Go, no cgo), attached to every tagged release. Neither platform has
+WebView2, so there is no app window there: `burnmon` collects once, writes
+`dashboard.html`, opens it in the system default browser (`open` on macOS, `xdg-open` on
+Linux), then keeps re-collecting and rewriting that same file on `-interval` in the
+background; reload the browser tab to see newer numbers. No bound live functions exist
+outside the WebView2 window, so the page falls back to its own "only available in the
+BurnMon app window" text for anything live, the same as any saved report. **Untested**:
+built and cross-compiled, never run on real macOS or Linux hardware.
+
 ## Configuration
 
 Prices and the subscription calibration are compiled-in illustrative defaults (see
@@ -168,16 +190,31 @@ resolves the WebView2 binding. Produces `burnmon-cli.exe` and `burnmon.exe`, bot
 single files. Copy them anywhere; no install. If a `build.local.ps1` exists next to
 `build.ps1` (gitignored, machine-local), it runs afterward.
 
+## Default transcript roots, by OS
+
+| Tool | Windows | macOS | Linux |
+|---|---|---|---|
+| Claude Code / Cowork | `%USERPROFILE%\.claude\projects` | `~/.claude/projects` | `~/.claude/projects` |
+| Codex | `%USERPROFILE%\.codex\sessions` (or `$CODEX_HOME`) | `~/.codex/sessions` | `~/.codex/sessions` |
+| Hermes | `%LOCALAPPDATA%\Hermes\state.db` | `~/Library/Application Support/Hermes/state.db` (VERIFY, no Hermes doc confirms this) | `$XDG_DATA_HOME/Hermes/state.db`, else `~/.local/share/Hermes/state.db` (VERIFY) |
+| GitHub Copilot CLI | `%COPILOT_HOME%\session-store.db`, else `~/.copilot/session-store.db` | `~/.copilot/session-store.db` (VERIFY) | `~/.copilot/session-store.db` (VERIFY) |
+| GitHub Copilot in VS Code | wherever `github.copilot.chat.otel.outfile` points, matched by `copilot_vscode_otel_file` | same (per-OS default outfile location not documented by GitHub; VERIFY) | same (VERIFY) |
+
+WSL distro detection (the registry-based scan for Claude Code and Codex transcripts
+inside a WSL distribution) only exists on Windows; it is a no-op everywhere else.
+
 ## Not yet there (v0.3)
 
-Per-vendor cost and credits, the dev/business cost-view switch, the full client map
-(active time, export, merge across owners), macOS and Linux builds, and GitHub Copilot in
-VS Code (its OTel export is confirmed working on Wilco's own laptop; wiring it in is
-scoped for v0.3, see `02_roadmap\2026-09-22_v0.2_spec.md` A3). None of these show partial
-or misleading numbers today: where a feature is not built, the page says so (the price
-book note on History, the forecast gate on Now) rather than guessing.
+v0.3 is in progress (`02_roadmap\2026-09-23_v0.3_spec.md`); this section is not yet
+brought up to date session by session (that pass is V3-6's own job, alongside the rest of
+this README). Per-vendor cost/credits, the dev/business switch, the client map (active
+time, export, merge), Copilot VS Code and the macOS/Linux builds above are all already
+built as of this commit; check `SESSION_LOG.md`'s newest entries or `STATUS.md` for what
+is still open. None of what is built shows partial or misleading numbers: where a feature
+is not built yet, the page says so (the price book note on History, the forecast gate on
+Now) rather than guessing.
 
 ## Status
 
-Actively developed toward the `v0.2.0` tag, due 2026-11-14 (`02_roadmap\2026-09-22_v0.2_spec.md`).
+Actively developed toward the `v0.3.0` tag, due 2026-10-09 (`02_roadmap\2026-09-23_v0.3_spec.md`).
 See `STATUS.md` for what is true at the current commit.

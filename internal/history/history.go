@@ -18,13 +18,14 @@ import (
 )
 
 // AgentLabel maps a schema.Event.Agent value to its display name, the same
-// five names P2's vendor filter lists.
+// names P2's vendor filter lists.
 var AgentLabel = map[string]string{
-	"claude-code": "Claude Code",
-	"cowork":      "Cowork",
-	"codex":       "Codex",
-	"hermes":      "Hermes",
-	"copilot-cli": "Copilot CLI",
+	"claude-code":    "Claude Code",
+	"cowork":         "Cowork",
+	"codex":          "Codex",
+	"hermes":         "Hermes",
+	"copilot-cli":    "Copilot CLI",
+	"copilot-vscode": "Copilot (VS Code)",
 }
 
 // Filter is what the History page's controls send bmHistory. From and To are

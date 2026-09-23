@@ -15,3 +15,11 @@ func wslSources(deadline time.Duration) []string {
 func WSLHomeSources(deadline time.Duration, relPath, envVar string) []string {
 	return nil
 }
+
+// WSLDistroNames returns nil on every platform except Windows, same reason
+// as wslSources: there is nothing here for the "reading Linux files from
+// Windows is slow" WSL cadence in app.go's stampAreaHTML/appRebuildNotice to
+// ever name.
+func WSLDistroNames() []string {
+	return nil
+}

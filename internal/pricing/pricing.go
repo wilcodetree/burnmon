@@ -241,6 +241,14 @@ type Config struct {
 	// header's own Monitor/Full view switch flips it live and saves the new
 	// choice back here through the settings save path.
 	View string `json:"view,omitempty"`
+
+	// CopilotVSCodeOtelFile is A4's own file path: GitHub Copilot Chat in
+	// VS Code writes no file at all until the two OTel settings in the
+	// README are set, and that outfile setting has no fixed default burnmon
+	// could auto-detect (see internal/adapter/copilotvsc). Empty (the
+	// default) means the adapter is off: no VS Code settings configured, no
+	// file to poll.
+	CopilotVSCodeOtelFile string `json:"copilot_vscode_otel_file,omitempty"`
 }
 
 // BusinessMode reports whether Mode is set to "business"; any other value
