@@ -119,16 +119,25 @@ func main() {
 	// Whichever file loads is also where Settings saves land afterward
 	// (cfgSavePath below), so a Groundwork Kit user editing Settings keeps
 	// writing to their own portable folder, not %LOCALAPPDATA%.
+	// claudecost.json is the pre-rename config name (v0.1.2 and earlier);
+	// still read if present so an existing portable folder or fixed install
+	// keeps working after the burnmon rename, but burnmon.json always wins
+	// when both exist.
 	cfgFile := *cfgPath
 	if cfgFile == "" {
 		if exe, err := os.Executable(); err == nil {
-			if cand := filepath.Join(filepath.Dir(exe), "burnmon.json"); fileExists(cand) {
+			exeDir := filepath.Dir(exe)
+			if cand := filepath.Join(exeDir, "burnmon.json"); fileExists(cand) {
+				cfgFile = cand
+			} else if cand := filepath.Join(exeDir, "claudecost.json"); fileExists(cand) {
 				cfgFile = cand
 			}
 		}
 	}
 	if cfgFile == "" {
 		if cand := filepath.Join(dataDir, "burnmon.json"); fileExists(cand) {
+			cfgFile = cand
+		} else if cand := filepath.Join(dataDir, "claudecost.json"); fileExists(cand) {
 			cfgFile = cand
 		}
 	}

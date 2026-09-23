@@ -1,5 +1,5 @@
 {
-  "_comment": "Optional overrides. Rename to claudecost.json next to claudecost.exe. Any subset of fields works; everything omitted keeps the compiled-in default. Values below are illustrative, not a real invoice: replace them with your own seat counts and invoice total.",
+  "_comment": "Optional overrides. Rename to burnmon.json next to burnmon.exe (or burnmon-cli.exe). Any subset of fields works; everything omitted keeps the compiled-in default. Values below are illustrative, not a real invoice: replace them with your own seat counts and invoice total.",
   "fx_usd_eur": 0.92,
   "prices": {
     "opus":   {"label": "Opus",   "in": 5.0,  "out": 25.0},
@@ -19,6 +19,8 @@
     "window": "example",
     "your_seat": "Premium"
   },
+  "_comment_owners": "v0.2 P6, the light client map. Empty (shown here) is the default: one owner, no owner column shown anywhere. Ordered rules, first match wins, unmatched paths get \"personal\": \"owners\": [{\"match\": \"C:\\\\dev\\\\Work\\\\*\", \"owner\": \"Valona\"}, {\"match\": \"C:\\\\ZND\\\\*\", \"owner\": \"ZND\"}]. Applied at ingest; after changing the rules, re-apply them to sessions already in the store with `burnmon-cli reown`.",
+  "owners": [],
   "_comment_wsl": "wsl_scan, extra_sources and wsl_interval_hours are new in v0.7.0. The three values below are shown at their defaults (auto-scan, nothing extra, 4-hour WSL cadence), so leaving this block out entirely is equivalent. Set wsl_scan to \"off\" if you do not want the app touching a WSL distro at all.",
   "wsl_scan": "auto",
   "extra_sources": [],

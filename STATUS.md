@@ -1,53 +1,105 @@
 # BurnMon, status
 
-What is true at the v0.1.2 tag, 2026-09-22.
+What is true at this commit (2026-09-23, after 44B: forecast chart and gate), on the way
+to the `v0.2.0` tag due 2026-11-14. Spec: `02_roadmap\2026-09-22_v0.2_spec.md`. Build
+order: week 45, session A (this pass: README, STATUS, docs, buffer).
 
 ## What it is
 
 BurnMon is the successor of claudecost, a vendor-agnostic token and cost monitor for
-Wilco's own Claude Code and Codex usage: a portable Windows app (`burnmon.exe`) plus a
-single-file CLI (`burnmon-cli.exe`), reading local session transcripts directly, no
-account or API key.
+Wilco's own AI coding usage: a portable Windows app (`burnmon.exe`) plus a single-file
+CLI (`burnmon-cli.exe`), reading local session transcripts directly, no account or API
+key.
 
 ## Adapters
 
 - **Claude** (`internal\adapter\claude`): Claude Code CLI, Cowork/desktop agent-mode
-  sessions, `claude-code-sessions`.
+  sessions.
 - **Codex** (`internal\adapter\codex`): Codex CLI/Desktop rollout transcripts, native and
   WSL roots.
+- **Hermes** (`internal\adapter\hermes`, A1): local SQLite `messages`, WAL, 5-second poll.
+- **Copilot CLI** (`internal\adapter\copilotcli`, A2): session totals read at shutdown,
+  not live.
+- Not an adapter: GitHub Copilot in VS Code. A3's one-hour check (this week, corrected
+  2026-09-23) confirmed it can emit OpenTelemetry to a local file on Wilco's own laptop;
+  wiring that file in as a source is scoped for v0.3, not built yet.
 
 ## Pages
 
-Tab bar: **Now**, Overview, Months, Weeks, Days, Sessions, Tools, How, About.
+Five tabs, deep-linkable: **Now** (default start page), **History**, **Sessions**,
+**Tools**, **About**. Overview, Months, Weeks and Days are gone from the tab bar (their
+markup and render code for Overview alone still sits unreferenced in
+`internal\report\template.html`, kept only until it is safe to delete outright); How it
+works became the first section of About. English only: the language toggle and the `t()`
+table's second language are gone.
 
-- **Now** (v0.1 Step 3): every running Claude Code/Codex session, polled every 2 seconds,
-  a live 30-minute/10-second-bucket burn chart, session cards with a context gauge, a
-  forecast panel.
-- The rest is claudecost's original historical dashboard: current/previous month, by
-  month, week, day and session, in euros, plus Tools.
+- **Now**: every running Claude Code/Cowork/Codex/Hermes/Copilot CLI session, polled
+  every 2 seconds; a smoothed 30-minute per-session burn chart; the vendor strip (one row
+  per vendor, today/week/month tokens, refreshed once a minute); the turn ticker with
+  finding markers and a spike-detail drawer; the forecast chart (plan line, live line,
+  error band once a week is scored, else the visible gate text).
+- **History**: one page, filters (period, range, vendor, owner once configured), URL-hash
+  state, replacing the old Overview/Months/Weeks/Days pages entirely.
+- **Sessions**: sortable/searchable table, a Findings column and expandable detail row
+  per session (I3), owner column and filter once owner rules are configured.
+- **Tools**: `tool_calls` totals (S2) as a chart and table.
+- **About**: the Claude pricing explainer, unchanged since v0.1, plus "what this shows
+  and what it cannot".
 
-## Known gaps at this tag
+## Store
 
-- README is still mostly claudecost's original text (says "claudecost",
-  `claudecost.json`); a full pass is scoped for v0.2.
-- Now page is English only, single-vendor totals only (no per-vendor split yet).
-- No forecast line on the live chart yet (only the day-ahead table).
-- `_board` still shows claudecost-era rows; renamed this tag.
+Versioned additive migrations (S1): schema version 5 at this commit
+(`forecast_scores` added in 44B). A v0.1 store opens under this code with no event lost
+(`TestMigrateRealV01Store`). `tool_calls` table (S2) fed by the Claude and Codex adapters.
+`burnmon-cli live` and the app's Now page share the same windowed query and
+`SessionTotals` path (S3).
 
-## v0.1.2 patch, this tag
+## Owner split (P6)
 
-F7: a new Codex session could sit invisible until "Refresh now" forced a full rescan.
-Root cause confirmed live and by test (`TestWatcher_NewNestedDayFolderRace`,
-`internal\watch\watch_test.go`): Codex creates its whole `YYYY/MM/DD` path and the
-rollout file back to back, and the file's own Create event could fire, and be dropped by
-Windows `ReadDirectoryChanges`, before the watch on that brand-new leaf directory was
-registered. `addTree` now re-lists a freshly-created directory for files that raced past
-it. F8: the Now chart no longer destroys and rebuilds itself every 2-second poll; one
-persistent Chart.js instance, per-session datasets updated in place, both axis maxima
-smoothed instead of snapped to the raw window peak. F9: this file, version strings, README
-first section, board rows.
+`burnmon.json`'s `owners` table, empty by default (one owner, no owner column shown
+anywhere). Applied at ingest to a session's project path; `burnmon-cli reown` re-applies
+current rules to every event already stored. Ships in `burnmon.example.json` as an empty
+array with the rule syntax documented alongside it.
 
-## Next release
+## Insight (I1, I2, I3)
 
-v0.2, one release tagged `v0.2.0`, due 2026-11-14, two BurnMon sessions a week starting
-after this tag. Plan: `02_roadmap\2026-09-22_v0.2_spec.md`.
+`internal\insight`, computed on the fly, no store writes. Four finding kinds shipped:
+`re-prefill`, `compaction`, `context-runway`, `expensive-turn`. Shown as markers on the
+Now chart, lines in the turn ticker, the spike drawer (model, token classes, tool calls,
+files read, gap since previous turn, cause, confidence), and per-session on the Sessions
+tab (cached client-side per page load, measured at 39ms warm on the longest real session
+in Wilco's own store, 461 turns).
+
+## Forecast (F1)
+
+Built, gated. Chart shows history only with "forecast unlocks after the first scored
+week" until one ISO week is scored (`InsertForecastPlan` writes the plan once per week on
+first Monday call; `RecordForecastActual` fills in the actual once, after the week fully
+elapses). Scoring started this session (44B); weeks 44-46 are the three scoring weeks the
+spec calls for. Tokens only; euros wait for the v0.3 price book.
+
+## Config
+
+`burnmon.json` is the current name; `claudecost.json` in the same two locations
+(exe-adjacent, then `%LOCALAPPDATA%\burnmon\`) is still read as a fallback so an
+un-renamed portable folder keeps working, `burnmon.json` always winning when both exist.
+`burnmon.example.json` replaces `claudecost.example.json` this pass, `owners` shown
+empty.
+
+## Known gaps at this commit
+
+- GitHub Copilot in VS Code: confirmed reachable via OTel (A3), not wired in as a source
+  yet (v0.3).
+- Per-vendor cost, the dev/business cost-view switch, the full client map (active time,
+  export, merge), macOS and Linux builds: all out of scope for v0.2, named as such in the
+  spec's section 3.
+- `internal\report\template.html`'s About section still describes only Claude's own
+  seat/allowance model and still says "Overview tab" in two places, a pre-P1 naming
+  leftover; not touched this pass (README/STATUS/docs scope only, no template changes).
+- Scoring has produced zero scored weeks as of this commit; the forecast chart is
+  expected to show the gate text until partway through week 44.
+
+## Next
+
+Release candidate week 46: Valona and Talon check, tag `v0.2.0`, 2026-11-14. Full plan:
+`02_roadmap\2026-09-22_v0.2_spec.md` section 4 (build order) and section 5 (done when).

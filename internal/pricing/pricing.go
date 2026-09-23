@@ -297,7 +297,7 @@ func Defaults() Config {
 		Subscription: Subscription{
 			// Illustrative example calibration, not a real invoice. Drop a
 			// burnmon.json next to the exe with your own numbers; see
-			// claudecost.example.json and the README section on calibration.
+			// burnmon.example.json and the README section on calibration.
 			MonthlySubscriptionEUR:    2000.00,
 			MonthlySubscriptionUSD:    2160.00,
 			SeatsPurchased:            50,

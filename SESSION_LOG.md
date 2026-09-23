@@ -1,6 +1,33 @@
-# claudecost, session log
+# BurnMon, session log
 
 One paragraph per work session, newest on top.
+
+## 2026-09-23, 45A: README, STATUS, docs pass
+
+Rewrote README.md for BurnMon v0.2 as scoped: what it reads (Claude Code, Cowork, Codex,
+Hermes, Copilot CLI, and why claude.ai and VS Code Copilot are absent), the five tabs,
+the Now page's findings and forecast chart, the owner rules, the CLI commands (report,
+live, tools, insight, reown, plus price-check for completeness), config, WSL, what
+BurnMon never does, and the v0.3 items named as not yet there. Filled STATUS.md with what
+is true at this commit: schema version 5, all sixteen S/P/I/F/A spec items built except
+Copilot VS Code wiring (confirmed reachable via OTel, not wired in), and named gaps
+(template.html's About section still says "Overview tab" twice and stays Claude-only;
+zero forecast weeks scored yet). Renamed claudecost.example.json to burnmon.example.json,
+owners table shown as an empty array with the rule syntax in a comment. Checked _board:
+board.json and board.html already carry no claudecost string and are generated
+externally by `C:\ZND\projects\siteoffice\board\render_board.py`, not hand-edited here;
+nothing to update this pass. Fixed the SESSION_LOG.md title itself ("claudecost, session
+log" to "BurnMon, session log"); left every past entry's body text alone as history.
+One open call, per the brief's own instruction to stop and ask on any: the brief assumed
+a claudecost.json config fallback that did not exist in code (burnmon.json only, no
+handling of the old name at all); asked, and was told to add it rather than write docs
+for behaviour that was not there, so cmd\burnmon\main.go and cmd\burnmon-cli\main.go
+each gained a same-locations claudecost.json fallback (burnmon.json always wins), the one
+code change beyond strings and the example file. `go test ./... -count=1` and
+`.\build.ps1` both green. `C:\dev\Work` untouched. The v0.2 spec's own build order still
+shows 44B unticked in `02_roadmap\2026-09-22_v0.2_session_prompts.md` despite that
+session's commit (`7fb66d8`) already landed; left as found, flagged rather than fixed
+silently, since only 45A was this session's to tick.
 
 ## 2026-09-23, 44B: forecast chart and gate (F1), Now-chart smoothing
 

@@ -1,188 +1,183 @@
 # BurnMon
 
-BurnMon is the successor of [claudecost](https://github.com/wilcodetree/claudecost): a
-vendor-agnostic token and cost monitor, starting from a straight fork. This is v0.1.2: a
-Now page showing every running Claude Code and Codex session live (polled every 2 seconds,
-new sessions picked up within about a second of their first write), on top of the same
-historical dashboard claudecost always had, binaries `burnmon.exe` (app) and
-`burnmon-cli.exe` (CLI). See the plan at
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_burnmon_plan.md` for where it goes from here.
+BurnMon is a vendor-agnostic token and cost monitor for your own AI coding sessions: a
+portable Windows app (`burnmon.exe`) and a single-file CLI (`burnmon-cli.exe`), reading
+the session transcripts your tools already write on this machine. No API key, no admin
+rights, no network calls, no server, no telemetry: everything happens by reading local
+files and everything stays on this device.
 
-The rest of this README is carried over from claudecost unchanged; it still says
-"claudecost" and `claudecost.json` in places, since only the code and build were renamed
-this week. A full README pass is scoped for v0.2.
+BurnMon is the successor of [claudecost](https://github.com/wilcodetree/claudecost),
+renamed and extended from v0.2 onward. Repo:
+[wilcodetree/burnmon](https://github.com/wilcodetree/burnmon). Plan:
+`02_roadmap\2026-09-22_burnmon_plan.md`; the v0.2 spec building this release:
+`02_roadmap\2026-09-22_v0.2_spec.md`.
 
-## claudecost
+## What it reads
 
-Your own Claude usage and cost dashboard, as a portable Windows app or a
-single-file CLI. It reads the session transcripts Cowork and Claude Code
-already write on your machine, prices them, and shows a self-contained HTML
-dashboard: current and previous month, by month, week, day and session, in
-euros, plus a Tools tab showing which connectors, plugins and skills your
-sessions actually call.
+- **Claude Code** and **Cowork** (Claude's desktop agent mode): `claude-code-sessions`
+  transcripts, on Windows, macOS, Linux and inside WSL.
+- **Codex** CLI and Desktop: rollout transcripts, native and WSL roots.
+- **Hermes**: its local SQLite `messages` database, polled every 5 seconds.
+- **GitHub Copilot CLI**: session totals, read at shutdown, so a Copilot CLI session's
+  numbers appear once it closes, not while it runs.
 
-This is the standalone sibling of the "Claude Cost (User)" Cowork dashboard
-plugin: same data, same dedup rules, same dashboard page, but no Cowork
-session, no mirror folder, no scheduled tasks. Everything reads the
-transcript folders directly on this device.
+Coverage is these five. `claude.ai` in the browser, and GitHub Copilot in VS Code, keep no
+local transcript BurnMon can read, so neither appears here (checked directly for Copilot
+VS Code: it can emit OpenTelemetry to a local file, but that path is not wired into
+BurnMon yet, see "Not yet there" below).
 
-Everything stays on this device. No API key, no admin rights, no network
-calls, no install.
+## The five tabs
 
-## The app (recommended)
+The app and every saved CLI report share one page, five tabs, deep-linkable
+(`#now`, `#history`, `#sessions`, `#tools`, `#about`):
 
-Double-click `claudecost.exe`. One window opens, no console, no tray
-icon, no browser tab. It collects your usage on startup, again every 30
-minutes while the window stays open, and whenever you press "Refresh now" in
-the bottom-right corner. Close the window and the app is gone; nothing keeps
-running in the background.
+- **Now** (the start page). Every running session, live: polled every 2 seconds, new
+  sessions picked up within about a second of their first write. A 30-minute smoothed
+  burn chart (per-session lines, the cost line off by default), the vendor strip (one
+  row per vendor seen in the store: today, this week, this month, tokens, refreshed once
+  a minute), the turn ticker, and the forecast chart. See "The Now page" below.
+- **History**. One page, filtered: period (day, week, month), range (last 7, 30, 90 days,
+  custom), vendor, and owner once owner rules are configured. Totals, a chart and a table
+  for whatever is selected; the filter state lives in the URL so a view can be reopened.
+- **Sessions**. Every session, sortable, searchable, with a Findings column (count by
+  kind) and an expandable row listing each finding; click one to open the same turn
+  detail drawer the Now page uses. The owner column and filter appear once owner rules
+  are configured.
+- **Tools**. Which connectors, plugins and skills your sessions actually call, as a chart
+  and a table, over the whole window.
+- **About**. How Claude's own seat and allowance model works, in plain language, plus
+  where the numbers come from and what they cannot show.
 
-- No open ports, no admin rights (`asInvoker`).
-- Needs the WebView2 runtime, which ships with Edge on Windows 10/11. If it
-  is somehow missing, the app falls back to writing the report once and
-  opening it in your default browser instead.
-- Checks for a `claudecost.json` next to the exe first (so the exe and the
-  config can be dropped together into one portable folder), then falls back
-  to `%LOCALAPPDATA%\claudecost\claudecost.json` for a fixed install that
-  must run from a read-only share. Cache and log always live under
-  `%LOCALAPPDATA%\claudecost\`, regardless of which config was used.
-- Launching it a second time brings the existing window to the front instead
-  of opening a second copy.
-- Flags: `-interval` (default 15m, floor 5m), `-wsl-interval` (how often to
-  re-read WSL transcripts specifically, default 4h, floor 15m; see "WSL"
-  below), `-months` (default 2), `-seat`, `-config`, `-source` (repeatable).
-  Same meaning as the CLI flags below.
-- Parsed transcripts are stored in `%LOCALAPPDATA%\claudecost\burnmon.db`, a
-  SQLite database that tracks how far each transcript file has been read, so
-  only the first start (and the first after an update or a config change)
-  reads every transcript from the beginning; later starts show the previous
-  dashboard right away, read only the new bytes, and quietly refresh in the
-  background. Delete that file to force a full re-read.
-- Click the gear icon (top right, next to Refresh now) to edit your
-  subscription numbers, seat counts and seat prices from inside the window,
-  no more hand-editing `claudecost.json`. Saving re-reads everything, since
-  cached sessions carry costs computed with the old numbers. Settings saves
-  land back in whichever `claudecost.json` was actually loaded, exe-adjacent
-  or `%LOCALAPPDATA%`, not always the latter.
-- Set `"your_seat"` in `claudecost.json` (e.g. `"Premium"`) to default the
-  "Your seat" dropdown for everyone who runs this config, useful when a
-  whole team shares one seat tier. An explicit `-seat` flag still wins.
+## The Now page
 
-Windows will likely show a blue "Windows protected your PC" screen the first
-time, since this is an unsigned binary. That is expected: click **More info**,
-then **Run anyway**, or build it yourself from source (see Build below).
+Every running session shows a card with a context gauge. Under the chart, each session's
+turn ticker line can carry a marker; clicking a marker or its ticker line opens a drawer
+with the model, token classes, tool calls that turn, files read, the gap since the
+previous turn, and, when a finding applies, its cause and confidence.
+
+Findings come from `internal/insight`, computed on the fly from the same windowed events
+the Now snapshot already loads (nothing about them is stored):
+
+- **re-prefill**: a turn's cache write exceeds the configured threshold. The cause is
+  inferred in order: compaction just happened, the model changed since the previous turn,
+  the gap since the previous turn exceeded the cache TTL, first turn after a resume, or
+  "unknown".
+- **compaction**: context size drops by more than 30% between consecutive turns while the
+  session continues.
+- **context-runway**: a linear fit over the last 10 turns of context size, reported as
+  turns remaining to 80% and 90% of the model's context window.
+- **expensive-turn**: a turn above the 95th percentile of the session's own turn cost or
+  tokens, with its dominant token class named.
+
+The forecast chart shows the plan line (the last four weeks, weekday-aware) and the live
+line (the current rate carried to end of day and end of month), with an error band once
+at least one week has been scored. Until then it shows history only, with the gate text
+"forecast unlocks after the first scored week". Tokens only; euros wait for the v0.3
+price book.
+
+## Owner rules
+
+`burnmon.json` can carry an ordered `owners` table of path-prefix rules, e.g.
+`{"match": "C:\\dev\\Work\\*", "owner": "Valona"}`, applied to a session's project path
+at ingest: the first matching rule wins, an unmatched path gets `"personal"`. Empty (the
+default) means one owner and no owner column anywhere. After changing the rules, re-apply
+them to sessions already in the store with `burnmon-cli reown`; nothing else re-runs
+ingest for you.
 
 ## The CLI
 
-For power users and scripting. Run it, and it writes a timestamped HTML
-report and opens it once, then exits.
+    burnmon-cli                        build the dashboard and open it in the browser
+    burnmon-cli live -json             one JSON snapshot of the Now page, for scripting
+    burnmon-cli tools -since 30d       tool_calls totals: tool, calls, sessions, bytes
+    burnmon-cli insight <session-id>   findings for one session, table or -json
+    burnmon-cli reown                  re-apply owner rules to every event in the store
+    burnmon-cli price-check            print every price book and when it was last checked
 
-    claudecost                  build the dashboard and open it in the browser
-    claudecost -months 3        widen the window to three months
-    claudecost -seat Premium    price your seat tier correctly (default Standard,
-                                 or your_seat from claudecost.json if set)
-    claudecost -no-open         write the report without opening it
-    claudecost -json data.json  also write the raw dataset
-    claudecost -source DIR      scan DIR instead of the auto-detected folders
-    claudecost -no-cache        re-read every transcript from the start, ignoring the
-                                 store's cursors
+`burnmon-cli` also keeps every claudecost-era flag: `-months`, `-seat`, `-no-open`,
+`-json data.json`, `-source DIR`, `-no-cache`, `-out DIR`, `-config`, `-version`. See
+`burnmon-cli -h` and each subcommand's own `-h` for the full list.
 
-Reports land in a `reports` folder next to the exe if writable, otherwise in
-`%LOCALAPPDATA%\claudecost\reports`. Override with `-out DIR`.
+## The app
 
-## What it does
+Double-click `burnmon.exe`. One window opens, no console, no tray icon, no browser tab.
+It collects on startup, again every 30 minutes (`-interval`, floor 5 minutes) while the
+window stays open, and whenever you press "Refresh now". Close the window and the app is
+gone; nothing keeps running in the background. No open ports, no admin rights
+(`asInvoker`). Needs the WebView2 runtime (ships with Edge on Windows 10/11); without it,
+the app writes the report once and opens it in your default browser instead.
 
-- Finds transcripts in the known locations (Claude Code `~\.claude\projects`,
-  Cowork under `%APPDATA%` or the MSIX `%LOCALAPPDATA%\Packages` path, plus
-  the macOS and Linux equivalents, plus WSL, see "WSL" below).
-- Deduplicates streamed API calls (one entry per requestId, largest
-  output_tokens), drops synthetic turns, and prices every call two ways:
-  subscription share (what a flat monthly plan actually costs, allocated by
-  consumption) and API list price (the comparison).
-- Renders the dashboard with Chart.js vendored inline: no network access.
-- The CLI also prints a terminal summary with per-month totals.
+Parsed transcripts are stored in `%LOCALAPPDATA%\burnmon\burnmon.db`, a SQLite database
+migrated forward automatically on every startup (versioned, additive migrations only:
+nothing already stored is ever dropped). Click the gear icon to edit subscription
+numbers, seat counts and seat prices from inside the window; saving re-reads everything,
+since cached sessions carry costs computed with the old numbers.
 
-Coverage is Cowork and Claude Code only. claude.ai in the browser keeps no
-local transcript, so it cannot appear here; check claude.ai/settings/usage
-for those limit bars instead.
+## Configuration
+
+Prices and the subscription calibration are compiled-in illustrative defaults (see
+`internal\pricing\pricing.go`), not a real invoice. Drop a `burnmon.json` next to the exe
+(app and CLI both check there first, then `%LOCALAPPDATA%\burnmon\burnmon.json` for a
+fixed, read-only-share install) with your own numbers; any subset of fields overrides the
+defaults. See `burnmon.example.json` for every key, including `owners` (empty by
+default).
+
+If no `burnmon.json` is found, both binaries still read a `claudecost.json` in the same
+two locations: the pre-rename config name, kept working for anyone who has not renamed
+their file yet. `burnmon.json` always wins when both are present. Rename to
+`burnmon.json` when convenient; there is no reason to keep using the old name once you
+have.
 
 ## WSL
 
-Claude Code running inside a WSL distribution (Ubuntu under WSL, most
-commonly) is a Linux process with a Linux `$HOME`, so its transcripts live
-inside the distro, not under any Windows folder. As of v0.7.0 claudecost
-finds them automatically: it reads which WSL distributions are installed
-from the registry, then looks for each one's `.claude/projects` folder,
+Claude Code running inside a WSL distribution (Ubuntu under WSL, most commonly) is a
+Linux process with a Linux `$HOME`, so its transcripts live inside the distro, not under
+any Windows folder. BurnMon finds them automatically: it reads which WSL distributions
+are installed from the registry, then looks for each one's `.claude/projects` folder,
 including one moved via a `CLAUDE_CONFIG_DIR` set in a shell startup file.
 
 A few things are worth knowing:
 
-- Reading Linux files from Windows goes over WSL's own file-sharing layer
-  and is slower than reading a native NTFS folder, so a scan that includes
-  WSL can take longer than one that does not. To keep this from slowing down
-  the app's regular refresh, WSL transcripts are re-read on their own,
-  slower clock (`-wsl-interval`, default 4 hours) while native Windows
-  transcripts keep the normal 15-minute one. Refresh now and saving Settings
-  always re-read everything, WSL included. When WSL data is present, the
-  header notice at the top of the dashboard states both cadences, and a
-  small "WSL data as of HH:MM" stamp next to the main snapshot time shows
-  how current the WSL half actually is.
-- Accessing a stopped WSL 2 distribution's files can start it in the
-  background, which costs a few seconds and some memory. This only happens
-  on the slower WSL cadence above, not on every 15-minute refresh.
-- To turn WSL scanning off entirely, set `"wsl_scan": "off"` in
-  `claudecost.json`. This is also the first thing to try if a scan seems
-  slow and you want to rule WSL out.
-- If detection misses a distro, or a config directory set somewhere other
-  than a shell startup file (a systemd unit, a wrapper script, an IDE launch
-  config), add the folder directly with `"extra_sources": ["..."]` in
-  `claudecost.json`, or with a repeatable `-source` flag. Unlike `-source`
-  on its own, `extra_sources` adds to auto-detection rather than replacing
-  it.
-- A native Windows install with a moved `CLAUDE_CONFIG_DIR` is also picked
-  up now, independent of WSL.
+- Reading Linux files from Windows goes over WSL's own file-sharing layer and is slower
+  than reading a native NTFS folder. WSL transcripts are re-read on their own, slower
+  clock (`-wsl-interval`, default 4 hours) while native Windows transcripts keep the
+  normal refresh. Refresh now and saving Settings always re-read everything, WSL
+  included.
+- Accessing a stopped WSL 2 distribution's files can start it in the background, which
+  costs a few seconds and some memory. This only happens on the slower WSL cadence above.
+- Set `"wsl_scan": "off"` in `burnmon.json` to turn WSL scanning off entirely; the first
+  thing to try if a scan seems slow and you want to rule WSL out.
+- If detection misses a distro, add the folder directly with `"extra_sources": ["..."]`
+  in `burnmon.json`, or with a repeatable `-source` flag.
 
-See `claudecost.example.json` for the exact config keys.
+## What BurnMon never does
+
+No server, no network call of any kind, no telemetry, no account. It reads only your own
+transcript folders, never aggregates or compares across people, and refuses no one
+because there is nothing to refuse: other people's usage is simply not on your disk.
+Costs shown for Claude are allocated shares of a flat monthly invoice, not money owed by
+anyone.
 
 ## Build
 
-Requires Go (winget install GoLang.Go). Then, in PowerShell, from this
-folder:
+Requires Go (winget install GoLang.Go). Then, in PowerShell, from this folder:
 
     .\build.ps1
 
-First run needs internet access: it fetches `go-winres` for the icons and
-`go mod tidy` resolves the WebView2 binding. Produces `claudecost-cli.exe`
-(the CLI) and `claudecost.exe` (the app), both portable single files. Copy
-them anywhere; no install. If a `build.local.ps1` exists next to `build.ps1`
-(gitignored, machine-local), it runs afterward; use it for any private
-post-build step such as copying the built app into another folder.
+First run needs internet access: it fetches `go-winres` for the icons and `go mod tidy`
+resolves the WebView2 binding. Produces `burnmon-cli.exe` and `burnmon.exe`, both portable
+single files. Copy them anywhere; no install. If a `build.local.ps1` exists next to
+`build.ps1` (gitignored, machine-local), it runs afterward.
 
-## Configuration
+## Not yet there (v0.3)
 
-Prices and the subscription calibration are compiled in as illustrative
-defaults (see `internal\pricing\pricing.go`), not a real invoice. Plug in
-your own numbers one of two ways.
-
-In the app, click the gear icon and fill in the form: your subscription
-total, seat counts, seat prices, usage credits, and (behind an Advanced
-section, since it changes far less often) the output cost factor and
-calibration date. Saving writes `claudecost.json` for you and re-reads
-everything.
-
-Or edit the file directly, useful for the CLI, for scripting, or for
-anything outside the subscription block, such as an unusual per-model price
-override or the WSL settings described above: drop a `claudecost.json` next
-to the exe, CLI or app alike, or pass `-config` explicitly, or (app only)
-place it in `%LOCALAPPDATA%\claudecost\` for a fixed, read-only-share
-install. Overrides any subset of the defaults. See `claudecost.example.json`.
-The recommended calibration source is your real invoice total divided by
-consumption, not seats times list price, since a flat subscription rarely
-maps cleanly to per-seat usage.
+Per-vendor cost and credits, the dev/business cost-view switch, the full client map
+(active time, export, merge across owners), macOS and Linux builds, and GitHub Copilot in
+VS Code (its OTel export is confirmed working on Wilco's own laptop; wiring it in is
+scoped for v0.3, see `02_roadmap\2026-09-22_v0.2_spec.md` A3). None of these show partial
+or misleading numbers today: where a feature is not built, the page says so (the price
+book note on History, the forecast gate on Now) rather than guessing.
 
 ## Status
 
-Personal project, actively used daily. The dashboard is deliberately
-personal: it reads only your own transcript folders and never aggregates or
-compares across people. Costs shown are allocated shares of a flat monthly
-invoice, not money owed by anyone.
+Actively developed toward the `v0.2.0` tag, due 2026-11-14 (`02_roadmap\2026-09-22_v0.2_spec.md`).
+See `STATUS.md` for what is true at the current commit.
