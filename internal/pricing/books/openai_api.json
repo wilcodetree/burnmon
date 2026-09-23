@@ -1,0 +1,8 @@
+{
+  "date": "2026-09-23",
+  "source": "https://developers.openai.com/api/docs/pricing",
+  "models": {
+    "gpt-6-astra": {"label": "GPT-6 Astra", "in": 10.00, "cached_in": 1.00, "out": 50.00},
+    "gpt-5.6-sol": {"label": "GPT-5.6 Sol", "in": 4.00, "cached_in": 0.40, "out": 20.00}
+  }
+}

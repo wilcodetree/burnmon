@@ -1,0 +1,239 @@
+package pricing
+
+import (
+	"sort"
+
+	"burnmon/internal/schema"
+)
+
+// Basis is one way of pricing a set of events: the vendor's published API
+// list price, a plan-credit conversion, or a subscription's share of the
+// invoice. C2 (spec 2.1): "Each event gets cost on all three bases where a
+// book covers it, computed on read, never stored."
+type Basis string
+
+const (
+	BasisAPIList      Basis = "api_list"
+	BasisCredits      Basis = "credits"
+	BasisSubscription Basis = "subscription"
+)
+
+// BasisCost is one cost figure on one Basis. Credits is only meaningful when
+// Basis is BasisCredits (the same total, expressed in the vendor's own
+// credit unit rather than USD).
+type BasisCost struct {
+	Basis   Basis
+	Label   string
+	USD     float64
+	Credits float64
+}
+
+// VendorCost is CostForEvents' per-vendor result: every basis that vendor's
+// price books cover, in a fixed order (credits, subscription, api list), and
+// the headline basis this vendor's config prefers. Headline is nil when no
+// book at all covers the vendor ("tokens only": Hermes today, and any future
+// vendor with no book).
+type VendorCost struct {
+	Vendor   string
+	Bases    []BasisCost
+	Headline *BasisCost
+}
+
+// SubscriptionConfigured reports whether Subscription carries a real
+// calibration rather than Defaults' illustrative example: the headline rule
+// ("subscription share when configured, else API list labelled upper
+// bound") reads this before offering the subscription basis at all.
+func (c *Config) SubscriptionConfigured() bool {
+	return c.Subscription.CalibratedOn != "" && c.Subscription.CalibratedOn != "example"
+}
+
+// CostForEvents is C2's one Go function: cost on every basis a book covers
+// for a set of events, grouped by vendor, plus the headline basis per
+// vendor given cfg. One function backs Now, History, Sessions and export, so
+// the numbers agree everywhere (spec 2.1 C2).
+func (c *Config) CostForEvents(events []schema.Event) []VendorCost {
+	byVendor := map[string][]schema.Event{}
+	for _, e := range events {
+		byVendor[e.Vendor] = append(byVendor[e.Vendor], e)
+	}
+	vendors := make([]string, 0, len(byVendor))
+	for v := range byVendor {
+		vendors = append(vendors, v)
+	}
+	sort.Strings(vendors)
+
+	out := make([]VendorCost, 0, len(vendors))
+	for _, vendor := range vendors {
+		out = append(out, c.vendorCost(vendor, byVendor[vendor]))
+	}
+	return out
+}
+
+func (c *Config) vendorCost(vendor string, events []schema.Event) VendorCost {
+	vc := VendorCost{Vendor: vendor}
+
+	switch vendor {
+	case "anthropic":
+		vc.Bases = append(vc.Bases, BasisCost{
+			Basis: BasisAPIList, Label: "API list", USD: c.anthropicAPICostUSD(events),
+		})
+		if c.SubscriptionConfigured() {
+			vc.Bases = append(vc.Bases, BasisCost{
+				Basis: BasisSubscription, Label: "Subscription share", USD: c.anthropicSubscriptionCostUSD(events),
+			})
+		}
+	case "openai":
+		vc.Bases = append(vc.Bases, BasisCost{
+			Basis: BasisAPIList, Label: "API list", USD: c.openAIAPICostUSD(events),
+		})
+	case "github":
+		usd := c.copilotCreditCostUSD(events)
+		vc.Bases = append(vc.Bases, BasisCost{
+			Basis: BasisCredits, Label: "GitHub Copilot credits", USD: usd, Credits: usd / c.CopilotCredits.creditUSD(),
+		})
+	}
+	// Any other vendor (e.g. "nous"/Hermes): no case matches, Bases stays
+	// nil, Headline resolves to nil below. "Tokens only."
+
+	vc.Headline = headlineBasis(vendor, vc.Bases)
+	return vc
+}
+
+// headlineBasis picks the one basis a reader sees first, per spec 2.1 C2:
+// "credits for Copilot, subscription share when configured, else API list
+// labelled upper bound." vendor only selects the Copilot-first rule; every
+// other vendor falls through subscription, then API list.
+func headlineBasis(vendor string, bases []BasisCost) *BasisCost {
+	find := func(b Basis) *BasisCost {
+		for i := range bases {
+			if bases[i].Basis == b {
+				return &bases[i]
+			}
+		}
+		return nil
+	}
+	if vendor == "github" {
+		if b := find(BasisCredits); b != nil {
+			return b
+		}
+	}
+	if b := find(BasisSubscription); b != nil {
+		return b
+	}
+	if b := find(BasisAPIList); b != nil {
+		upper := *b
+		upper.Label = "API list (upper bound)"
+		return &upper
+	}
+	return nil
+}
+
+func cacheTokens(cacheWrite, cacheRead *int64) (write, read int64) {
+	if cacheWrite != nil {
+		write = *cacheWrite
+	}
+	if cacheRead != nil {
+		read = *cacheRead
+	}
+	return write, read
+}
+
+// anthropicAPICostUSD prices every anthropic-vendor event at its exact
+// model's AnthropicBook rate, cache writes at the 5-minute rate (the same
+// convention the family-generic CacheWriteMult used: most Claude Code
+// traffic re-primes well inside 5 minutes). A model with no entry in the
+// book (an id the live check never confirmed) prices at 0 and is not
+// separately flagged here: the book itself, printed by price-check, is
+// where a missing model is visible.
+func (c *Config) anthropicAPICostUSD(events []schema.Event) float64 {
+	var total float64
+	for _, e := range events {
+		if e.Vendor != "anthropic" {
+			continue
+		}
+		rate, ok := c.AnthropicBook.Models[e.Model]
+		if !ok {
+			continue
+		}
+		cw, cr := cacheTokens(e.CacheWrite, e.CacheRead)
+		total += (float64(e.Input)*rate.In +
+			float64(cw)*rate.CacheWrite5m +
+			float64(cr)*rate.CacheRead +
+			float64(e.Output)*rate.Out) / 1e6
+	}
+	return total
+}
+
+// anthropicSubscriptionCostUSD is the share of the subscription each event
+// accounts for, output-driven like the old family-generic CallCostSubUSD
+// (cache traffic is not charged), but keyed by exact model rather than
+// family so it tracks AnthropicBook's per-model split.
+func (c *Config) anthropicSubscriptionCostUSD(events []schema.Event) float64 {
+	var total float64
+	for _, e := range events {
+		if e.Vendor != "anthropic" {
+			continue
+		}
+		rate, ok := c.AnthropicBook.Models[e.Model]
+		if !ok {
+			continue
+		}
+		total += (float64(e.Output)*rate.Out + float64(e.Input)*rate.In) / 1e6 * c.Subscription.OutputCostFactor
+	}
+	return total
+}
+
+// openAIAPICostUSD prices every openai-vendor event at its exact model's
+// OpenAIBook rate. A model with no entry (unconfirmed at the live check, or
+// never seen locally) prices at 0.
+func (c *Config) openAIAPICostUSD(events []schema.Event) float64 {
+	var total float64
+	for _, e := range events {
+		if e.Vendor != "openai" {
+			continue
+		}
+		rate, ok := c.OpenAIBook.Models[e.Model]
+		if !ok {
+			continue
+		}
+		_, cr := cacheTokens(e.CacheWrite, e.CacheRead)
+		total += (float64(e.Input)*rate.In + float64(cr)*rate.CachedIn + float64(e.Output)*rate.Out) / 1e6
+	}
+	return total
+}
+
+// copilotCreditCostUSD prices every github-vendor event at its exact
+// model's CopilotCredits rate; the USD total converts to credits in the
+// caller (vendorCost) via CopilotCredits.creditUSD().
+func (c *Config) copilotCreditCostUSD(events []schema.Event) float64 {
+	var total float64
+	for _, e := range events {
+		if e.Vendor != "github" {
+			continue
+		}
+		rate, ok := c.CopilotCredits.Models[e.Model]
+		if !ok {
+			continue
+		}
+		cw, cr := cacheTokens(e.CacheWrite, e.CacheRead)
+		total += (float64(e.Input)*rate.In +
+			float64(cw)*rate.CacheWrite +
+			float64(cr)*rate.CachedIn +
+			float64(e.Output)*rate.Out) / 1e6
+	}
+	return total
+}
+
+func (b CreditBook) creditUSD() float64 {
+	return b.CreditUnitUSD()
+}
+
+// CreditUnitUSD returns the dollar value of one credit, falling back to
+// $0.01 (docs.github.com/.../models-and-pricing's stated rate) when CreditUSD
+// is unset, e.g. a burnmon.json override that only touched Models.
+func (b CreditBook) CreditUnitUSD() float64 {
+	if b.CreditUSD > 0 {
+		return b.CreditUSD
+	}
+	return 0.01
+}

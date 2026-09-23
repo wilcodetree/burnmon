@@ -17,7 +17,16 @@
     "output_cost_factor": 1.8085,
     "calibrated_on": "example",
     "window": "example",
-    "your_seat": "Premium"
+    "your_seat": "Premium",
+    "source": ""
+  },
+  "_comment_books": "v0.3 C1. Three dated, embedded price books, each overridable in part: naming one model keeps every other compiled-in model (same partial-merge behaviour as prices/subscription above). Recalibrate a book by editing its date, source and only the models that changed. Leave this whole block out to keep the compiled-in books as-is; the anthropic_book example below only shows re-dating one model, the rest of the book stays compiled-in.",
+  "anthropic_book": {
+    "date": "2026-10-01",
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "models": {
+      "claude-sonnet-5": {"label": "Claude Sonnet 5", "in": 2.0, "cache_write_5m": 2.50, "cache_write_1h": 4.0, "cache_read": 0.20, "out": 10.0}
+    }
   },
   "_comment_owners": "v0.2 P6, the light client map. Empty (shown here) is the default: one owner, no owner column shown anywhere. Ordered rules, first match wins, unmatched paths get \"personal\": \"owners\": [{\"match\": \"C:\\\\dev\\\\Work\\\\*\", \"owner\": \"Valona\"}, {\"match\": \"C:\\\\ZND\\\\*\", \"owner\": \"ZND\"}]. Applied at ingest; after changing the rules, re-apply them to sessions already in the store with `burnmon-cli reown`.",
   "owners": [],

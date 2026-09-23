@@ -363,14 +363,14 @@ func runPriceCheck(args []string) int {
 		return 1
 	}
 
-	fmt.Println("Anthropic price book, dated", pricing.AnthropicPriceBookDate)
+	fmt.Println("Anthropic price book (family, v0.2), dated", pricing.AnthropicPriceBookDate)
 	for _, fam := range cfg.Families() {
 		p := cfg.Prices[fam]
 		fmt.Printf("  %-10s in %6.2f  out %6.2f  USD/MTok\n", p.Label, p.In, p.Out)
 	}
 
 	fmt.Println()
-	fmt.Println("OpenAI price book, dated", pricing.OpenAIPriceBookDate)
+	fmt.Println("OpenAI price book (family, v0.2), dated", pricing.OpenAIPriceBookDate)
 	models := make([]string, 0, len(cfg.OpenAIPrices))
 	for m := range cfg.OpenAIPrices {
 		models = append(models, m)
@@ -381,7 +381,82 @@ func runPriceCheck(args []string) int {
 		fmt.Printf("  %-20s (%-14s) in %6.3f  cached-in %6.3f  out %6.3f  USD/MTok\n",
 			m, p.Label, p.In, p.CachedIn, p.Out)
 	}
+
+	fmt.Println()
+	fmt.Println("Anthropic API list book, dated", cfg.AnthropicBook.Date, "source", cfg.AnthropicBook.Source)
+	printAnthropicBook(cfg.AnthropicBook)
+
+	fmt.Println()
+	fmt.Println("OpenAI API list book, dated", cfg.OpenAIBook.Date, "source", cfg.OpenAIBook.Source)
+	printOpenAIBook(cfg.OpenAIBook)
+
+	fmt.Println()
+	fmt.Println("GitHub Copilot AI credits book, dated", cfg.CopilotCredits.Date, "source", cfg.CopilotCredits.Source)
+	fmt.Println("  plans, dated", cfg.CopilotCredits.Date, "source", cfg.CopilotCredits.PlansSource)
+	printCopilotPlans(cfg.CopilotCredits)
+	printCopilotCreditModels(cfg.CopilotCredits)
+
+	fmt.Println()
+	if cfg.SubscriptionConfigured() {
+		fmt.Printf("Subscription share book, calibrated %s, source %s\n", cfg.Subscription.CalibratedOn, cfg.Subscription.Source)
+	} else {
+		fmt.Println("Subscription share book: not configured (Defaults' illustrative example, calibrated_on \"example\")")
+	}
+
+	fmt.Println()
+	fmt.Println("Hermes and any vendor above with no book: tokens only.")
 	return 0
+}
+
+func printAnthropicBook(b pricing.AnthropicAPIBook) {
+	models := make([]string, 0, len(b.Models))
+	for m := range b.Models {
+		models = append(models, m)
+	}
+	sort.Strings(models)
+	for _, m := range models {
+		r := b.Models[m]
+		fmt.Printf("  %-28s (%-18s) in %6.2f  cache-write(5m/1h) %5.2f/%5.2f  cache-read %5.3f  out %6.2f  USD/MTok\n",
+			m, r.Label, r.In, r.CacheWrite5m, r.CacheWrite1h, r.CacheRead, r.Out)
+	}
+}
+
+func printOpenAIBook(b pricing.OpenAIAPIBook) {
+	models := make([]string, 0, len(b.Models))
+	for m := range b.Models {
+		models = append(models, m)
+	}
+	sort.Strings(models)
+	for _, m := range models {
+		r := b.Models[m]
+		fmt.Printf("  %-20s (%-14s) in %6.3f  cached-in %6.3f  out %6.3f  USD/MTok\n",
+			m, r.Label, r.In, r.CachedIn, r.Out)
+	}
+}
+
+func printCopilotPlans(b pricing.CreditBook) {
+	plans := make([]string, 0, len(b.Plans))
+	for p := range b.Plans {
+		plans = append(plans, p)
+	}
+	sort.Strings(plans)
+	for _, p := range plans {
+		plan := b.Plans[p]
+		fmt.Printf("  %-6s $%-6.2f/month  %.0f credits/month\n", p, plan.MonthlyUSD, plan.MonthlyCredits)
+	}
+}
+
+func printCopilotCreditModels(b pricing.CreditBook) {
+	models := make([]string, 0, len(b.Models))
+	for m := range b.Models {
+		models = append(models, m)
+	}
+	sort.Strings(models)
+	for _, m := range models {
+		r := b.Models[m]
+		fmt.Printf("  %-28s (%-16s) in %6.3f  cached-in %6.3f  cache-write %6.3f  out %6.2f  USD-equiv/MTok (1 credit = $%.2f)\n",
+			m, r.Label, r.In, r.CachedIn, r.CacheWrite, r.Out, b.CreditUnitUSD())
+	}
 }
 
 func run() int {

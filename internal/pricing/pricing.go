@@ -75,6 +75,14 @@ type Subscription struct {
 	CalibratedOn              string             `json:"calibrated_on"`
 	Window                    string             `json:"window"`
 
+	// Source is this calibration's provenance: the invoice, seat report or
+	// other document the numbers above were read from, printed by
+	// `burnmon-cli price-check` next to the other two books' source URLs.
+	// There is rarely a public URL for a subscription invoice, so this is
+	// free text, not necessarily a link. "" (Defaults' value) means the
+	// illustrative example below, not a real calibration.
+	Source string `json:"source,omitempty"`
+
 	// YourSeat is the default "Your seat" tier, a key into SeatPriceUSD
 	// (e.g. "Standard" or "Premium"). Empty means no override: both binaries
 	// fall back to their -seat flag default ("Standard"). Set this when
@@ -101,6 +109,20 @@ type Config struct {
 	FallbackFamily string                `json:"fallback_family"`
 	Prices         map[string]ModelPrice `json:"prices"`
 	Subscription   Subscription          `json:"subscription"`
+
+	// AnthropicBook, OpenAIBook and CopilotCredits are C1's three dated,
+	// embedded price books (see books.go), keyed by exact model id rather
+	// than family: the family-generic Prices map above stays as-is for the
+	// v0.2 UI paths that already read it, but CostForEvents (cost.go, C2)
+	// reads these three instead, and only these three, since a family
+	// bucket can no longer represent two same-family models Anthropic now
+	// prices apart (Claude Opus 5.5 at $4/$20 vs Claude Opus 5 at $5/$25).
+	// Overridable from burnmon.json per field, same merge behaviour as
+	// Prices and OpenAIPrices: a partial "models" object overwrites only
+	// the model ids it names, keeping the rest of the compiled-in book.
+	AnthropicBook  AnthropicAPIBook `json:"anthropic_book"`
+	OpenAIBook     OpenAIAPIBook    `json:"openai_book"`
+	CopilotCredits CreditBook       `json:"copilot_credits"`
 
 	// Owners is P6's light client map: ordered rules matched against a
 	// session's project path at ingest. Empty (the default) means one
@@ -325,7 +347,11 @@ func Defaults() Config {
 			OutputCostFactor:          1.8085,
 			CalibratedOn:              "example",
 			Window:                    "example",
+			Source:                    "",
 		},
+		AnthropicBook:  defaultAnthropicAPIBook(),
+		OpenAIBook:     defaultOpenAIAPIBook(),
+		CopilotCredits: defaultCreditBook(),
 		// WSLScan, ExtraSources and WSLIntervalHours are left at their zero
 		// values here: "" means auto-scan, nil means nothing extra, 0 means
 		// the compiled-in 4-hour WSL cadence, all identical to today's

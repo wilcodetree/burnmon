@@ -2,6 +2,51 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.3 V3-1: price books restructured into dated JSON, C2 cost function
+
+Read `02_roadmap\2026-09-23_v0.3_spec.md` sections 1 and 2.1 C1/C2 and
+`04_assets\2026-09-22_token_monitor_architecture.md` section 4.3 before touching
+`internal\pricing\pricing.go`. C1: added three dated, embedded JSON price books, each with a
+`date` and `source` field (`internal\pricing\books\anthropic_api.json`,
+`openai_api.json`, `copilot_credits.json`, loaded via `go:embed` in the new
+`internal\pricing\books.go`), keyed by exact model id rather than the old
+family-generic `Prices` map (left untouched, still serving the v0.2 UI paths). Live-checked
+today against `platform.claude.com/docs/en/about-claude/pricing`,
+`developers.openai.com/api/docs/pricing`,
+`docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing` and
+`github.com/features/copilot/plans` (the last two via `firecrawl_scrape` after `WebFetch`'s
+own AI-summarised read of the OpenAI page came back with garbled, non-exact numbers; the
+firecrawl markdown pull was the one actually used for every price written into the books).
+Finding worth flagging: Anthropic now prices Claude Opus 5.5 apart from Claude Opus 5
+($4/$20 vs $5/$25 per MTok in/out) with its own 0.05x cache-read multiplier (Claude Fable
+5.1: 0.025x, everyone else: 0.1x), which the old single "opus" family bucket could not
+represent; this is the concrete reason C1 asked for per-model, not per-family, books. C2:
+`internal\pricing\cost.go`'s `CostForEvents` groups a set of events by vendor and returns
+every basis a book covers (`api_list`, `subscription`, `credits`) plus the headline basis
+per spec 2.1 C2 (credits for `github`/Copilot, subscription share once
+`Config.SubscriptionConfigured()`, else API list labelled "API list (upper bound)"); a
+vendor with no book at all (Hermes, vendor `nous`, and any future unmapped vendor) gets no
+basis and a nil headline, "tokens only". Extended `burnmon-cli price-check` to print all
+three new books (with date and source) plus the Copilot plan-credit allotments and whether a
+real subscription calibration is configured, alongside the existing v0.2 family-book
+listing (kept, relabelled "(family, v0.2)" so the two are not confused). No UI touched this
+session, per the spec's explicit "No UI in this session"; wiring cost-on-every-page is
+V3-3's job. VERIFY (unresolved, left out of the books rather than guessed): a ChatGPT or
+Codex plan-credit table (nothing found on a primary OpenAI/ChatGPT page today); GitHub
+Copilot Business and Enterprise seat credit allotments (the `github.com/features/copilot/plans`
+"for businesses" tab did not render in a plain page fetch, so only the four individual
+plans - Free, Pro, Pro+, Max - are in `copilot_credits.json`'s `plans` block); `gpt-5.6-terra`
+and `gpt-5.6-luna`, no longer listed on OpenAI's own current pricing page (superseded by
+`gpt-6-sol`/`gpt-6-luna`), so left out of the new `openai_api.json` book even though the old
+family-generic `OpenAIPrices` map (untouched, v0.2 path) still carries them at the same
+numbers GitHub's mirrored Copilot table still shows. Tests: `internal\pricing\cost_test.go`
+(one fixture per vendor - anthropic, openai, github, and a no-book vendor - covering every
+basis and the headline choice, plus an unknown-model-prices-zero case) and
+`internal\pricing\books_test.go` (a partial `burnmon.json` override of one Anthropic model
+keeps every other compiled-in model, matching the existing `Prices`/`OpenAIPrices` merge
+behaviour; the embedded books parse non-empty). `go test ./... -count=1` and `.\build.ps1`
+both green.
+
 ## 2026-09-23, v0.2.3: window check patch, W0 to W8
 
 Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.3_window_check_patch.md`. W0 first:
