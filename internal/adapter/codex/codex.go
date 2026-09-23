@@ -171,19 +171,28 @@ func rateLimitWindow(rl map[string]any) map[string]any {
 // read on a multi-gigabyte rollout cheap even if a build ever moves it.
 const headerScanLimit = 64 * 1024
 
-// scanHeaderMeta re-reads path's session_meta line (always near the top of
-// the file, written once) so an incremental Parse call that starts at a
-// later offset can still recover cwd, surface and whether the thread is a
-// sub-run: without this, a live-watched Codex session's every turn after
-// the first read reported surface "unknown" (F2, SESSION_LOG.md), because
-// surface was a Parse-local variable that reset to "unknown" on every call
-// and session_meta, the only line carrying originator, never appears again
-// after the first read consumes it. Leaves f positioned wherever the
-// bounded read stopped; the caller seeks to its own offset afterward.
-func scanHeaderMeta(f *os.File) (cwd, surface string, subRun bool) {
+// scanHeaderMeta re-reads path's own start (bounded by headerScanLimit) so
+// an incremental Parse call that starts at a later offset can still recover
+// state that only appears near the top of the file and is never repeated:
+// cwd, surface and whether the thread is a sub-run from session_meta
+// (always the first line), and, N6 (v0.2.2, SESSION_LOG.md), the model from
+// turn_context. Without the session_meta half of this, a live-watched Codex
+// session's every turn after the first read reported surface "unknown" (F2,
+// SESSION_LOG.md); without the turn_context half, the Now page showed
+// "(model unknown)" for exactly the same reason, confirmed on a real
+// rollout (68-line file, model=gpt-5.6-sol at turn_context on line 7 then
+// not repeated again until line 150): most incremental reads landed in the
+// gap between two turn_context lines and had none of their own. A session's
+// model does change mid-file on rare occasions (the fixture this guards
+// exercises that case), so this keeps scanning the whole header rather than
+// stopping at the first turn_context, and returns the last one seen, same
+// as the live read loop below would if it saw every line from the start.
+// Leaves f positioned wherever the bounded read stopped; the caller seeks
+// to its own offset afterward.
+func scanHeaderMeta(f *os.File) (cwd, surface, model string, subRun bool) {
 	surface = "unknown"
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return cwd, surface, subRun
+		return cwd, surface, model, subRun
 	}
 	reader := bufio.NewReader(io.LimitReader(f, headerScanLimit))
 	for {
@@ -192,11 +201,18 @@ func scanHeaderMeta(f *os.File) (cwd, surface string, subRun bool) {
 		if line != "" {
 			var obj map[string]any
 			if json.Unmarshal([]byte(line), &obj) == nil {
-				if typ, _ := obj["type"].(string); typ == "session_meta" {
-					if payload, ok := obj["payload"].(map[string]any); ok && payload != nil {
+				payload, _ := obj["payload"].(map[string]any)
+				switch typ, _ := obj["type"].(string); typ {
+				case "session_meta":
+					if payload != nil {
 						cwd, surface, subRun = readSessionMeta(payload)
 					}
-					break
+				case "turn_context":
+					if payload != nil && !subRun {
+						if m, ok := payload["model"].(string); ok && m != "" {
+							model = m
+						}
+					}
 				}
 			}
 		}
@@ -204,7 +220,7 @@ func scanHeaderMeta(f *os.File) (cwd, surface string, subRun bool) {
 			break
 		}
 	}
-	return cwd, surface, subRun
+	return cwd, surface, model, subRun
 }
 
 // readSessionMeta extracts cwd, surface and whether payload describes a
@@ -292,15 +308,18 @@ func toolCallOutputBytes(output any) int64 {
 // complete line consumed. A trailing partial line (the file still being
 // written) is left for the next call, same contract as the claude adapter.
 //
-// Model is the most recent turn_context.model seen since from: a session
-// that switches model mid-file (rare, but real) is picked up correctly
-// within one read, but a token_count line appearing in a chunk that starts
-// after its turn_context (a read resumed mid-turn) carries no model,
-// matching the claude adapter's own precedent of only tracking state
-// within one read. A sub-run thread (see readSessionMeta) never gets a
-// Model at all: its turn_context.model is a sub-run name, not a model id
-// (observed: "codex-auto-review"), so it is carried as Title instead and
-// Model stays empty, "context window unknown" rather than a fabricated one.
+// Model is the most recent turn_context.model seen since from, seeded (N6,
+// v0.2.2, SESSION_LOG.md) by scanHeaderMeta's own header-window scan for
+// from > 0, then overwritten by any fresher turn_context this read's own
+// chunk carries: a session that switches model mid-file (rare, but real)
+// is still picked up correctly, and a token_count line appearing in a
+// chunk with no turn_context of its own (the common case, confirmed on a
+// real rollout, see scanHeaderMeta's own comment) now falls back to the
+// header-scanned value instead of "". A sub-run thread (see
+// readSessionMeta) never gets a Model at all: its turn_context.model is a
+// sub-run name, not a model id (observed: "codex-auto-review"), so it is
+// carried as Title instead and Model stays empty, "context window unknown"
+// rather than a fabricated one.
 func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -318,7 +337,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 	subRun := false
 
 	if from > 0 {
-		cwd, surface, subRun = scanHeaderMeta(f)
+		cwd, surface, model, subRun = scanHeaderMeta(f)
 	}
 	if _, err := f.Seek(from, io.SeekStart); err != nil {
 		return nil, nil, from, err

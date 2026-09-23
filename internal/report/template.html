@@ -86,6 +86,10 @@ th,td{text-align:right;padding:7px 9px;border-bottom:1px solid var(--merc)}
 th:first-child,td:first-child{text-align:left}
 thead th{background:var(--pine-10);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-bottom:1px solid var(--pine-40);cursor:pointer;white-space:nowrap}
 .scroll thead th{position:sticky;top:0;z-index:2}
+/* N4 (v0.2.2, SESSION_LOG.md): vendor strip cells keep their History link
+   (href, click handler) but read as plain numbers until hovered. */
+#t_vendorstrip td a{color:inherit;text-decoration:none}
+#t_vendorstrip td a:hover{text-decoration:underline}
 thead th.nosort{cursor:default}
 tbody tr:hover{background:var(--merc-l)}
 tfoot td{font-weight:700;background:var(--merc-l);border-top:2px solid var(--pine-40)}
@@ -112,7 +116,10 @@ ul.tight{margin:8px 0 0;padding-left:20px} ul.tight li{margin-bottom:5px}
 code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px}
 .bar{height:6px;background:var(--merc);border-radius:3px;overflow:hidden;margin-top:5px}
 .bar i{display:block;height:100%;background:var(--pine-l)}
-.now-cards{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+/* N3 (v0.2.2, SESSION_LOG.md): matches h2's own 28px top margin, the same
+   rhythm every other section on this page uses, rather than the 0px the
+   chart panel and the cards grid had between them as plain siblings. */
+.now-cards{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));margin-top:28px}
 .now-card .sub-cards{margin-top:10px;padding-left:10px;border-left:2px solid var(--pine-40);display:flex;flex-direction:column;gap:8px}
 .gauge{height:10px;background:var(--merc);border-radius:5px;overflow:hidden;margin-top:6px}
 .gauge i{display:block;height:100%;background:var(--sun)}
@@ -1437,105 +1444,117 @@ function sessionChartLabel(s){
   return esc(s.agent||'') + ' · ' + esc(s.model || '(model unknown)') + ' · ' + esc(baseName(s.project));
 }
 
-// drawNowChart renders the Now page's fixed 30-minute, 10-second-bucket,
-// 180-slot running chart: chart is already dense (every slot present, zero
+// drawNowChart renders the Now page's fixed 30-minute, whole-minute-bucket,
+// 30-slot running chart: chart is already dense (every slot present, zero
 // when empty) and in windowStart/bucketSeconds order from the backend, and
 // already slides forward on its own every poll (F3), so this only maps it
-// onto Chart.js, it never re-derives slots or moves the window itself. One
-// stacked bar series per session (colored by session, labeled agent ·
-// model · project basename, raw id only in the tooltip), a cost/bucket line
-// on its own right-axis scale.
+// onto Chart.js, it never re-derives slots or moves the window itself.
 //
-// F8 (SESSION_LOG.md, v0.1.2): replaces v0.1.1 F3's "destroy and rebuild
-// every poll, axis recomputed from the raw window peak", which produced a
-// visible jump on every 2-second tick. charts.now is now created once and
-// updated in place (nowChart, module scope, carries its state between
-// calls): bar datasets are kept one per session id across polls rather than
-// rebuilt from a fresh array, so a session already on screen animates via
-// Chart.js's own update() transition instead of popping to a new value, and
-// the y/cost axis maxima are smoothed (grow instantly to a new peak, decay
-// 5% per poll once it leaves the window) instead of snapping to this
-// window's raw peak. Known trade-off of no longer destroying the chart
-// every poll: a theme toggle no longer repaints its existing bars/grid
-// until a full page reload, unlike every other chart on this page.
-// findingMarkerStyle maps an I3 finding Kind to how its marker draws: a
-// distinct point shape plus color per kind, so a glance at the chart tells
-// kinds apart without reading the legend.
-var findingMarkerStyle = {
-  're-prefill':      {shape:'triangle', color:'#FFB84D', label:'Re-prefill'},
-  'compaction':       {shape:'rect',     color:'#C77DFF', label:'Compaction'},
-  'context-runway':   {shape:'circle',   color:'#4DA3FF', label:'Context runway'},
-  'expensive-turn':   {shape:'star',     color:'#FF6B6B', label:'Expensive turn'}
+// N2 (v0.2.2, SESSION_LOG.md): replaces F8's smoothed per-session lines
+// with a clustered bar chart, one bar per running session per minute, bars
+// side by side inside each minute (Chart.js's own default bar grouping,
+// nothing here forces it). F8's other rules stay: one Chart.js instance
+// (charts.now, created once, updated in place via nowChart, module scope,
+// carrying its state between polls), update('none') so a poll never
+// restarts the bar-grow animation, no height animation, damped Y max (grow
+// instantly to a new peak, decay 5% per poll once it leaves the window).
+// Known trade-off carried over from F8: a theme toggle does not repaint
+// existing bars/grid until a full page reload.
+//
+// Finding markers (re-prefill, compaction, context-runway, expensive-turn)
+// are gone from this chart per the spec ("findings stay in the turn
+// ticker, the drawer and the session card"): a bar click instead opens the
+// drawer for the session's own largest turn inside that minute
+// (nowChartOnClick below), so nothing about a finding is lost, only its
+// separate marker layer on this chart.
+
+// VENDOR_COLOR_FAMILIES: one hue family per vendor, one shade per client
+// type inside it (the CLI/native surface darkest, a GUI surface lighter),
+// dark- and light-mode pairs so contrast holds in both. Claude reuses the
+// template's own warm token (--warn); Codex is green, Copilot blue, Hermes
+// violet, none of which had an existing token to reuse. Ruling (N2,
+// SESSION_LOG.md): 'codex-desktop' and 'copilot-vscode' are defined here
+// for when those surfaces ship (Codex Desktop already scoped, Copilot in
+// VS Code is v0.3, STATUS.md's Known gaps); today's adapters only ever set
+// agent 'codex' or 'copilot-cli', so those lighter shades are unreachable
+// until an adapter sets one of those two agent values, not dead code left
+// over from a rewrite.
+var VENDOR_COLOR_FAMILIES = {
+  dark: {
+    'claude-code': '#E8A16B', 'cowork': '#F2C29B',
+    'codex': '#3EDCB0', 'codex-desktop': '#82E8C8',
+    'copilot-cli': '#4DA3FF', 'copilot-vscode': '#8AC4FF',
+    'hermes': '#B18CFF'
+  },
+  light: {
+    'claude-code': '#B5651D', 'cowork': '#D98A3D',
+    'codex': '#0E5C4E', 'codex-desktop': '#2F8F79',
+    'copilot-cli': '#1F5FAF', 'copilot-vscode': '#4A85D0',
+    'hermes': '#6647C2'
+  }
 };
+var DEFAULT_SESSION_COLOR = {dark:'#8A9CB5', light:'#4A5A70'};
 
-// findingMarkerDatasets builds one Chart.js point dataset per finding Kind
-// present in turns (I3: "a marker per finding on the live chart at its
-// slot, shaped by kind"). chart is the dense bucket array bmLive returns;
-// bucketMs is each slot's width in milliseconds, derived from two
-// consecutive slots rather than assumed, so this keeps working if
-// BucketSeconds ever changes server-side. Each dataset carries isMarker and
-// a parallel pointMeta array (session id, turn) so the chart's onClick
-// handler below can open the I3 drawer without re-deriving which point was
-// clicked from pixel coordinates itself.
-function findingMarkerDatasets(chart, turns){
-  if(!chart || !chart.length || !turns || !turns.length) return [];
-  var windowStartMs = Date.parse(chart[0].at);
-  var bucketMs = chart.length > 1 ? (Date.parse(chart[1].at) - windowStartMs) : 10000;
-  if(!(bucketMs > 0)) bucketMs = 10000;
-
-  var byKind = {};
-  turns.forEach(function(te){
-    if(!te.finding) return;
-    var kind = te.finding.Kind;
-    var style = findingMarkerStyle[kind];
-    if(!style) return;
-    var idx = Math.floor((Date.parse(te.at) - windowStartMs) / bucketMs);
-    if(idx < 0 || idx >= chart.length) return;
-    if(!byKind[kind]){
-      byKind[kind] = {
-        data: new Array(chart.length).fill(null),
-        meta: new Array(chart.length).fill(null)
-      };
-    }
-    // Chart's own top: just above where the token bars can reach, so a
-    // marker never gets buried under a tall stack.
-    byKind[kind].data[idx] = nowChart.tokenMax * 0.98;
-    byKind[kind].meta[idx] = {session_id: te.session_id, turn: te.turn, kind: kind};
-  });
-
-  return Object.keys(byKind).map(function(kind){
-    var style = findingMarkerStyle[kind];
-    var entry = byKind[kind];
-    return {
-      type: 'line', label: style.label, yAxisID: 'y', showLine: false,
-      isMarker: true, pointMeta: entry.meta,
-      data: entry.data, pointStyle: style.shape,
-      pointRadius: entry.data.map(function(v){ return v==null ? 0 : 7; }),
-      pointHoverRadius: 9,
-      backgroundColor: style.color, borderColor: style.color
-    };
-  });
+// shadeHex lightens (positive pct) or darkens (negative pct) a #rrggbb
+// colour by mixing it toward white or black, used to step two further
+// sessions of the same vendor/type apart from each other.
+function shadeHex(hex, pct){
+  var m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if(!m) return hex;
+  var num = parseInt(m[1], 16);
+  var r = (num>>16)&255, g = (num>>8)&255, b = num&255;
+  var target = pct < 0 ? 0 : 255;
+  var p = Math.min(Math.abs(pct), 100)/100;
+  r = Math.round(r + (target-r)*p); g = Math.round(g + (target-g)*p); b = Math.round(b + (target-b)*p);
+  return '#' + [r,g,b].map(function(v){ return ('0'+v.toString(16)).slice(-2); }).join('');
 }
 
-// nowChartOnClick opens the I3 drawer when a finding marker (isMarker
-// dataset, see findingMarkerDatasets) is clicked; a click that lands on a
-// bar or the cost line, or misses every point, does nothing.
+// sessionSeriesColor picks agent's family shade for the current theme,
+// stepped lighter (dark mode) or darker (light mode) for the 2nd, 3rd, ...
+// concurrent session sharing that same agent value (occurrenceIndex,
+// 0-based).
+function sessionSeriesColor(agent, occurrenceIndex){
+  var mode = UI.theme === 'light' ? 'light' : 'dark';
+  var base = VENDOR_COLOR_FAMILIES[mode][agent] || DEFAULT_SESSION_COLOR[mode];
+  if(!occurrenceIndex) return base;
+  return shadeHex(base, mode === 'light' ? -occurrenceIndex*10 : occurrenceIndex*12);
+}
+
+// nowChartOnClick opens the I3 drawer for the largest turn (by total
+// tokens) that the clicked session had inside the clicked bar's minute.
+// Uses getElementsAtEventForMode('nearest', intersect:true) itself rather
+// than the elements Chart.js would hand a plain onClick, since the chart's
+// hover/tooltip interaction mode is 'index' (every bar in the clicked
+// minute, not just the one under the pointer); a real click needs the one
+// bar actually hit.
 function nowChartOnClick(evt, elements, chart){
-  for(var i=0;i<elements.length;i++){
-    var el = elements[i];
-    var ds = chart.data.datasets[el.datasetIndex];
-    if(ds && ds.isMarker && ds.pointMeta && ds.pointMeta[el.index]){
-      var meta = ds.pointMeta[el.index];
-      openTurnDrawer(meta.session_id, meta.turn);
-      return;
-    }
-  }
+  var hits = chart.getElementsAtEventForMode(evt, 'nearest', {intersect:true}, true);
+  if(!hits.length) return;
+  var el = hits[0];
+  var ds = chart.data.datasets[el.datasetIndex];
+  if(!ds || !ds.sessionId) return;
+  var bucket = nowChart.lastChart && nowChart.lastChart[el.index];
+  if(!bucket) return;
+  var minuteStart = Date.parse(bucket.at);
+  var minuteEnd = minuteStart + 60000;
+  var best = null;
+  (nowChart.lastTurns||[]).forEach(function(te){
+    if(te.session_id !== ds.sessionId) return;
+    var at = Date.parse(te.at);
+    if(at < minuteStart || at >= minuteEnd) return;
+    var total = te.fresh + te.cache_write + te.cache_read + te.output;
+    if(!best || total > best.total) best = {turn: te.turn, total: total};
+  });
+  if(best) openTurnDrawer(ds.sessionId, best.turn);
 }
 
 function drawNowChart(chart, sessions, turns){
   if(typeof Chart === 'undefined'){ chartFallback('ch_now', 'Live burn'); return; }
   chart = chart || [];
   try {
+    nowChart.lastChart = chart;
+    nowChart.lastTurns = turns || [];
+
     var byId = {};
     flattenSessions(sessions).forEach(function(s){ byId[s.session_id] = s; });
 
@@ -1545,11 +1564,10 @@ function drawNowChart(chart, sessions, turns){
       Object.keys(b.by_session||{}).forEach(function(id){ if(sessionIds.indexOf(id)===-1) sessionIds.push(id); });
     });
     var P = chartPalette();
-    var colors = [P.accent, P.blue2, P.blue3, P.muted, '#C77DFF', '#FFB84D'];
 
-    // Per-line peak, not a stacked sum: each session is now its own smooth
-    // line rather than a bar in a shared stack, so the token axis tracks
-    // whichever single line runs highest, not their total.
+    // Per-bar peak, not a stacked sum: bars cluster side by side rather
+    // than stacking, so the token axis tracks whichever single bar runs
+    // highest, not their total.
     var tokenPeak = 0;
     chart.forEach(function(b){
       Object.keys(b.by_session||{}).forEach(function(id){
@@ -1561,26 +1579,32 @@ function drawNowChart(chart, sessions, turns){
     var costPeak = 0;
     chart.forEach(function(b){ var c = (b.cost||0)*rate(); if(c > costPeak) costPeak = c; });
 
+    // A session that fell out of the window frees its colour slot first,
+    // so a newly-appearing session counts only currently-visible siblings
+    // of the same agent when picking its shade step.
+    Object.keys(nowChart.colorBySession).forEach(function(id){
+      if(sessionIds.indexOf(id) === -1) delete nowChart.colorBySession[id];
+    });
     sessionIds.forEach(function(id){
       if(!(id in nowChart.colorBySession)){
-        nowChart.colorBySession[id] = colors[nowChart.nextColorIdx % colors.length];
-        nowChart.nextColorIdx++;
+        var s = byId[id];
+        var agent = s ? s.agent : '';
+        var used = Object.keys(nowChart.colorBySession).filter(function(oid){
+          return nowChart.colorBySession[oid].agent === agent;
+        }).length;
+        nowChart.colorBySession[id] = {agent: agent, color: sessionSeriesColor(agent, used)};
       }
     });
 
     // Decided (grill, question 12): grows instantly to a new peak, decays
     // 5% per poll once that peak has left the window, so the scale itself
-    // never jumps, only the lines move (by the chart's own animation).
+    // never jumps, only the bars move (by the chart's own animation).
     // Tokens carry a 10K floor so a near-idle chart does not zoom in on
     // noise; cost has no such floor, it settles toward zero with no spend.
     nowChart.tokenMax = Math.max(tokenPeak*1.1, nowChart.tokenMax*0.95, 10000);
     nowChart.costMax = Math.max(costPeak*1.1, nowChart.costMax*0.95);
 
-    // Smooth, moving lines, not bars: each session is its own line, tension
-    // rounds the per-bucket steps into a curve, and only the actual data
-    // (the window sliding one bucket every 10s) makes anything move, never
-    // a resize/rebuild jump.
-    var lineDatasets = sessionIds.map(function(id){
+    var barDatasets = sessionIds.map(function(id){
       var s = byId[id];
       var data = chart.map(function(b){
         var v = (b.by_session||{})[id];
@@ -1588,14 +1612,15 @@ function drawNowChart(chart, sessions, turns){
       });
       var classBreakdown = chart.map(function(b){ return (b.by_session||{})[id] || null; });
       var label = s ? sessionChartLabel(s) : 'recent session';
+      var color = nowChart.colorBySession[id].color;
       var ds = nowChart.datasetById[id];
       if(ds){
         ds.data = data; ds.classBreakdown = classBreakdown; ds.label = label;
+        ds.backgroundColor = color; ds.borderColor = color;
       } else {
-        ds = {type:'line', label: label, yAxisID:'y', sessionId: id,
+        ds = {type:'bar', label: label, yAxisID:'y', sessionId: id,
           data: data, classBreakdown: classBreakdown,
-          borderColor: nowChart.colorBySession[id], backgroundColor: nowChart.colorBySession[id],
-          fill:false, tension:0.4, cubicInterpolationMode:'monotone', borderWidth:2, pointRadius:0};
+          backgroundColor: color, borderColor: color, borderWidth:0};
         nowChart.datasetById[id] = ds;
       }
       return ds;
@@ -1612,33 +1637,43 @@ function drawNowChart(chart, sessions, turns){
       nowChart.costDataset.data = costData;
     } else {
       // Hidden by default (v0.2 is tokens-only, cost stays an opt-in legend
-      // toggle here): click "Cost/10s" in the legend to show it.
-      nowChart.costDataset = {type:'line', label:'Cost/10s', yAxisID:'cost', sessionId: null,
+      // toggle here): click "Cost/min" in the legend to show it.
+      nowChart.costDataset = {type:'line', label:'Cost/min', yAxisID:'cost', sessionId: null,
         data: costData, borderColor: P.blue3, backgroundColor:'transparent',
         tension:0.4, cubicInterpolationMode:'monotone', pointRadius:0, hidden:true};
     }
-    var markerDatasets = findingMarkerDatasets(chart, turns);
-    var datasets = lineDatasets.concat([nowChart.costDataset]).concat(markerDatasets);
+    var datasets = barDatasets.concat([nowChart.costDataset]);
 
-    // One label per 5 minutes, on the round minute, so only the edge label
-    // changes as the window drifts (decided, grill question 12); every
-    // other slot renders blank rather than being auto-skipped, since the
-    // slot positions themselves keep sliding every poll.
+    // N2: a tick and a light gridline every minute (autoSkip:false plus
+    // grid.display:true draws one at every slot regardless of its label),
+    // the label text itself only every minute when there is room (>=40px
+    // per label, this.width comes from Chart.js binding the callback to
+    // the scale instance) else every 5 minutes; never rotated.
     var tickCallback = function(value, index){
       var b = chart[index];
       if(!b) return '';
       var d = new Date(b.at);
       if(isNaN(d.getTime())) return '';
-      return (d.getMinutes() % 5 === 0 && d.getSeconds() === 0) ? localHMS(b.at) : '';
+      var pxPerLabel = this && this.width ? this.width / chart.length : 0;
+      var everyN = pxPerLabel >= 40 ? 1 : 5;
+      return (d.getMinutes() % everyN === 0) ? localHMS(b.at).slice(0,5) : '';
     };
 
+    // N2: the tooltip's main line matches the left axis's K/M/B token
+    // format (tok()); the cost line keeps Chart.js's own default
+    // "label: formattedValue" line, unchanged from before this rewrite.
+    var tooltipLabel = function(ctx){
+      if(ctx.dataset.yAxisID === 'y') return ctx.dataset.label + ': ' + tok(ctx.parsed.y);
+      return ctx.dataset.label + ': ' + ctx.formattedValue;
+    };
     var afterLabel = function(ctx){
       var cc = ctx.dataset.classBreakdown && ctx.dataset.classBreakdown[ctx.dataIndex];
       if(!cc) return [];
       var lines = [];
       if(ctx.dataset.sessionId) lines.push('id: '+ctx.dataset.sessionId);
-      // Token class split inside a line is tooltip-only in v0.1.1 (F3): a
-      // per-class toggle on the lines themselves is v0.2.
+      // Token class split inside a bar is tooltip-only (F3/v0.1.1's own
+      // decision, unchanged by N2): a per-class toggle on the bars
+      // themselves is out of scope here too.
       lines.push('fresh '+tok(cc.fresh)+', cache write '+tok(cc.cache_write)
         +', cache read '+tok(cc.cache_read)+', output '+tok(cc.output));
       return lines;
@@ -1648,20 +1683,20 @@ function drawNowChart(chart, sessions, turns){
       charts.now = new Chart(document.getElementById('ch_now'), {
         data:{labels:labels, datasets:datasets},
         options:{responsive:true, maintainAspectRatio:false,
-          // Smooth, right-to-left only: no growing/shrinking transition on
-          // the values themselves, just the window sliding one bucket at a
-          // time (F1 follow-up). A short line-drawing duration keeps a
-          // freshly-appearing point from popping in.
-          animation:{duration:250, easing:'linear'},
+          // No height/value animation (F8): a poll only ever slides the
+          // window and updates bar heights in place, update('none') below
+          // skips Chart.js's own transition entirely rather than tuning
+          // its duration down.
+          animation:false,
           interaction:{mode:'index', intersect:false},
           scales:{
-            x:{grid:{display:false}, ticks:{font:{size:10}, maxRotation:0, autoSkip:false, callback: tickCallback}},
-            y:{beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}},
+            x:{grid:{display:true, color:P.grid}, ticks:{font:{size:10}, maxRotation:0, autoSkip:false, callback: tickCallback}},
+            y:{beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}, ticks:{callback: function(v){ return tok(v); }}},
             cost:{position:'right', beginAtZero:true, max: nowChart.costMax || undefined, grid:{display:false}}
           },
           plugins:{
             legend:{position:'bottom', labels:{font:{size:10}, boxWidth:10}},
-            tooltip:{callbacks:{afterLabel: afterLabel}}
+            tooltip:{callbacks:{label: tooltipLabel, afterLabel: afterLabel}}
           },
           onClick: nowChartOnClick}});
     } else {
@@ -1670,7 +1705,9 @@ function drawNowChart(chart, sessions, turns){
       charts.now.options.scales.x.ticks.callback = tickCallback;
       charts.now.options.scales.y.max = nowChart.tokenMax;
       charts.now.options.scales.cost.max = nowChart.costMax || undefined;
-      charts.now.update();
+      // F8: update('none') so a poll never plays a transition, only the
+      // window sliding and bar heights change.
+      charts.now.update('none');
     }
   } catch(e){
     chartFallback('ch_now', 'Live burn');
@@ -1722,6 +1759,17 @@ document.addEventListener('click', function(e){
   if(line) openTurnDrawer(line.getAttribute('data-session'), parseInt(line.getAttribute('data-turn'), 10));
 });
 
+// TURN_DETAIL_PENDING turns bmTurn's async callback (N1, v0.2.2: it now
+// returns immediately and resolves off the UI thread, same pattern as
+// SESSION_INSIGHT_PENDING above) back into openTurnDrawer's promise. Keyed
+// by "sessionID:turn" since a single sessionID can have more than one turn
+// in flight (a fast second click before the first resolves).
+var TURN_DETAIL_PENDING = {};
+window.__bmTurnResolve = function(key, detail){
+  var p = TURN_DETAIL_PENDING[key];
+  if(p){ delete TURN_DETAIL_PENDING[key]; p.resolve(detail); }
+};
+
 // openTurnDrawer is the I3 drawer's single entry point, fed by one bound
 // function (bmTurn) per the spec: a marker click (nowChartOnClick) and a
 // ticker line click (the delegated handler above) both call this the same
@@ -1737,7 +1785,11 @@ function openTurnDrawer(sessionID, turn){
     return;
   }
   body.innerHTML = '<p class="small">Loading turn detail&hellip;</p>';
-  Promise.resolve(window.bmTurn(sessionID, turn)).then(renderTurnDrawer).catch(function(e){
+  var key = sessionID + ':' + turn;
+  new Promise(function(resolve){
+    TURN_DETAIL_PENDING[key] = {resolve: resolve};
+    window.bmTurn(sessionID, turn);
+  }).then(renderTurnDrawer).catch(function(e){
     body.innerHTML = '<p class="small">Could not load turn detail: ' + esc(e && e.message ? e.message : String(e)) + '</p>';
   });
 }
@@ -1746,6 +1798,15 @@ function closeTurnDrawer(){
   var overlay = document.getElementById('turn_drawer_overlay');
   if(overlay) overlay.classList.add('hidden');
 }
+
+// N1 (v0.2.2): Esc closes the drawer from anywhere on the page, matching
+// the overlay-click and Close-button paths, without needing focus inside
+// the drawer itself.
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Escape' && e.key !== 'Esc') return;
+  var overlay = document.getElementById('turn_drawer_overlay');
+  if(overlay && !overlay.classList.contains('hidden')) closeTurnDrawer();
+});
 
 // renderTurnDrawer is bmTurn's one template branch: model, token classes,
 // tool calls that turn (from S2's tool_calls), files read where the trail
@@ -1838,8 +1899,12 @@ function openVendorStripCell(agent, period){
   goToTab('history');
 }
 
+// N4 (v0.2.2, SESSION_LOG.md): the link keeps working (href plus its own
+// click handler, unchanged) but no longer looks like one; #t_vendorstrip
+// td a's own CSS rule strips the colour/underline, title carries the
+// "Open in History" hover tooltip natively rather than a custom widget.
 function vsCell(tok_, agent, period){
-  return '<td><a href="'+vsHistoryHash(agent, period)+'" onclick="openVendorStripCell(\''
+  return '<td><a href="'+vsHistoryHash(agent, period)+'" title="Open in History" onclick="openVendorStripCell(\''
     +String(agent).replace(/'/g,"\\'")+'\',\''+period+'\');return false;">'+tok(tok_)+'</a></td>';
 }
 

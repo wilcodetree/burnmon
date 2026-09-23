@@ -238,17 +238,20 @@ func TestAnalyze_UnderFiveMillisecondsPerSession(t *testing.T) {
 }
 
 // TestAnalyze_ContextRunway_ExpectedTurnCount: context grows a steady 8K
-// tokens a turn over 10 turns against a 200K window (from testConfig's
-// default context_window table). The fit is exact (no noise), so the turn
-// counts to 80% and 90% are computable by hand: last turn's context is
-// 80,000; 80% of window is 160,000, needing (160,000-80,000)/8,000 = 10 more
-// turns; 90% is 180,000, needing 12.5, rounded up to 13.
+// tokens a turn over 10 turns against a 200K window (claude-haiku-4-5-20251001
+// from testConfig's default context_window table; N5, v0.2.2, SESSION_LOG.md
+// moved claude-sonnet-5 itself to its native 1M window, so this fixture uses
+// the one model still booked at 200K to keep the hand-computed numbers
+// below valid). The fit is exact (no noise), so the turn counts to 80% and
+// 90% are computable by hand: last turn's context is 80,000; 80% of window
+// is 160,000, needing (160,000-80,000)/8,000 = 10 more turns; 90% is
+// 180,000, needing 12.5, rounded up to 13.
 func TestAnalyze_ContextRunway_ExpectedTurnCount(t *testing.T) {
 	base := time.Date(2026, 9, 22, 10, 0, 0, 0, time.UTC)
 	var events []schema.Event
 	for i := 0; i < 10; i++ {
 		ctx := int64(8_000 * (i + 1))
-		events = append(events, ev("s1", fmt.Sprintf("r%d", i), "claude-sonnet-5",
+		events = append(events, ev("s1", fmt.Sprintf("r%d", i), "claude-haiku-4-5-20251001",
 			base.Add(time.Duration(i)*time.Minute), ctx, ptr(0), ptr(0), 300))
 	}
 	findings := Analyze(events, testConfig())

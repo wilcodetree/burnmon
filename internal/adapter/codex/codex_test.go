@@ -191,6 +191,12 @@ func TestParseIncrementalReadKeepsSurface(t *testing.T) {
 	if events[0].Project != `C:\ZND\projects\burnmon` {
 		t.Fatalf("Project = %q, want the session cwd re-read via scanHeaderMeta", events[0].Project)
 	}
+	// N6 (v0.2.2, SESSION_LOG.md): same bug as Surface/Project above, for
+	// Model. The fixture's last turn_context (before the appended line) set
+	// gpt-6-astra; scanHeaderMeta must recover that, not "".
+	if events[0].Model != "gpt-6-astra" {
+		t.Fatalf("Model = %q, want gpt-6-astra (turn_context re-read via scanHeaderMeta)", events[0].Model)
+	}
 }
 
 // TestParseSubRunModelBecomesTitle guards F2's second label fix: a Codex

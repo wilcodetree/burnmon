@@ -23,11 +23,12 @@ type ClassCounts struct {
 	Output     int64 `json:"output"`
 }
 
-// Bucket is one fixed 10-second slot of the Now page's 30-minute sliding
-// chart (F3): always present in Snapshot.Chart, zero-valued when no turn
-// landed in it, so the frontend never has to derive a dense timeline from a
-// sparse one. At is UTC; the frontend renders it in the viewer's local time
-// (F3's fix for the axis showing UTC while local read differently).
+// Bucket is one fixed whole-minute slot of the Now page's 30-minute sliding
+// chart (F3, widened from 10 seconds to 60 by N2, v0.2.2, SESSION_LOG.md):
+// always present in Snapshot.Chart, zero-valued when no turn landed in it,
+// so the frontend never has to derive a dense timeline from a sparse one.
+// At is UTC; the frontend renders it in the viewer's local time (F3's fix
+// for the axis showing UTC while local read differently).
 type Bucket struct {
 	At        string                 `json:"at"`
 	BySession map[string]ClassCounts `json:"by_session,omitempty"`
@@ -120,11 +121,14 @@ const turnTickerCap = 50
 // last turn ever falls outside what EventsSince(now-ChartWindow) returns.
 const ChartWindow = 30 * time.Minute
 
-// BucketSeconds is the width of one Now-page chart slot (F3): a fixed
-// 30-minute, 10-second-bucket, 180-slot running chart.
-const BucketSeconds = 10
+// BucketSeconds is the width of one Now-page chart slot: a fixed 30-minute,
+// 60-second-bucket, 30-slot running chart (N2, v0.2.2: widened from F3's
+// 10-second buckets so each slot is a whole minute, the last 30 closed
+// minutes plus the current one, which grows as more of it elapses, matching
+// windowEnd's own truncation to this width below).
+const BucketSeconds = 60
 
-// chartSlots is ChartWindow's slot count at BucketSeconds width (180).
+// chartSlots is ChartWindow's slot count at BucketSeconds width (30).
 const chartSlots = int(ChartWindow / (BucketSeconds * time.Second))
 
 // turnCost returns one event's subscription-share cost, the same model

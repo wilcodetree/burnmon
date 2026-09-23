@@ -44,8 +44,10 @@ func TestBuildSnapshot_RunningVsStale(t *testing.T) {
 	if s.Context != 1500 {
 		t.Fatalf("want context 1500 (input+cache_read), got %d", s.Context)
 	}
-	if s.ContextWindow != 200_000 {
-		t.Fatalf("want context window 200000 for claude-sonnet-5, got %d", s.ContextWindow)
+	// N5 (v0.2.2, SESSION_LOG.md): claude-sonnet-5's book entry moved from
+	// 200,000 to its native 1,000,000-token window, re-checked live.
+	if s.ContextWindow != 1_000_000 {
+		t.Fatalf("want context window 1000000 for claude-sonnet-5, got %d", s.ContextWindow)
 	}
 	if s.CacheHitRatio <= 0 {
 		t.Fatalf("want a positive cache hit ratio, got %v", s.CacheHitRatio)

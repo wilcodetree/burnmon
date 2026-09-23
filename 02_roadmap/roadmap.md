@@ -25,12 +25,25 @@ Priority order lives here and only here.
    and the CPU pin are fixed (bmLive stayed under 50ms throughout every measured run);
    peak WorkingSet dropped from ~1.4-1.7 GB to ~900 MB, short of the 400 MB Done-when
    target and left open in `STATUS.md`'s Known gaps for v0.3 or a follow-up patch.
-5. v0.3 (2026-10-09, moved from 2026-12-12), next, one release, two sessions a week: price
+5. v0.2.2 patch: Now page fixes from Wilco's live review (three screenshots, 2026-09-23
+   around 12:00). Turn drawer could not be closed (root cause: bmTurn ran synchronously on
+   the WebView2 UI thread, same mechanism as the v0.2.1 hang, now async plus an Esc handler);
+   Live burn chart rebuilt as clustered per-minute bars (BucketSeconds 10 to 60, one hue
+   family per vendor); more gap above the session cards; vendor strip links de-styled to
+   plain numbers with a hover tooltip; the context-window book corrected (Opus 5.5, Sonnet 5
+   and Fable 5.1 run a native 1M-token window, not 200K, re-checked live against
+   platform.claude.com/docs; the Opus key itself was also wrong, "claude-opus-5" instead of
+   the real "claude-opus-5-5"); the Codex "(model unknown)" card traced to scanHeaderMeta
+   never re-reading turn_context on an incremental parse, now carries the header-scanned
+   model forward the same way it already did for surface and cwd. Spec:
+   `2026-09-23_v0.2.2_now_page_patch.md`. **DONE 2026-09-23, committed locally, tag `v0.2.2`
+   not yet pushed, see SESSION_LOG.md for the commands.**
+6. v0.3 (2026-10-09, moved from 2026-12-12), next, one release, two sessions a week: price
    books, per-vendor cost, dev and business switch, client map (owner then client), active
    time, export and merge, Copilot VS Code (OTel file), macOS and Linux in browser mode.
    Slip order: platforms, then Copilot VS Code. Spec: `2026-09-23_v0.3_spec.md`. Session
    prompts with the checklist: `2026-09-23_v0.3_session_prompts.md`. Grilled 2026-09-23.
-6. Decision 2026-12-19.
+7. Decision 2026-12-19.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.
 Architecture (decided): `..\04_assets\2026-09-22_token_monitor_architecture.md`.

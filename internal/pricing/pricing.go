@@ -41,11 +41,14 @@ const (
 	OpenAIPriceBookDate    = "2026-09-22"
 
 	// ContextWindowBookDate is when the context_window table below was last
-	// checked against platform.claude.com/docs/en/about-claude/models and
-	// developers.openai.com/codex's model pages. VERIFY: both are published
-	// standard-tier windows; Sonnet's documented 1M-token beta context is not
-	// used here since it needs a separate beta header burnmon never sends.
-	ContextWindowBookDate = "2026-09-22"
+	// checked against platform.claude.com/docs/en/build-with-claude/context-windows,
+	// each Claude model's own overview page, and developers.openai.com/codex's
+	// model pages. VERIFY: both are published standard-tier windows; Opus 5.5,
+	// Sonnet 5 and Fable 5.1 now run a native 1M-token window as that standard
+	// tier (N5, v0.2.2, SESSION_LOG.md: re-checked after the 200,000-token
+	// reading in this table one day earlier turned out to already be stale),
+	// no beta header needed; Haiku 4.5 stays at 200,000.
+	ContextWindowBookDate = "2026-09-23"
 
 	// ClaudeCodeCacheBookDate is when the cache-lifetime and auto-compact
 	// facts below were checked against code.claude.com/docs/en/costs and
@@ -165,9 +168,10 @@ type Config struct {
 	// percentage; Claude Code compacts when the conversation reaches the
 	// model's context window, except models running a native 1M-token
 	// window (Sonnet 5, the Fable models, Opus 4.7+ on the Anthropic API),
-	// which compact early at about 967,000 tokens by default. burnmon's own
-	// ContextWindows table above prices the 200,000-token standard tier, not
-	// the 1M beta, so this number does not apply to it directly; insight's
+	// which compact early at about 967,000 tokens by default. ContextWindows
+	// above now prices that native 1M window directly for Opus 5.5, Sonnet 5
+	// and Fable 5.1 (N5, v0.2.2), so this threshold is close to, but still
+	// not equal to, that table's own window for those three; insight's
 	// compaction rule (I2) detects a compaction by its effect instead, a
 	// greater-than-30%-percent context drop between consecutive turns, not
 	// by comparing against this threshold.
@@ -276,19 +280,30 @@ func Defaults() Config {
 			"gpt-5.6-luna":  {Label: "GPT-5.6 Luna", In: 0.20, CachedIn: 0.02, Out: 1.20},
 		},
 		// Context windows, tokens, dated ContextWindowBookDate. Anthropic
-		// models: 200,000 tokens standard tier, per
-		// platform.claude.com/docs/en/about-claude/models (Sonnet's 1M-token
-		// beta window needs a beta header burnmon never sends, so it is not
-		// used here). OpenAI Codex models: 400,000 tokens, per
-		// developers.openai.com/codex's model pages for the Codex-class
+		// models (N5, v0.2.2, SESSION_LOG.md: re-checked live against
+		// platform.claude.com/docs/en/build-with-claude/context-windows and
+		// each model's own overview page after Wilco's Now page screenshot
+		// showed claude-sonnet-5 as "window in book: 200K, exceeded"): Opus
+		// 5.5, Sonnet 5 and Fable 5.1 now run a native 1,000,000-token
+		// window as their standard/default tier, no beta header needed (the
+		// prior 200,000-token entry for these three was yesterday's
+		// standard-tier reading, now stale); Haiku 4.5 stays at its own
+		// standard 200,000 tokens, unchanged. The Opus key itself moved from
+		// "claude-opus-5" to "claude-opus-5-5": the same N5 live check
+		// against the real store (burnmon-cli.exe live --json) found a
+		// running Cowork session reporting model "claude-opus-5-5", which
+		// had no entry at all under the old key, so its window showed
+		// unknown regardless of the value on this line; "claude-opus-5" had
+		// no real session backing it. OpenAI Codex models: 400,000 tokens,
+		// per developers.openai.com/codex's model pages for the Codex-class
 		// models seen on Wilco's laptop. "codex-auto-review" has no
 		// published context window (also unpriced, see OpenAIPrices) and is
 		// deliberately left out, so its gauge shows tokens only.
 		ContextWindows: map[string]int64{
-			"claude-opus-5":             200_000,
-			"claude-sonnet-5":           200_000,
+			"claude-opus-5-5":           1_000_000,
+			"claude-sonnet-5":           1_000_000,
 			"claude-haiku-4-5-20251001": 200_000,
-			"claude-fable-5-1":          200_000,
+			"claude-fable-5-1":          1_000_000,
 			"gpt-6-astra":               400_000,
 			"gpt-5.6-sol":               400_000,
 			"gpt-5.6-terra":             400_000,

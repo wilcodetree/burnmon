@@ -1,9 +1,11 @@
 # BurnMon, status
 
-What is true at this commit (2026-09-23): **v0.2.1 tagged**, the Refresh hang patch (Not
-Responding, 98.5% CPU pinned) fixed and measured; v0.2.0 shipped before it, all sixteen
-spec items built, release-candidate Done-when and VERIFY pass (46A) clean with no fails.
-Specs: `02_roadmap\2026-09-22_v0.2_spec.md`, `02_roadmap\2026-09-23_v0.2.1_hang_patch.md`.
+What is true at this commit (2026-09-23): **v0.2.2 committed locally, tag not yet pushed**,
+the Now page patch from Wilco's live review (turn drawer close, the clustered per-minute
+chart, chart-to-cards spacing, vendor strip link styling, the context-window book, the Codex
+"model unknown" card); v0.2.1 (the Refresh hang patch) and v0.2.0 (all sixteen v0.2 spec
+items) shipped before it. Specs: `02_roadmap\2026-09-22_v0.2_spec.md`,
+`02_roadmap\2026-09-23_v0.2.1_hang_patch.md`, `02_roadmap\2026-09-23_v0.2.2_now_page_patch.md`.
 Next: v0.3 (2026-10-09), per-vendor cost and credits, dev/business switch, full client map,
 macOS and Linux builds.
 
@@ -37,9 +39,11 @@ works became the first section of About. English only: the language toggle and t
 table's second language are gone.
 
 - **Now**: every running Claude Code/Cowork/Codex/Hermes/Copilot CLI session, polled
-  every 2 seconds; a smoothed 30-minute per-session burn chart; the vendor strip (one row
-  per vendor, today/week/month tokens, refreshed once a minute); the turn ticker with
-  finding markers and a spike-detail drawer; the forecast chart (plan line, live line,
+  every 2 seconds; a 30-minute, one-bar-per-session-per-minute clustered burn chart
+  (v0.2.2 N2, one hue family per vendor, clicking a bar opens the drawer for that session's
+  largest turn in that minute); the vendor strip (one row per vendor, today/week/month
+  tokens, refreshed once a minute); the turn ticker with finding markers and a spike-detail
+  drawer; the forecast chart (plan line, live line,
   error band once a week is scored, else the visible gate text).
 - **History**: one page, filters (period, range, vendor, owner once configured), URL-hash
   state, replacing the old Overview/Months/Weeks/Days pages entirely.
@@ -93,6 +97,10 @@ empty.
 
 - GitHub Copilot in VS Code: confirmed reachable via OTel (A3), not wired in as a source
   yet (v0.3).
+- The Now chart's per-vendor colour families (v0.2.2 N2) define a lighter "desktop"/"VS
+  Code" shade for Codex and Copilot, but no adapter sets a distinct agent value for those
+  surfaces yet (Codex is always agent "codex", Copilot in VS Code is not an adapter at all,
+  see above), so those two shades are unreachable until that adapter work lands.
 - Per-vendor cost, the dev/business cost-view switch, the full client map (active time,
   export, merge), macOS and Linux builds: all out of scope for v0.2, named as such in the
   spec's section 3.

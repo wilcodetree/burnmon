@@ -2,6 +2,93 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.2.2: Now page patch, N1 to N6
+
+Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.2_now_page_patch.md` and worked N1
+to N6 in order. Capability note up front, per the session prompt's own instruction to say so
+rather than skip verification silently: this session has no way to open or click the native
+WebView2 window burnmon.exe draws, so every item below was verified by proxy instead of by
+watching or clicking the running app, specifically: reading the rendered template.html logic
+directly, `node --check` on the two extracted inline `<script>` blocks, `go test ./... -count=1`
+and `.\build.ps1` after every item, and, where the change touched runtime data rather than
+only markup or CSS, querying `burnmon-cli.exe live --json` against the real store (54 MB,
+~51,300 events at the time) while this very session's own Claude Code turns were live in that
+window; no Codex CLI session happened to be running for a concurrent window-side check, so
+N6 rests on a real rollout file read directly (see below) plus a unit test, not a live Codex
+session. N1 (turn drawer could not close): root cause was not the drawer's own JS, which
+checked out correct in isolation, but `bmTurn` (`cmd\burnmon\main.go`) still returning its
+result synchronously from go-webview2's `Bind` callback, the same UI-thread mechanism
+v0.2.1's own hang patch documented; opening the drawer re-reads a session's whole event
+history on the same thread the Close button's click has to be processed on, so on the real
+store's scale the window reads as "the drawer cannot be closed" rather than "briefly frozen".
+Fixed the same way v0.2.1 fixed `bmSessionInsight`/`bmHistory`: `bmTurn` returns immediately,
+resolves through a goroutine and `asyncResolveJS`/`__bmTurnResolve`
+(`internal\report\template.html`), keyed by `sessionID:turn` since more than one turn can be
+in flight; added an `Escape` key handler as its own independent close path. N2 (chart
+rewrite): read `drawNowChart` and its F8 comments first as instructed; widened
+`live.BucketSeconds` from 10 to 60 (`internal\live\live.go`), which the existing
+`windowEnd`/`windowStart` truncation logic already turns into "last 30 closed minutes plus
+the current, growing one" with no further change, confirmed via `burnmon-cli.exe live --json`
+returning `bucket_seconds: 60` and a 30-slot chart against the real store; rewrote
+`drawNowChart` from smoothed per-session lines to clustered per-session-per-minute bars
+(Chart.js's own default bar grouping), kept F8's one-instance/`update('none')`/damped-Y-max
+rules, added a `VENDOR_COLOR_FAMILIES` table (Claude warm reusing the template's own `--warn`
+token, Codex green, Copilot blue, Hermes violet, dark- and light-mode pairs, `shadeHex` steps
+a second/third concurrent session of the same agent value two shades apart), a K/M/B token
+axis and matching tooltip format (`tok()`, already used elsewhere on the page), a per-minute
+gridline with the label text itself thinning to every 5 minutes under 40px/label
+(`this.width` from Chart.js's own tick-callback binding), and removed the finding-marker
+point layer entirely per the spec ("findings stay in the turn ticker, the drawer and the
+session card"); a bar click now calls `chart.getElementsAtEventForMode('nearest', {intersect:
+true})` itself (the chart's hover mode is `'index'`, which would otherwise hand back every
+bar in that minute, not the one clicked) and opens the drawer for that session's own largest
+turn inside the clicked minute. Ruling: the colour table also defines `codex-desktop` and
+`copilot-vscode` shades for a lighter GUI-surface shade neither adapter can produce yet
+(Codex always sets agent `"codex"`, Copilot in VS Code is not an adapter at all, per
+STATUS.md's own Known gaps); left them in as forward-compatible definitions rather than
+waiting for that adapter work, documented in STATUS.md's Known gaps rather than treated as
+dead code. N3: added `margin-top:28px` to `.now-cards`, the same value `h2`'s own top margin
+uses everywhere else on the page. N4: `#t_vendorstrip td a` now inherits colour and drops the
+underline until hover, `title="Open in History"` carries the tooltip natively. N5 (context
+window): live-checked `claude-sonnet-5` against
+`platform.claude.com/docs/en/build-with-claude/context-windows` (Perplexity, cited pages),
+confirmed Sonnet 5's 1,000,000-token window is now its standard/default tier, no beta header
+needed, reversing yesterday's own dated comment in `internal\pricing\pricing.go` that assumed
+otherwise; the same check found Opus 5.5 and Fable 5.1 also default to 1M, Haiku 4.5 stays at
+200K, so `ContextWindows` was updated for exactly those three, `ContextWindowBookDate` moved
+to 2026-09-23. While verifying live against the real store, the running Cowork session's own
+model reported as `"claude-opus-5-5"`, a string with no entry at all under the book's
+previous `"claude-opus-5"` key (which no real session had ever produced), so that key was
+renamed to match; `ModelFamily`'s substring match still prices it correctly either way, this
+only affected the context-window gauge. `TestBuildSnapshot_RunningVsStale` and
+`TestAnalyze_ContextRunway_ExpectedTurnCount` (`internal\live`, `internal\insight`) both
+asserted the old 200K figure and were watched to fail before being updated, the latter
+switched to `claude-haiku-4-5-20251001` (the one model still booked at 200K) to keep its
+hand-computed turn-count math valid rather than recomputing it for 1M; runway text needed no
+separate code change, `insight.contextRunway` and `live.buildSession` already read
+`cfg.ContextWindow(model)`. N6 (Codex model unknown): read a real rollout
+(`~\.codex\sessions\2026\09\23\rollout-2026-09-23T11-06-23-...jsonl`, 868 lines) directly:
+`turn_context` (the only line carrying `model`) appeared 7 times against 114 `token_count`
+lines, all but the first well past `scanHeaderMeta`'s own re-read, which only ever recovered
+`session_meta`'s cwd/surface and never looked at `turn_context` at all, so most of
+`watch`'s incremental `Parse` calls landed in the gap between two `turn_context` lines with
+none of their own and fell back to `model=""`, the same mechanism F2 already fixed for
+surface. Extended `scanHeaderMeta` to also track the most recent `turn_context.model` across
+its existing 64KB header window (kept scanning past the first `session_meta` rather than
+breaking there), seeded into `Parse`'s own `model` var for `from > 0` reads; a sub-run
+thread's `turn_context.model` (its own name, not a model id) is still excluded, guarded by
+the existing `TestParseSubRunModelBecomesTitle`. Extended
+`TestParseIncrementalReadKeepsSurface` (the exact precedent for this class of bug) with a
+`Model` assertion, watched it fail (`Model = ""`) before the fix, green after. `node --check`
+on both extracted script blocks, `go test ./... -count=1` and `.\build.ps1` all green after
+every item. Version constants moved to `0.2.2` in `cmd\burnmon\main.go` and
+`cmd\burnmon-cli\main.go`; `STATUS.md` and `02_roadmap\roadmap.md` updated, `STATUS.md`'s
+Known gaps carries the colour-family ruling above. No open choice needed stopping for: the
+Codex/Copilot lighter-shade ruling above was resolvable from the existing adapter code and
+STATUS.md's own Known gaps section, not a genuine fork with more than one defensible reading.
+`C:\dev\Work` untouched throughout. Committed locally; tag and push commands printed at the
+end of this session's own reply, not run.
+
 ## 2026-09-23, v0.2.1: Refresh hang patch, measured
 
 Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.1_hang_patch.md`. Measured before

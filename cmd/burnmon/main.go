@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	version        = "0.2.1"
+	version        = "0.2.2"
 	windowTitle    = "BurnMon"
 	mutexName      = `Local\burnmon-app`
 	minInterval    = 5 * time.Minute
@@ -374,11 +374,38 @@ func main() {
 	// sessionID's whole event history (EventsForSession, any vendor) rather
 	// than bmLive's windowed one, so a drawer opened on a turn that has
 	// since scrolled out of the 30-minute chart still resolves.
-	if err := w.Bind("bmTurn", func(sessionID string, turn int) (live.TurnDetail, error) {
-		a.mu.Lock()
-		cfg := a.cfg
-		a.mu.Unlock()
-		return live.BuildTurnDetail(st, &cfg, sessionID, turn)
+	//
+	// N1 (v0.2.2, SESSION_LOG.md): this used to return live.BuildTurnDetail's
+	// result directly, synchronously, on go-webview2's Bind callback, which
+	// v0.2.1's own hang patch documented as running on the same UI thread
+	// the window paints and processes input on. On the real store a turn
+	// drawer open re-reads a session's whole event history, so while that
+	// call is in flight the window (including the drawer's own Close button
+	// and Esc) cannot respond, which reads as "the drawer cannot be closed"
+	// rather than "the window is briefly frozen". Same fix as
+	// bmSessionInsight/bmHistory below: return immediately, do the real work
+	// in a goroutine, resolve through asyncResolveJS.
+	if err := w.Bind("bmTurn", func(sessionID string, turn int) {
+		go func() {
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			start := time.Now()
+			detail, err := live.BuildTurnDetail(st, &cfg, sessionID, turn)
+			if err != nil {
+				log.Println("bmTurn:", sessionID, turn, ":", err)
+			}
+			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+				log.Printf("bound bmTurn: %v waiting for the store", elapsed)
+			}
+			key := fmt.Sprintf("%s:%d", sessionID, turn)
+			js, err := asyncResolveJS("__bmTurnResolve", key, detail)
+			if err != nil {
+				log.Println("bmTurn: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
 	}); err != nil {
 		log.Println("could not bind bmTurn:", err)
 	}
