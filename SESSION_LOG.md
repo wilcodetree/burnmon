@@ -2,6 +2,57 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.3 V3-4: export and merge (K4, K5)
+
+Read `02_roadmap\2026-09-23_v0.3_spec.md` section 2.2 K4/K5 and the v0.2 spec's P6 wall rule
+before touching anything. K4: new `internal/export` package, `export.Doc`/`export.Row`, grouping
+real turns (the claude adapter's synthetic tool-only events excluded, same `isTurn` filter as
+`internal/history`) into day (UTC)/owner/client/vendor/model rows, five token classes (input,
+cache write, cache read, output, reasoning), cost on every basis C2's `CostForEvents` covers for
+that row's vendor, and active minutes recomputed directly off the row's own events via a new
+`dataset.ActiveTimeMinutes` (K2's gap-sum algorithm exported for buckets finer than a whole
+session, since one session's events can land in more than one row here). `export.DefaultLabel`
+is the literal string `"dev-1"`; nothing in the export path calls `os.Hostname`. `burnmon-cli
+export --since --until --owner... --label --out`: refuses to run when `burnmon.json` carries
+owner rules and no `--owner` was given (`cfg.Owners` non-empty gate), silent otherwise, matching
+K4's "so a Valona row never leaves by accident." No field on `Row`/`Doc` carries a path, session
+id, prompt or project name; `TestExportedJSON_NoPathsOrSessionIDs`
+(`internal/export/export_test.go`) is the requested leak scanner: builds a doc from an event
+whose `Project`/`SessionID`/`Title` do carry a Windows path and a UUID, marshals it the way the
+CLI will, and fails if a path separator or a UUID-shaped session id pattern survives into the
+actual bytes. K5: new `internal/merge` package, `merge.Merge` refuses files whose `schema` value
+differs, sums tokens (the five classes) into per-client/per-vendor/per-ISO-week rows, one column
+per label (`LabelTotals`, a repeated label from two files of the same machine sums into the same
+column rather than erroring); `burnmon-cli merge <file>... --out <dir>` writes `merged.json` and,
+via a new `internal/mergereport` package, a `report.html` rendered entirely server-side with Go's
+`html/template`, no `<script>` tag at all (a chart was judged not needed for three totals tables,
+so nothing from the vendored Chart.js copy was pulled in; "opens offline with no network script"
+holds trivially since there is no script). Found and fixed a real bug while running this for
+real: `runMerge`'s flag/positional split treated `--out`'s own value as a second positional file,
+since it only recognised a token as "the value of a flag" by prefix, not by asking whether the
+previous token was a flag; fixed to consume the next token after any `-`-prefixed argument as
+that flag's value (`cmd/burnmon-cli/main.go`, `TestMerge...` would not have caught this, it is
+CLI-parsing not package logic, so this was only caught by actually running the exe). Ran for real
+on this laptop: no `burnmon.json` with owner rules existed anywhere on it yet (checked
+`%LOCALAPPDATA%\burnmon\burnmon.json` and next to the exe, neither existed), so `--owner ZND`
+would have matched nothing meaningful; dropped a temporary `burnmon.json` in the scratchpad with
+`C:\dev\Work\* -> Valona`, `C:\ZND\* -> ZND` (the same rule shape `burnmon.example.json` already
+documents) and ran `burnmon-cli reown` against the real store once to backfill Owner on the
+51,795 events already in it, per K1. `burnmon-cli export --owner ZND --label wilco-laptop`
+produced 32 rows, every one `"owner": "ZND"`, zero occurrences of "Valona" and zero path
+separators in the file (checked by grep, not just by eye). A second export with `--owner ZND
+--owner Valona --label dev-2` (kept local, in the scratchpad only, never published, per the wall
+rule) gave a second file with different totals to merge against; `burnmon-cli merge` on the two
+produced `merged.json` (three breakdowns, both labels as columns, e.g. by_vendor.anthropic:
+wilco-laptop 2,403,871,082 vs dev-2 2,404,052,920 tokens) and a `report.html` that opens with
+`file://`, no console errors, three plain tables matching the JSON exactly. That real `reown` run
+temporarily changed the live store's `owner`/`client` columns, which made
+`TestMigrateRealV01Store` fail (it snapshot-compares the real `%LOCALAPPDATA%\burnmon\burnmon.db`
+and expects `Owner == ""`, the pre-K1 state); reverted by running `reown` once more against an
+empty-`owners` config, which is P6's documented "empty means no owner column at all" behaviour,
+confirmed the test green again before stopping. `go vet ./...`, `go test ./... -count=1` and
+`.\build.ps1` all green.
+
 ## 2026-09-23, v0.3 V3-3b: monitor mode (U3, U4)
 
 Read `02_roadmap\2026-09-23_v0.3_spec.md` section 2.5 U3/U4 and the v0.2.2 vendor colour table

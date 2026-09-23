@@ -25,10 +25,14 @@ import (
 	"time"
 
 	"burnmon/internal/dataset"
+	"burnmon/internal/export"
 	"burnmon/internal/insight"
 	"burnmon/internal/live"
+	"burnmon/internal/merge"
+	"burnmon/internal/mergereport"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
+	"burnmon/internal/schema"
 	"burnmon/internal/store"
 )
 
@@ -61,6 +65,14 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "insight" {
 		os.Exit(runInsight(os.Args[2:]))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "export" {
+		os.Exit(runExport(os.Args[2:]))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "merge" {
+		os.Exit(runMerge(os.Args[2:]))
 		return
 	}
 	os.Exit(run())
@@ -357,6 +369,182 @@ func runInsight(args []string) int {
 	for _, f := range findings {
 		fmt.Printf("%-6d %-12s %-25s %-10.2f %s\n", f.Turn, f.Kind, f.At.Format(time.RFC3339), f.Confidence, f.Cause)
 	}
+	return 0
+}
+
+// runExport prints K4's export: `burnmon-cli export --since <date> --until
+// <date> --owner <name>... --label <name> --out <file>`. Does a full
+// Collect pass first (same as live, tools and insight) so the store is as
+// current as a one-shot process can make it. When owner rules exist, --owner
+// is required and the command refuses without it, so a Valona row never
+// leaves this laptop by accident (P6's wall rule, v0.2 spec 2.2).
+func runExport(args []string) int {
+	fs := flag.NewFlagSet("export", flag.ExitOnError)
+	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
+	since := fs.String("since", "", "earliest UTC day to include, YYYY-MM-DD (default: no lower bound)")
+	until := fs.String("until", "", "latest UTC day to include, YYYY-MM-DD, inclusive (default: no upper bound)")
+	label := fs.String("label", export.DefaultLabel, "this machine's label in the export; never the hostname")
+	out := fs.String("out", "", "output file path")
+	var owners multiFlag
+	fs.Var(&owners, "owner", "owner to include; repeatable, required when owner rules exist")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if *out == "" {
+		fmt.Fprintln(os.Stderr, "export: --out is required")
+		return 1
+	}
+
+	cfg, err := loadConfig(*cfgPath, true)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config error:", err)
+		return 1
+	}
+	if len(cfg.Owners) > 0 && len(owners) == 0 {
+		fmt.Fprintln(os.Stderr, "export: owner rules are configured; --owner is required "+
+			"(repeat --owner for more than one), so a Valona row never leaves by accident")
+		return 1
+	}
+
+	storePath, err := store.DefaultPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	st, err := store.Open(storePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not open the local store at", storePath, ":", err)
+		return 1
+	}
+	defer st.Close()
+
+	cache := dataset.Cache{Store: st}
+	opts := dataset.CollectOpts{Seat: "Standard", MonthsN: 1, RefreshSlow: true}
+	if _, err := cache.Collect(&cfg, opts, nil); err != nil {
+		var seatErr *dataset.SeatError
+		if !errors.As(err, &seatErr) && !errors.Is(err, dataset.ErrNoSessions) {
+			fmt.Fprintln(os.Stderr, "could not collect:", err)
+			return 1
+		}
+	}
+
+	events, err := st.AllEvents()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+
+	ownerSet := map[string]bool{}
+	for _, o := range owners {
+		ownerSet[o] = true
+	}
+	var filtered []schema.Event
+	for _, e := range events {
+		day := e.At.UTC().Format("2006-01-02")
+		if *since != "" && day < *since {
+			continue
+		}
+		if *until != "" && day > *until {
+			continue
+		}
+		if len(ownerSet) > 0 && !ownerSet[e.Owner] {
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+
+	doc := export.Build(filtered, &cfg, *label, time.Now())
+	b, err := json.MarshalIndent(doc, "", " ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	if err := os.WriteFile(*out, b, 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "could not write", *out, ":", err)
+		return 1
+	}
+	fmt.Printf("Wrote %s with %d row(s), label %q\n", *out, len(doc.Rows), doc.Label)
+	return 0
+}
+
+// runMerge combines K4 export files into K5's merged.json plus a static,
+// offline report.html: `burnmon-cli merge <file>... --out <dir>`. Refuses
+// files whose schema value differs (merge.Merge).
+func runMerge(args []string) int {
+	var files []string
+	var flagArgs []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "-") {
+			flagArgs = append(flagArgs, a)
+			// Every merge flag today (-out) takes a value; a bare flag with
+			// no "=" is followed by its value as the next token, which must
+			// not be mistaken for a positional file argument.
+			if !strings.Contains(a, "=") && i+1 < len(args) {
+				i++
+				flagArgs = append(flagArgs, args[i])
+			}
+			continue
+		}
+		files = append(files, a)
+	}
+
+	fs := flag.NewFlagSet("merge", flag.ExitOnError)
+	outDir := fs.String("out", "", "output directory for merged.json and report.html")
+	if err := fs.Parse(flagArgs); err != nil {
+		return 1
+	}
+	if len(files) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: burnmon-cli merge <file>... --out <dir>")
+		return 1
+	}
+	if *outDir == "" {
+		fmt.Fprintln(os.Stderr, "merge: --out is required")
+		return 1
+	}
+
+	var docs []export.Doc
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "could not read", f, ":", err)
+			return 1
+		}
+		var d export.Doc
+		if err := json.Unmarshal(b, &d); err != nil {
+			fmt.Fprintln(os.Stderr, "could not parse", f, ":", err)
+			return 1
+		}
+		docs = append(docs, d)
+	}
+
+	m, err := merge.Merge(docs)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+
+	if err := os.MkdirAll(*outDir, 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, "could not create", *outDir, ":", err)
+		return 1
+	}
+	mergedPath := filepath.Join(*outDir, "merged.json")
+	mb, err := json.MarshalIndent(m, "", " ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return 1
+	}
+	if err := os.WriteFile(mergedPath, mb, 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "could not write", mergedPath, ":", err)
+		return 1
+	}
+	reportPath := filepath.Join(*outDir, "report.html")
+	if err := mergereport.Write(reportPath, m); err != nil {
+		fmt.Fprintln(os.Stderr, "could not write", reportPath, ":", err)
+		return 1
+	}
+	fmt.Println("Wrote", mergedPath)
+	fmt.Println("Wrote", reportPath)
 	return 0
 }
 

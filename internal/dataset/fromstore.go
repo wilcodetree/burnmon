@@ -243,6 +243,21 @@ func activeTimeMinutes(sorted []time.Time, idleCutoffMinutes float64) float64 {
 	return total.Minutes()
 }
 
+// ActiveTimeMinutes is K2's active time computed directly off events, for
+// callers that group events into buckets finer than a whole session (K4
+// export's per-row active minutes, one row per day/owner/client/vendor/model
+// rather than per session).
+func ActiveTimeMinutes(events []schema.Event, cfg *pricing.Config) float64 {
+	var times []time.Time
+	for _, e := range events {
+		if !e.At.IsZero() {
+			times = append(times, e.At)
+		}
+	}
+	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
+	return activeTimeMinutes(times, cfg.ActiveIdleMinutesOrDefault())
+}
+
 // ActiveMinutesByClient sums each session's ActiveMinutes into its Client
 // (K2: "per client as the sum of its sessions"). A session with Client ==
 // "" (a store not yet reowned since K1 landed) is omitted rather than
