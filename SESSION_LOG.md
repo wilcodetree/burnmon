@@ -2,6 +2,64 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.3 V3-3b: monitor mode (U3, U4)
+
+Read `02_roadmap\2026-09-23_v0.3_spec.md` section 2.5 U3/U4 and the v0.2.2 vendor colour table
+(`VENDOR_COLOR_FAMILIES`, `internal\report\template.html`) before touching the template. U3: a
+`view` field on `pricing.Config` (`"view"` in `burnmon.json`, `""`/`"full"` default, `"monitor"`
+starts straight into it), exposed to the page as `D.view` via a new field on `dataset.Payload`,
+same start-state convention as `Mode`/`D.mode`. `cmd\burnmon\main.go`'s `writeSubscriptionConfig`
+generalised into `writeConfigKey(path, key, value)` (a merge-into-JSON, `.tmp`+rename write for any
+top-level key, not just `"subscription"`), reused by a new `ccSaveView` binding (the header's live
+Monitor/Full switch persists its own choice, no rebuild: the view choice changes chrome only) and by
+`ccSaveSettings`/`applySettings`, which now also writes `"view"` from a new `defaultView` field on
+`settingsPayload` and the Settings dialog (a `<select>` next to Your seat). Template: `UI.view`
+(from `D.view`, not `localStorage`, unlike `mode`/`theme`: the header switch's own choice belongs in
+`burnmon.json`, not per-viewer browser storage), a header `#btn_monitor` button, a fixed
+`#monitor_exit_btn` ("Full view", shown only via `body.monitor-mode` CSS) and `setView`/
+`applyViewMode` (toggles `body.monitor-mode`/`body.monitor-dev`, forces the Now tab active, saves via
+`ccSaveView`). Monitor mode's three panels (chart, sessions, vendor strip) are the Now page's own:
+`body.monitor-mode` hides `#topbar` (header and tab bar, `.tabsbar` is its own child) and a new
+`#now_extra` wrapper around the turn ticker and forecast blocks; business mode's monitor view is
+exactly the normal Now page underneath that chrome, "reuse bmLive/bmVendorStrip as they are" from the
+brief taken literally, no second Chart.js instance. U4 (dev mode only, `body.monitor-mode.monitor-dev`
+additionally swaps `#now` for `#monitor_text_view`, a fixed-position dark monospace page): a
+block-character chart (`renderMonitorChartText`, one `▁`-`█` column per minute over the same
+30-minute `chart` array `drawNowChart` already gets from `bmLive`, one row per session, vendor colour
+from `VENDOR_COLOR_FAMILIES.dark`, fixed regardless of the theme toggle), ASCII-bordered session boxes
+(`monitorSessionBoxHTML`/`mtBox`, the same tokens/turn/last-turn fields `sessionCardDevBody` shows,
+clicking one opens the I3 turn drawer for `turn_count`, no hover, no bar click) and an ASCII vendor
+strip table (`mtVendorStripText`). Both render functions are called from `renderNow`/`renderVendorStrip`
+when `body` carries `monitor-dev`, off the same 2s/60s polls the Now page already runs: no new backend
+call, per the brief. `internal/pricing`: `TestLoadView`/`TestDefaultsAreFullView` (new `"view"` field,
+same shape as the existing `TestLoadModeAndCopilotPlan`/`TestDefaultsAreDevMode`). `node --check` on
+both extracted `<script>` blocks, `go vet ./...`, `go test ./... -count=1` and `.\build.ps1` all green.
+Real-window check: wrote a new self-managed `tools\uicheck\check_v3b.go` (`scripts\uicheck.ps1`'s own
+self-managed list generalised from a hardcoded `w1` case to `@("w1", "v3b")`, since v3b also needs to
+control `burnmon.json` before its own launch and restart the exe mid-check) covering every uicheck step
+the brief asked for: opens in monitor mode from a saved `"view":"monitor"` setting (asserted via the
+dev eval channel: `#topbar` and `#now_extra` hidden, `#monitor_text_view` shown, `monitor-dev` on
+`body`), Full view and back with real `SendInput` clicks, business-mode monitor showing the normal
+Now visuals instead of the text page, a restart with the exe killed and relaunched confirming the
+choice survives. The eval-only assertions (everything above that does not need a click) hold, and are
+strong evidence the markup/CSS/JS wiring is right. The click-driven assertions did not run to
+completion in this session: `query session` showed this laptop's console session locked (foreground
+window "Windows Default Lock Screen") for the whole run, so `BitBlt` screenshots captured the lock
+screen's own Spotlight-style background image (not burnmon), and `SendInput` clicks landed on it too,
+never reaching burnmon's window regardless of the window's own topmost z-order (`ensureWindowSize`,
+called before every click and screenshot in `check_v3b.go`, same trick `main.go`'s dispatch already
+uses for every other check). Confirmed this is an environment condition, not a v3b or monitor-mode
+regression, by re-running the already-`x`-ticked `v3` check (V3-3's own dev/business toggle test,
+unchanged by this session): it failed the exact same way (`btn_mode label after click = "Dev", want
+"Business"`), so the click path was never exercisable this session, on any check, old or new. Per the
+house rule (never a proxy check alone) this is reported plainly rather than claimed: Wilco needs to
+run `.\scripts\uicheck.ps1 v3b` himself, from an unlocked interactive session, for the click-driven
+screenshots (`v3b-full-view.png`, `v3b-monitor-business.png`, `v3b-monitor-restart.png`) to show real
+content instead of the lock screen. Not carried further this session: V3-3b is otherwise complete and
+ticked below; the interactive re-verification is the one open item, tracked in `STATUS.md`'s Known
+gaps section rather than blocking the next V3-4 session, since nothing about V3-4 (export/merge)
+depends on it.
+
 ## 2026-09-23, v0.3 V3-3: dev/business switch (C3), client view (K3), Now page fixes and loading states (U1, U2)
 
 Read `02_roadmap\2026-09-23_v0.3_spec.md` sections 2.1 C3, 2.2 K3, 2.5 U1/U2 and

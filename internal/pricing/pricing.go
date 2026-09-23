@@ -234,12 +234,25 @@ type Config struct {
 	// always reports ok=false, so the business-mode card omits the "credits
 	// left" line rather than guessing which tier applies.
 	CopilotPlan string `json:"copilot_plan,omitempty"`
+
+	// View is U3's monitor/full start state: "" or "full" (the default)
+	// opens the normal page; "monitor" opens straight into the chrome-less
+	// monitor view. Same role as Mode above, a start state only: the
+	// header's own Monitor/Full view switch flips it live and saves the new
+	// choice back here through the settings save path.
+	View string `json:"view,omitempty"`
 }
 
 // BusinessMode reports whether Mode is set to "business"; any other value
 // (including "" and "dev") means dev.
 func (c *Config) BusinessMode() bool {
 	return c.Mode == "business"
+}
+
+// MonitorView reports whether View is set to "monitor"; any other value
+// (including "" and "full") means the normal, full page.
+func (c *Config) MonitorView() bool {
+	return c.View == "monitor"
 }
 
 // DefaultClaudeCodeCacheTTLMinutes is the compiled-in cache-lifetime

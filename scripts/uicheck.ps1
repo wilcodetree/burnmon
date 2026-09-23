@@ -20,22 +20,27 @@ $targetChecks = $args
 if ($targetChecks.Count -eq 0) {
     $targetChecks = @("w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8")
 }
-# w1 tests startup itself and manages its own burnmon.exe instance
-# (tools\uicheck\check_w1.go), so it must run before anything else here
-# starts one, and outside this script's own Start-Process/wait-for-port flow.
-if ($targetChecks -contains "w1") {
-    Push-Location tools\uicheck
-    try {
-        Write-Host "--- uicheck w1 (self-managed) ---"
-        go run . w1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "uicheck w1 FAILED"
-            exit $LASTEXITCODE
+# Self-managed checks (tools\uicheck\main.go's own selfManaged map: w1 tests
+# startup itself, v3b restarts burnmon.exe mid-check to prove a setting
+# survives it) start and stop their own burnmon.exe instance, so each must
+# run before anything else here starts one, outside this script's own
+# Start-Process/wait-for-port flow.
+$selfManagedChecks = @("w1", "v3b")
+foreach ($sm in $selfManagedChecks) {
+    if ($targetChecks -contains $sm) {
+        Push-Location tools\uicheck
+        try {
+            Write-Host "--- uicheck $sm (self-managed) ---"
+            go run . $sm
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "uicheck $sm FAILED"
+                exit $LASTEXITCODE
+            }
+        } finally {
+            Pop-Location
         }
-    } finally {
-        Pop-Location
+        $targetChecks = $targetChecks | Where-Object { $_ -ne $sm }
     }
-    $targetChecks = $targetChecks | Where-Object { $_ -ne "w1" }
 }
 if ($targetChecks.Count -eq 0) {
     Write-Host "uicheck: all checks passed"

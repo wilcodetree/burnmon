@@ -110,6 +110,9 @@ type Payload struct {
 	// straight from pricing.Config.Mode: the header toggle's default before
 	// any per-machine choice is remembered.
 	Mode string `json:"mode,omitempty"`
+	// View is U3's monitor/full start state ("" or "full" means full),
+	// straight from pricing.Config.View.
+	View string `json:"view,omitempty"`
 }
 
 func round4(x float64) float64 { return math.Round(x*1e4) / 1e4 }
@@ -184,6 +187,7 @@ func BuildPayload(cfg *pricing.Config, seat string, cutoff, today time.Time,
 		Days:             days,
 		Sessions:         kept,
 		Mode:             cfg.Mode,
+		View:             cfg.View,
 	}
 }
 

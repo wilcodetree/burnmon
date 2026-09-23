@@ -277,3 +277,29 @@ func TestDefaultsAreDevMode(t *testing.T) {
 		t.Error("BusinessMode() = true for compiled-in defaults, want false (dev is the default)")
 	}
 }
+
+// TestLoadView guards U3's "view" burnmon.json field, the monitor/full
+// header switch's start state, same convention as "mode" above.
+func TestLoadView(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "burnmon.json")
+	if err := os.WriteFile(path, []byte(`{"view": "monitor"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.MonitorView() {
+		t.Error("MonitorView() = false, want true with view:\"monitor\"")
+	}
+}
+
+// TestDefaultsAreFullView guards the default: no "view" key at all means
+// full, same as an explicit "full".
+func TestDefaultsAreFullView(t *testing.T) {
+	cfg := Defaults()
+	if cfg.MonitorView() {
+		t.Error("MonitorView() = true for compiled-in defaults, want false (full is the default)")
+	}
+}

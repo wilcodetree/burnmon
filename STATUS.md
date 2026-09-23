@@ -119,6 +119,12 @@ empty.
   residual is Go/OS-level memory retention around the Sessions tab's still-considerable
   concurrent read volume, not a further Collect-side leak. Left open for v0.3 or a
   follow-up patch. See `02_roadmap\2026-09-23_v0.2.1_hang_patch.md` and `SESSION_LOG.md`.
+- Monitor mode (U3/U4, v0.3 V3-3b): the click-driven part of its real-window check
+  (`.\scripts\uicheck.ps1 v3b`, and the pre-existing `v3`) could not run to completion on
+  2026-09-23 because this laptop's console session was locked at the time
+  (`SendInput`/`BitBlt` both hit the Windows lock screen, not burnmon's window, regardless
+  of the window's own topmost z-order); the eval-only startup assertions passed. Needs
+  Wilco to run it once from an unlocked interactive session. See `SESSION_LOG.md`.
 
 ## Next
 
