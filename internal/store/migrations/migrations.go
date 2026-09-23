@@ -22,6 +22,7 @@ var All = []Migration{
 	{3, "tool_calls table (S2)", migration3},
 	{4, "tool_calls.path column (I3)", migration4},
 	{5, "forecast_scores table (F1)", migration5},
+	{6, "session_id-only index on events (v0.2.1 hang patch)", migration6},
 }
 
 // migration1 records the v0.1 schema as version 1 without changing it: the
@@ -129,5 +130,18 @@ CREATE TABLE IF NOT EXISTS forecast_scores (
 	PRIMARY KEY (iso_year, iso_week)
 );
 `)
+	return err
+}
+
+// migration6 adds a session_id-only index: EventsForSession and
+// EventsForSession-like lookups filter WHERE session_id = ? with no vendor
+// in the WHERE clause, so idx_events_session (vendor, session_id) cannot be
+// used (session_id is not its leading column) and every such call fell back
+// to a full table scan. Measured the v0.2.1 hang patch's dominant cost: the
+// Sessions tab's bmSessionInsight fan-out (one EventsForSession call per
+// kept session, all on the app's single UI thread) turned into hundreds of
+// full scans of the whole events table. See SESSION_LOG.md.
+func migration6(tx *sql.Tx) error {
+	_, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_events_session_id ON events (session_id);`)
 	return err
 }

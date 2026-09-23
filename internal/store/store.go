@@ -20,8 +20,17 @@ import (
 	"burnmon/internal/store/migrations"
 )
 
+// Store holds two *sql.DB handles onto the same file: db is the writer,
+// one connection, serialising every insert/update/delete exactly as before;
+// readDB is a small pool of read-only connections, so a poll (bmLive,
+// bmVendorStrip, bmForecast, bmSessionInsight, bmHistory) never queues
+// behind an in-flight ingest or Collect on the same connection. WAL mode
+// (set in Open) is what makes that split safe: a WAL reader sees a
+// consistent snapshot without blocking on, or blocking, the one writer.
+// See SESSION_LOG.md, v0.2.1 hang patch, H1.
 type Store struct {
-	db *sql.DB
+	db     *sql.DB
+	readDB *sql.DB
 }
 
 const schemaVersionDDL = `CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);`
@@ -45,6 +54,10 @@ func Open(path string) (*Store, error) {
 	// anyway, and burnmon's own callers (CLI: one-shot; app: one rebuild at
 	// a time, guarded by app.building) never need concurrent writers.
 	db.SetMaxOpenConns(1)
+	if err := setPragmas(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("store: pragmas on %s: %w", path, err)
+	}
 	from, to, err := runMigrations(db)
 	if err != nil {
 		db.Close()
@@ -53,7 +66,41 @@ func Open(path string) (*Store, error) {
 	if from != to {
 		log.Printf("store: migrated %s from version %d to %d", path, from, to)
 	}
-	return &Store{db: db}, nil
+
+	// readDB is a second handle onto the same file, opened only after the
+	// writer above has set WAL mode and run every migration, so a read
+	// through this pool never race-reads a schema the writer has not
+	// finished creating. A handful of connections (not one, not unbounded):
+	// several bound functions (bmLive, bmSessionInsight per session, ...)
+	// can be in flight from the UI thread inside the same second, and WAL
+	// lets them all read concurrently with each other and with the writer.
+	readDB, err := sql.Open("sqlite", path)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("store: open read pool for %s: %w", path, err)
+	}
+	readDB.SetMaxOpenConns(8)
+	if err := setPragmas(readDB); err != nil {
+		db.Close()
+		readDB.Close()
+		return nil, fmt.Errorf("store: pragmas on read pool for %s: %w", path, err)
+	}
+	return &Store{db: db, readDB: readDB}, nil
+}
+
+// setPragmas puts conn in WAL mode (readers and the one writer stop
+// blocking each other) with a five-second busy timeout (so a reader that
+// still lands mid-checkpoint retries instead of erroring SQLITE_BUSY
+// straight away). Idempotent: safe to call on every connection opened
+// against the same file, including the read pool's four connections.
+func setPragmas(conn *sql.DB) error {
+	if _, err := conn.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
+		return fmt.Errorf("journal_mode=WAL: %w", err)
+	}
+	if _, err := conn.Exec(`PRAGMA busy_timeout=5000;`); err != nil {
+		return fmt.Errorf("busy_timeout: %w", err)
+	}
+	return nil
 }
 
 // runMigrations ensures the schema_version table exists, reads the store's
@@ -108,7 +155,13 @@ func runMigrations(db *sql.DB) (from, to int, err error) {
 	return from, to, nil
 }
 
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	err := s.readDB.Close()
+	if werr := s.db.Close(); werr != nil {
+		err = werr
+	}
+	return err
+}
 
 // UpsertEvents inserts events, keeping, per (vendor, session_id, request_id),
 // the one with the largest Output ("largest output wins": a streamed API
@@ -220,7 +273,7 @@ ON CONFLICT (vendor, session_id, call_id) DO UPDATE SET
 // fixture proves the two coincide) simply returns no rows rather than
 // erroring, same as a turn that truly called no tool.
 func (s *Store) ToolCallsForTurn(vendor, sessionID, turn string) ([]schema.ToolCall, error) {
-	rows, err := s.db.Query(`
+	rows, err := s.readDB.Query(`
 SELECT vendor, agent, session_id, call_id, turn, tool, at, input_bytes, result_bytes, path
 FROM tool_calls
 WHERE vendor = ? AND session_id = ? AND turn = ?
@@ -268,7 +321,7 @@ type ToolCallTotal struct {
 // orphaned call_id, see schema.ToolCall) still gets a row, with
 // result_bytes 0.
 func (s *Store) ToolCallTotals(since time.Time) ([]ToolCallTotal, error) {
-	rows, err := s.db.Query(`
+	rows, err := s.readDB.Query(`
 SELECT tool, COUNT(*) AS calls, COUNT(DISTINCT session_id) AS sessions,
 	SUM(input_bytes) AS input_bytes, SUM(COALESCE(result_bytes, 0)) AS result_bytes
 FROM tool_calls
@@ -316,7 +369,7 @@ func (s *Store) VendorStripTotals(day, week, month time.Time) ([]VendorStripTota
 	if month.Before(from) {
 		from = month
 	}
-	rows, err := s.db.Query(`
+	rows, err := s.readDB.Query(`
 SELECT agent,
 	SUM(CASE WHEN at >= ? THEN input + COALESCE(cache_write,0) + COALESCE(cache_read,0) + output ELSE 0 END) AS today,
 	SUM(CASE WHEN at >= ? THEN input + COALESCE(cache_write,0) + COALESCE(cache_read,0) + output ELSE 0 END) AS week,
@@ -386,7 +439,7 @@ func scanForecastScore(scan func(dest ...any) error) (ForecastScore, error) {
 // ForecastScore returns the row for one ISO week, ok false when that week
 // has never had a plan recorded.
 func (s *Store) ForecastScore(isoYear, isoWeek int) (ForecastScore, bool, error) {
-	row := s.db.QueryRow(`SELECT `+forecastScoreColumns+` FROM forecast_scores WHERE iso_year = ? AND iso_week = ?`,
+	row := s.readDB.QueryRow(`SELECT `+forecastScoreColumns+` FROM forecast_scores WHERE iso_year = ? AND iso_week = ?`,
 		isoYear, isoWeek)
 	f, err := scanForecastScore(row.Scan)
 	if err == sql.ErrNoRows {
@@ -400,7 +453,7 @@ func (s *Store) ForecastScore(isoYear, isoWeek int) (ForecastScore, bool, error)
 
 // ForecastScores returns every scored-or-scoring week, oldest first.
 func (s *Store) ForecastScores() ([]ForecastScore, error) {
-	rows, err := s.db.Query(`SELECT ` + forecastScoreColumns + ` FROM forecast_scores ORDER BY iso_year, iso_week`)
+	rows, err := s.readDB.Query(`SELECT ` + forecastScoreColumns + ` FROM forecast_scores ORDER BY iso_year, iso_week`)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +506,7 @@ type DailyTokenTotal struct {
 // the last four weeks) and its actual/live totals are both built from this,
 // one query, rather than loading raw events into Go.
 func (s *Store) DailyTokenTotals(from time.Time) ([]DailyTokenTotal, error) {
-	rows, err := s.db.Query(`
+	rows, err := s.readDB.Query(`
 SELECT substr(at, 1, 10) AS day,
 	SUM(input + COALESCE(cache_write,0) + COALESCE(cache_read,0) + output) AS tokens
 FROM events
@@ -561,7 +614,7 @@ func scanEvents(rows *sql.Rows) ([]schema.Event, error) {
 // polling AllEvents every 2 seconds re-groups the whole table in memory on
 // every tick.
 func (s *Store) AllEvents() ([]schema.Event, error) {
-	rows, err := s.db.Query(`SELECT ` + eventColumns + ` FROM events ORDER BY at ASC`)
+	rows, err := s.readDB.Query(`SELECT ` + eventColumns + ` FROM events ORDER BY at ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -575,7 +628,7 @@ func (s *Store) AllEvents() ([]schema.Event, error) {
 // of rows, not the whole history (F1: burnmon.exe was measured at 1,886 MB
 // and thrashing before this fix).
 func (s *Store) EventsSince(from time.Time) ([]schema.Event, error) {
-	rows, err := s.db.Query(`SELECT `+eventColumns+` FROM events WHERE at >= ? ORDER BY at ASC`,
+	rows, err := s.readDB.Query(`SELECT `+eventColumns+` FROM events WHERE at >= ? ORDER BY at ASC`,
 		from.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return nil, err
@@ -594,7 +647,7 @@ func (s *Store) EventsSince(from time.Time) ([]schema.Event, error) {
 // not a correctness one, no vendor has ever repeated another's id in
 // practice.
 func (s *Store) EventsForSession(sessionID string) ([]schema.Event, error) {
-	rows, err := s.db.Query(`SELECT `+eventColumns+` FROM events WHERE session_id = ? ORDER BY at ASC`,
+	rows, err := s.readDB.Query(`SELECT `+eventColumns+` FROM events WHERE session_id = ? ORDER BY at ASC`,
 		sessionID)
 	if err != nil {
 		return nil, err
@@ -659,7 +712,7 @@ FROM events
 WHERE (` + strings.Join(clauses, " OR ") + `)
 	AND NOT (model = '' AND input = 0 AND output = 0)
 GROUP BY vendor, session_id, model`
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.readDB.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

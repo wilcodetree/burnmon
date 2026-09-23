@@ -981,24 +981,62 @@ function renderSessions(){
     ? '<tr><td>'+t('sessions_count',{n:ss.length})+'</td><td></td><td></td><td></td><td>'+n(tcalls)+'</td><td>'+tok(tt)+'</td><td>'+(tcalls?money(tc/tcalls,3):'n/a')+'</td><td>'+money(tc)+'</td><td class="col-owner hidden"></td><td></td></tr>' : '';
   document.getElementById('s_count').textContent = t('sessions_shown', {shown: ss.length, total: (D.sessions||[]).length});
   applyOwnerColumnVisibility();
-  ss.forEach(function(s){
-    sessionInsight(s.session_id).then(function(findings){
+  // A page load (every Refresh, tick or Settings save reloads the page)
+  // used to fire one bmSessionInsight call per row in ss here, all at once:
+  // against a real history (over a thousand kept sessions) that meant
+  // over a thousand goroutines and store reads landing in the same instant
+  // (v0.2.1 hang patch, SESSION_LOG.md). runWithConcurrency caps how many
+  // are ever in flight together, so peak memory stays bounded regardless of
+  // how many sessions the table holds; the Findings column still fills in
+  // progressively, same as before.
+  runWithConcurrency(ss, 8, function(s){
+    return sessionInsight(s.session_id).then(function(findings){
       var cell = tb.querySelector('.col-findings[data-session="' + cssAttrEscape(s.session_id) + '"]');
       if(cell) cell.innerHTML = findingsSummary(findings);
     });
   });
 }
 
+// runWithConcurrency runs worker(item) for every item in items, at most
+// limit at a time, waiting for one to finish before starting the next.
+// worker must return a promise; a rejected one is treated as finished
+// (logged, not retried) so one bad session never stalls the rest.
+function runWithConcurrency(items, limit, worker){
+  var i = 0, active = 0;
+  function next(){
+    while(active < limit && i < items.length){
+      var item = items[i++];
+      active++;
+      worker(item).catch(function(e){ console.error(e); }).then(function(){
+        active--;
+        next();
+      });
+    }
+  }
+  next();
+}
+
 // ---------- Sessions tab findings (I3): bmSessionInsight(sessionID) is
 // called on demand per session, never polled, and cached here in page
 // memory for the tab's lifetime so re-expanding a row or re-sorting the
-// table never re-fetches the same session twice.
+// table never re-fetches the same session twice. bmSessionInsight itself
+// returns immediately (v0.2.1 hang patch: the Go side does the real work in
+// a background goroutine, off the WebView2 UI thread) and later calls
+// __bmSessionInsightResolve(sessionID, findings) once; SESSION_INSIGHT_PENDING
+// is what turns that single callback back into this promise's resolution.
 var SESSION_INSIGHT_CACHE = {};
+var SESSION_INSIGHT_PENDING = {};
+window.__bmSessionInsightResolve = function(sessionID, findings){
+  var p = SESSION_INSIGHT_PENDING[sessionID];
+  if(p){ delete SESSION_INSIGHT_PENDING[sessionID]; p.resolve(findings || []); }
+};
 function sessionInsight(sessionID){
   if(!SESSION_INSIGHT_CACHE[sessionID]){
-    SESSION_INSIGHT_CACHE[sessionID] = (typeof window.bmSessionInsight === 'function')
-      ? Promise.resolve(window.bmSessionInsight(sessionID)).catch(function(){ return []; })
-      : Promise.resolve([]);
+    SESSION_INSIGHT_CACHE[sessionID] = new Promise(function(resolve){
+      if(typeof window.bmSessionInsight !== 'function'){ resolve([]); return; }
+      SESSION_INSIGHT_PENDING[sessionID] = {resolve: resolve};
+      window.bmSessionInsight(sessionID);
+    }).catch(function(){ return []; });
   }
   return SESSION_INSIGHT_CACHE[sessionID];
 }
@@ -1992,6 +2030,24 @@ function renderHistTable(rows, period, showCost){
   }).join('');
 }
 
+// bmHistory(reqID, filter) returns immediately (v0.2.1 hang patch: the Go
+// side reads and aggregates the store in a background goroutine, off the
+// WebView2 UI thread) and later calls __bmHistoryResolve(reqID, payload)
+// once. HIST_REQ_SEQ/HIST_PENDING turn that callback back into a promise,
+// the same pattern sessionInsight uses; HIST_LATEST_REQ lets a filter
+// change that fires a second call while the first is still running ignore
+// the first once it resolves, so a slow, superseded request never
+// overwrites what the user is now looking at.
+var HIST_REQ_SEQ = 0;
+var HIST_PENDING = {};
+var HIST_LATEST_REQ = '';
+window.__bmHistoryResolve = function(reqID, payload){
+  var p = HIST_PENDING[reqID];
+  if(!p) return;
+  delete HIST_PENDING[reqID];
+  if(reqID === HIST_LATEST_REQ) p.resolve(payload);
+};
+
 function renderHistory(){
   var empty = document.getElementById('h_empty');
   if(typeof window.bmHistory !== 'function'){
@@ -2004,7 +2060,12 @@ function renderHistory(){
   empty.classList.add('hidden');
   var range = histRangeDates();
   var filter = {period: UI_HIST.period, from: range.from, to: range.to, vendor: UI_HIST.vendor, owner: UI_HIST.owner};
-  Promise.resolve(window.bmHistory(filter)).then(function(payload){
+  var reqID = 'h' + (++HIST_REQ_SEQ);
+  HIST_LATEST_REQ = reqID;
+  new Promise(function(resolve){
+    HIST_PENDING[reqID] = {resolve: resolve};
+    window.bmHistory(reqID, filter);
+  }).then(function(payload){
     buildHistFilterOptions(payload);
     var showCost = payload.totals.cost_usd != null;
     renderHistTotals(payload.totals);

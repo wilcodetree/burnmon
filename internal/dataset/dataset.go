@@ -25,13 +25,6 @@ import (
 	"burnmon/internal/store"
 )
 
-// CoverageNote explains what burnmon can and cannot see. Unchanged from
-// v0.1.0.
-const CoverageNote = "Local Cowork and Claude Code sessions only, from this machine. Cowork " +
-	"sessions that run in Anthropic's cloud, claude.ai browser chats and mobile chats keep " +
-	"no local transcript and are deliberately not collected: the only source for those " +
-	"would be an organisation-wide export (Compliance API / OpenTelemetry)."
-
 // Distinct errors Collect can return. Callers map each to their own message
 // and exit code.
 var (
@@ -111,10 +104,8 @@ type Payload struct {
 	LongSessionCalls int                    `json:"long_session_calls"`
 	Totals           totalsOut              `json:"totals"`
 	Months           map[string]*agg.Bucket `json:"months"`
-	Weeks            map[string]*agg.Bucket `json:"weeks"`
 	Days             map[string]*agg.Bucket `json:"days"`
 	Sessions         []*scan.Session        `json:"sessions"`
-	CoverageNote     string                 `json:"coverage_note"`
 }
 
 func round4(x float64) float64 { return math.Round(x*1e4) / 1e4 }
@@ -129,6 +120,11 @@ func monthStart(t time.Time, back int) time.Time {
 }
 
 // BuildPayload assembles the schema-1 payload from already-aggregated data.
+// weeks is accepted (agg.Build returns it alongside months and days) but not
+// put in Payload: no v0.2 tab reads D.weeks (checked against every D.*
+// reference in internal/report/template.html), so it would only inflate the
+// embedded JSON and dashboard.html for nothing. See SESSION_LOG.md, v0.2.1
+// hang patch.
 func BuildPayload(cfg *pricing.Config, seat string, cutoff, today time.Time,
 	months, weeks, days map[string]*agg.Bucket, kept []*scan.Session) Payload {
 
@@ -181,10 +177,8 @@ func BuildPayload(cfg *pricing.Config, seat string, cutoff, today time.Time,
 		LongSessionCalls: scan.LongSessionCalls,
 		Totals:           t,
 		Months:           months,
-		Weeks:            weeks,
 		Days:             days,
 		Sessions:         kept,
-		CoverageNote:     CoverageNote,
 	}
 }
 
@@ -448,6 +442,9 @@ func adapterFor(name string) adapter.Adapter {
 // cadence exists to avoid), trusting the store's cursor outright the same
 // way v0.0.1 trusted its in-memory cache entry outright for those files.
 func (c *Cache) ingest(cfg *pricing.Config, files []string, trustSlow map[string]bool, forceFull bool, progress func(done, total int)) error {
+	ingestStart := time.Now()
+	var bytesRead int64
+	var filesParsed int
 	total := len(files)
 	if progress != nil {
 		progress(0, total)
@@ -499,12 +496,19 @@ func (c *Cache) ingest(cfg *pricing.Config, files []string, trustSlow map[string
 			// offset.
 			startOffset = 0
 		}
+		parseStart := time.Now()
 		events, toolCalls, newOffset, err := a.Parse(f, startOffset)
 		if err != nil {
 			if progress != nil {
 				progress(i+1, total)
 			}
 			continue
+		}
+		filesParsed++
+		readBytes := newOffset - startOffset
+		bytesRead += readBytes
+		if readBytes > 10*1024*1024 {
+			log.Printf("ingest: parsed %s, %d bytes in %v", f, readBytes, time.Since(parseStart))
 		}
 		// P6: the owner split, applied at ingest to each event's project
 		// path so it lands in the store rather than being recomputed on
@@ -542,6 +546,7 @@ func (c *Cache) ingest(cfg *pricing.Config, files []string, trustSlow map[string
 			progress(i+1, total)
 		}
 	}
+	log.Printf("stage ingest: %v, %d/%d files parsed, %d bytes read", time.Since(ingestStart), filesParsed, total, bytesRead)
 	return nil
 }
 
@@ -588,6 +593,7 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 		opts.ForceFull = true
 	}
 
+	sourceListStart := time.Now()
 	fast, slow, roots := resolveSources(cfg, opts)
 	fast = dedupeCaseInsensitive(fast)
 	slow = dedupeCaseInsensitive(slow)
@@ -601,15 +607,19 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 		c.RootsByAdapter = roots
 		c.rootsMu.Unlock()
 	}
+	log.Printf("stage source listing: %v, %d source(s)", time.Since(sourceListStart), len(all))
 
+	walkStart := time.Now()
 	var files []string
 	if opts.RefreshSlow {
 		files = scan.FindJSONL(all)
 		c.SlowFiles = filesUnderAny(files, slow)
 		c.SlowScannedAt = time.Now()
+		log.Printf("stage WSL walk (full FindJSONL): %v, %d files", time.Since(walkStart), len(files))
 	} else {
 		files = scan.FindJSONL(fast)
 		files = append(files, c.SlowFiles...)
+		log.Printf("stage source walk (fast tier): %v, %d files", time.Since(walkStart), len(files))
 	}
 	c.Files = files
 	if len(files) == 0 {
@@ -634,23 +644,36 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 	// A transcript that no longer exists on disk (deleted, renamed, moved)
 	// must not keep contributing its session to every future report; v0.0.1's
 	// gob cache pruned the same way on every save.
+	deleteStart := time.Now()
 	if err := c.Store.DeleteEventsForOtherPaths(files); err != nil {
 		return Payload{}, err
 	}
+	log.Printf("stage DeleteEventsForOtherPaths: %v", time.Since(deleteStart))
 
+	allEventsStart := time.Now()
 	events, err := c.Store.AllEvents()
 	if err != nil {
 		return Payload{}, err
 	}
+	log.Printf("stage AllEvents: %v, %d rows", time.Since(allEventsStart), len(events))
+
+	sessionsStart := time.Now()
 	sessions := SessionsFromEvents(events, cfg)
 	sessions, c.DroppedDuplicates = dedupSessions(sessions)
-	log.Printf("dropped %d duplicate session(s)", c.DroppedDuplicates)
+	log.Printf("stage SessionsFromEvents: %v, %d sessions (%d duplicate(s) dropped)",
+		time.Since(sessionsStart), len(sessions), c.DroppedDuplicates)
 
 	today := time.Now()
 	cutoff := monthStart(today, max(0, opts.MonthsN-1))
+	aggStart := time.Now()
 	months, weeks, days, kept := agg.Build(sessions, cutoff)
+	log.Printf("stage agg.Build: %v, %d months, %d weeks, %d days, %d sessions kept",
+		time.Since(aggStart), len(months), len(weeks), len(days), len(kept))
 	if len(kept) == 0 {
 		return Payload{}, ErrNoSessions
 	}
-	return BuildPayload(cfg, opts.Seat, cutoff, today, months, weeks, days, kept), nil
+	buildPayloadStart := time.Now()
+	payload := BuildPayload(cfg, opts.Seat, cutoff, today, months, weeks, days, kept)
+	log.Printf("stage BuildPayload: %v", time.Since(buildPayloadStart))
+	return payload, nil
 }

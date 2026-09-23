@@ -2,6 +2,71 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.2.1: Refresh hang patch, measured
+
+Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.1_hang_patch.md`. Measured before
+fixing, against the real store (54 MB, 51,028 events, 1,719 sessions at the time),
+with a Claude Code and a Codex session running: added stage timing to `Collect`/`ingest`
+(source listing, WSL walk, per-file bytes for files over 10 MB, `DeleteEventsForOtherPaths`,
+`AllEvents` row count, `SessionsFromEvents`, `agg.Build`, `BuildPayload`, `json.Marshal`
+byte size, `report.Render`, `WriteFile`) and around every bound function (`bmLive`,
+`bmVendorStrip`, `bmForecast`, `bmHistory`, `bmSessionInsight`), then built and ran
+`burnmon.exe` against the real store (`burnmon-app.log`, `SESSION_LOG.md`'s own numbers
+below). H1 to H4 confirmed and killed with those numbers, not as the spec guessed: `Collect`
+itself finished in 1.2 to 2.6 seconds and the embedded payload was 850 KB, so H2 (the v0.1
+pipeline's Months/Weeks/Days as the memory driver) does not hold; H1's mechanism (the store's
+one connection, no WAL) is real but the thing actually saturating it was not `Collect`'s own
+ingest and `AllEvents`, it was `internal\report\template.html`'s `renderSessions()`, which
+fired one `bmSessionInsight` call per kept session unconditionally on every page load, all
+of them landing on the WebView2 UI thread in the same burst (go-webview2's `Bind` runs the
+bound Go function synchronously on that thread, confirmed by reading
+`github.com/jchv/go-webview2`'s `msgcb`/`callbinding`): 1,192 to 1,719 sessions, each near
+60 ms (H3's disk read explained the same way, `EventsForSession`'s `WHERE session_id = ?`
+could not use `idx_events_session (vendor, session_id)`, since `session_id` is not that
+index's leading column, so every call fell back to a full table scan), serialised one at a
+time and blocking paint and input for the whole burst, which is what WebView2 reports as
+"Not Responding". H4 confirmed by code (`bmHistory` still called `st.AllEvents()` directly)
+but was not the reproduced driver this session (History tab was never opened). Fixes, in
+the order the numbers actually called for: added migration 6, a `session_id`-only index
+(`internal\store\migrations\migrations.go`, `schema_version` head now 6,
+`TestMigrateRealV01Store`/`TestFreshStoreAtHeadVersion` updated and green against the real
+store); split the store into a one-connection writer and an eight-connection WAL reader
+pool with a five-second busy timeout (`internal\store\store.go`, every read-only query
+routed to the pool, every write-adjacent one kept on the writer); changed `bmSessionInsight`
+and `bmHistory` to return immediately and resolve through `w.Dispatch` from a goroutine
+instead of blocking the UI thread for the real work (`cmd\burnmon\main.go`'s new
+`asyncResolveJS`, `template.html`'s `__bmSessionInsightResolve`/`__bmHistoryResolve`); capped
+`renderSessions()`'s fan-out to 8 concurrent `bmSessionInsight` calls instead of unbounded
+(`runWithConcurrency`); removed `Weeks` and the unused `CoverageNote` field from
+`dataset.Payload` (checked every `D.*` reference in `template.html`; `Totals` stays, the CLI
+prints it); kept `bmHistory` on `AllEvents` rather than rewriting it to a SQL aggregate,
+since the frontend's vendor/owner dropdowns are built from the same unfiltered pass and a
+narrower query would have silently hidden a filter option outside the selected range, a
+real regression the measurements gave no reason to risk; and added a 400 MB
+`debug.SetMemoryLimit` (`cmd\burnmon\main.go`'s `init`), since an isolated repro proved
+`Collect`'s own data is under 50 MB live even at this store's scale (a forced GC after each
+stage: `AllEvents` 46 MB, `SessionsFromEvents` 48 MB, `agg.Build` 48 MB, `BuildPayload`
+48 MB) while the running app's `HeapAlloc` reached over 1 GB before Go's default GC pacing
+ever caught up. Results: `bmLive` stayed under 50 ms in every post-fix run (zero slow-call
+log lines), so Not Responding did not reproduce again; CPU during the Sessions-tab burst
+dropped from a sustained roughly 98 percent to roughly 50 to 55 percent, settling toward
+idle afterward; peak WorkingSet dropped from the reported 1,438 MB (and 1.6 to 1.7 GB in
+this session's own pre-fix runs) to about 900 MB, short of the 400 MB Done-when target;
+`Collect` on a warm store measured 1.2 to 2.6 seconds in most runs but touched 5.9 seconds
+once, when the Sessions-tab fan-out was itself saturating the new read pool, so the under-5-
+second target is met in the common case, not guaranteed under this specific concurrent
+load. Both misses are named in `STATUS.md`'s Known gaps and `02_roadmap\roadmap.md` item 4
+rather than claimed as fixed. `go test ./... -count=1` green across every package,
+including `TestMigrateRealV01Store` run against the real store; `node --check` on the
+script extracted from `template.html` passed; `.\build.ps1` green. Version constants moved
+to `0.2.1` in `cmd\burnmon\main.go` and `cmd\burnmon-cli\main.go`; `STATUS.md` and
+`02_roadmap\roadmap.md` list v0.2.1 before v0.3, and item 5 renumbered from the v0.3 grill
+already in the working tree. No open choice needed to stop for: the deviation from H1 to H4's
+literal framing was a measurement finding, not a judgment call, and the bmHistory scope
+decision above is recorded with its reasoning rather than asked. `C:\dev\Work` untouched.
+Hub brief written as `04_assets\hub_agent_update_2026-09-23_v0.2.1_hang_patch.md`. Committed
+locally; tag and push commands printed for Wilco, not run.
+
 ## 2026-09-23, v0.2 leftovers: About copy, patch spec, hub briefs
 
 Three mechanical leftovers from v0.2, no version bump. (1) `internal\report\template.html`

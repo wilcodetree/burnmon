@@ -16,10 +16,21 @@ Priority order lives here and only here.
    checklist: `2026-09-22_v0.2_session_prompts.md`. Grilled 2026-09-22. **DONE 2026-09-23,
    tagged `v0.2.0`, all sixteen spec items shipped, release-candidate Done-when and VERIFY
    pass clean (46A), no fails carried into the tag.**
-4. v0.3 (2026-12-12), next: per-vendor cost and credits, dev and business switch (moved from
-   v0.2, ships complete), full client map, active time, export and merge, macOS and Linux
-   builds.
-5. Decision 2026-12-19.
+4. v0.2.1 patch: Refresh went "Not Responding" (98.5% CPU, 1,438 MB, 175 MB/s disk).
+   Measured root cause: the Sessions tab fired one bmSessionInsight call per kept session
+   unconditionally on every page load (real store: ~1,700 sessions), all serialised through
+   the store's one connection and blocking the WebView2 UI thread call by call; Collect
+   itself was fast (1.2-2.6s) and not the driver. Spec:
+   `2026-09-23_v0.2.1_hang_patch.md`. **DONE 2026-09-23, tagged `v0.2.1`.** Not Responding
+   and the CPU pin are fixed (bmLive stayed under 50ms throughout every measured run);
+   peak WorkingSet dropped from ~1.4-1.7 GB to ~900 MB, short of the 400 MB Done-when
+   target and left open in `STATUS.md`'s Known gaps for v0.3 or a follow-up patch.
+5. v0.3 (2026-10-09, moved from 2026-12-12), next, one release, two sessions a week: price
+   books, per-vendor cost, dev and business switch, client map (owner then client), active
+   time, export and merge, Copilot VS Code (OTel file), macOS and Linux in browser mode.
+   Slip order: platforms, then Copilot VS Code. Spec: `2026-09-23_v0.3_spec.md`. Session
+   prompts with the checklist: `2026-09-23_v0.3_session_prompts.md`. Grilled 2026-09-23.
+6. Decision 2026-12-19.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.
 Architecture (decided): `..\04_assets\2026-09-22_token_monitor_architecture.md`.

@@ -1,9 +1,11 @@
 # BurnMon, status
 
-What is true at this commit (2026-09-23, 46B): **v0.2.0 shipped**, all sixteen spec items
-built, the release-candidate Done-when and VERIFY pass (46A) clean with no fails. Spec:
-`02_roadmap\2026-09-22_v0.2_spec.md`. Next: v0.3 (2026-12-12), per-vendor cost and
-credits, dev/business switch, full client map, macOS and Linux builds.
+What is true at this commit (2026-09-23): **v0.2.1 tagged**, the Refresh hang patch (Not
+Responding, 98.5% CPU pinned) fixed and measured; v0.2.0 shipped before it, all sixteen
+spec items built, release-candidate Done-when and VERIFY pass (46A) clean with no fails.
+Specs: `02_roadmap\2026-09-22_v0.2_spec.md`, `02_roadmap\2026-09-23_v0.2.1_hang_patch.md`.
+Next: v0.3 (2026-10-09), per-vendor cost and credits, dev/business switch, full client map,
+macOS and Linux builds.
 
 ## What it is
 
@@ -98,8 +100,14 @@ empty.
   seat/allowance model, not the other vendors.
 - Scoring has produced zero scored weeks as of this commit; the forecast chart is
   expected to show the gate text until partway through week 44.
+- v0.2.1's hang patch got peak WorkingSet during Refresh from ~1.4-1.7 GB down to
+  ~900 MB against the real store (~1,700 sessions), short of the 400 MB Done-when target;
+  isolating Collect's own data in Go proved it under 50 MB even at that scale, so the
+  residual is Go/OS-level memory retention around the Sessions tab's still-considerable
+  concurrent read volume, not a further Collect-side leak. Left open for v0.3 or a
+  follow-up patch. See `02_roadmap\2026-09-23_v0.2.1_hang_patch.md` and `SESSION_LOG.md`.
 
 ## Next
 
-v0.3 (2026-12-12): per-vendor cost and credits, dev and business switch, full client map
-(active time, export, merge), macOS and Linux builds. Plan: `02_roadmap\roadmap.md` item 4.
+v0.3 (2026-10-09): per-vendor cost and credits, dev and business switch, full client map
+(active time, export, merge), macOS and Linux builds. Plan: `02_roadmap\roadmap.md` item 5.

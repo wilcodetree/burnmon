@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,7 +34,6 @@ import (
 	"burnmon/internal/dataset"
 	"burnmon/internal/forecast"
 	"burnmon/internal/history"
-	"burnmon/internal/insight"
 	"burnmon/internal/live"
 	"burnmon/internal/pricing"
 	"burnmon/internal/report"
@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	version        = "0.2.0"
+	version        = "0.2.1"
 	windowTitle    = "BurnMon"
 	mutexName      = `Local\burnmon-app`
 	minInterval    = 5 * time.Minute
@@ -55,6 +55,21 @@ func init() {
 	// go-webview2 pumps a Win32 message loop tied to the thread that created
 	// the window; keep that on one OS thread for the life of the process.
 	runtime.LockOSThread()
+
+	// v0.2.1 hang patch (SESSION_LOG.md): Refresh's own live (reachable)
+	// footprint against Wilco's real store measured at well under 100 MB
+	// (isolated AllEvents + a forced GC), but Go's default GC pacer (GOGC
+	// 100, no soft limit) lets HeapAlloc run up to whatever the last
+	// collection's live size implies before the next one, and a rebuild's
+	// burst of allocation (Collect's own event/session slices, plus however
+	// many bmSessionInsight/bmHistory goroutines the page fires at once)
+	// measured that at 1+ GB before a GC ever ran. A 400 MB soft memory
+	// limit (matching the Done-when target) makes the runtime collect
+	// proactively as usage approaches it rather than waiting for the heap
+	// to double; a burst that briefly needs more than 400 MB of genuinely
+	// live data still gets it (this is a soft target, not a hard cap), the
+	// difference is only how eagerly garbage gets reclaimed under load.
+	debug.SetMemoryLimit(400 << 20)
 }
 
 type multiFlag []string
@@ -317,6 +332,7 @@ func main() {
 
 	var bmLivePolls atomic.Uint64
 	if err := w.Bind("bmLive", func() (live.Snapshot, error) {
+		callStart := time.Now()
 		a.mu.Lock()
 		cfg := a.cfg
 		a.mu.Unlock()
@@ -327,18 +343,26 @@ func main() {
 		// read to live.ChartWindow, and ApplySessionTotals below fills in
 		// each running session's true lifetime totals from a small SQL
 		// aggregate instead of the full history.
+		storeStart := time.Now()
 		events, err := st.EventsSince(now.Add(-live.ChartWindow))
+		storeWait := time.Since(storeStart)
 		if err != nil {
+			log.Printf("bound bmLive: %v total, %v waiting for the store (EventsSince error: %v)", time.Since(callStart), storeWait, err)
 			return live.Snapshot{}, err
 		}
 		snap := live.BuildSnapshot(events, &cfg, now)
+		totalsStart := time.Now()
 		if err := live.ApplySessionTotals(snap.Sessions, st, &cfg); err != nil {
 			log.Println("bmLive: session totals:", err)
 		}
+		storeWait += time.Since(totalsStart)
 		if n := bmLivePolls.Add(1); n%30 == 0 {
 			var mem runtime.MemStats
 			runtime.ReadMemStats(&mem)
 			log.Printf("debug: bmLive poll %d, HeapAlloc=%d bytes", n, mem.HeapAlloc)
+		}
+		if elapsed := time.Since(callStart); elapsed > 50*time.Millisecond {
+			log.Printf("bound bmLive: %v total, %v waiting for the store", elapsed, storeWait)
 		}
 		return snap, nil
 	}); err != nil {
@@ -362,12 +386,40 @@ func main() {
 	// bmSessionInsight (I3, Sessions tab): the findings column and its
 	// expandable row call this on demand, one sessionID at a time, never
 	// polled; the frontend caches the result in page memory so re-expanding
-	// a row costs nothing further.
-	if err := w.Bind("bmSessionInsight", func(sessionID string) ([]insight.Finding, error) {
-		a.mu.Lock()
-		cfg := a.cfg
-		a.mu.Unlock()
-		return live.BuildSessionInsight(st, &cfg, sessionID)
+	// a row costs nothing further. renderSessions() (template.html) fires
+	// one of these per kept session on every page load, unconditionally
+	// (hundreds at once against a real history, see SESSION_LOG.md v0.2.1
+	// hang patch): go-webview2's Bind runs the bound Go function
+	// synchronously on the same Win32 message-pump thread the window
+	// paints and processes input on, so hundreds of them in a row, even at
+	// a few tens of milliseconds each, add up to the UI thread being fully
+	// consumed for the whole burst. This binding therefore returns
+	// immediately (case (b): "or move it to a goroutine that resolves
+	// through w.Dispatch") and does the real work in a goroutine, pushing
+	// the result back into the page by calling a small JS-side resolver
+	// once it is ready; asyncResolveJS below is the shared plumbing both
+	// this and bmHistory use for that.
+	if err := w.Bind("bmSessionInsight", func(sessionID string) {
+		go func() {
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			start := time.Now()
+			findings, err := live.BuildSessionInsight(st, &cfg, sessionID)
+			if err != nil {
+				log.Println("bmSessionInsight:", sessionID, ":", err)
+				findings = nil
+			}
+			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+				log.Printf("bound bmSessionInsight: %v waiting for the store", elapsed)
+			}
+			js, err := asyncResolveJS("__bmSessionInsightResolve", sessionID, findings)
+			if err != nil {
+				log.Println("bmSessionInsight: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
 	}); err != nil {
 		log.Println("could not bind bmSessionInsight:", err)
 	}
@@ -375,15 +427,34 @@ func main() {
 	// bmHistory (P2): queried on demand from the History tab's filter
 	// controls, not polled, so it re-reads the whole store on every call
 	// rather than the windowed query bmLive uses for its 2-second poll.
-	if err := w.Bind("bmHistory", func(f history.Filter) (history.Payload, error) {
-		a.mu.Lock()
-		cfg := a.cfg
-		a.mu.Unlock()
-		events, err := st.AllEvents()
-		if err != nil {
-			return history.Payload{}, err
-		}
-		return history.Build(events, &cfg, f), nil
+	// Same UI-thread concern as bmSessionInsight above (a large store's
+	// AllEvents plus history.Build's own aggregation can run past 50ms), so
+	// it returns immediately and resolves asynchronously too; unlike
+	// bmSessionInsight this fires once per filter change, not once per
+	// session, so the win here is "never freezes on a big store" rather
+	// than "no longer fires hundreds at once".
+	if err := w.Bind("bmHistory", func(reqID string, f history.Filter) {
+		go func() {
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			start := time.Now()
+			events, err := st.AllEvents()
+			if err != nil {
+				log.Println("bmHistory: AllEvents:", err)
+				return
+			}
+			payload := history.Build(events, &cfg, f)
+			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+				log.Printf("bound bmHistory: %v waiting for the store, %d rows", elapsed, len(events))
+			}
+			js, err := asyncResolveJS("__bmHistoryResolve", reqID, payload)
+			if err != nil {
+				log.Println("bmHistory: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
 	}); err != nil {
 		log.Println("could not bind bmHistory:", err)
 	}
@@ -393,7 +464,12 @@ func main() {
 	// aggregate against the whole events table rather than bmLive's
 	// windowed read.
 	if err := w.Bind("bmVendorStrip", func() (vendorstrip.Payload, error) {
-		return vendorstrip.Build(st, time.Now())
+		callStart := time.Now()
+		payload, err := vendorstrip.Build(st, time.Now())
+		if elapsed := time.Since(callStart); elapsed > 50*time.Millisecond {
+			log.Printf("bound bmVendorStrip: %v total, %v waiting for the store", elapsed, elapsed)
+		}
+		return payload, err
 	}); err != nil {
 		log.Println("could not bind bmVendorStrip:", err)
 	}
@@ -405,7 +481,12 @@ func main() {
 	// to, as long as the app is open at least once a minute somewhere in
 	// that week.
 	if err := w.Bind("bmForecast", func() (forecast.Payload, error) {
-		return forecast.Build(st, time.Now())
+		callStart := time.Now()
+		payload, err := forecast.Build(st, time.Now())
+		if elapsed := time.Since(callStart); elapsed > 50*time.Millisecond {
+			log.Printf("bound bmForecast: %v total, %v waiting for the store", elapsed, elapsed)
+		}
+		return payload, err
 	}); err != nil {
 		log.Println("could not bind bmForecast:", err)
 	}
@@ -508,6 +589,28 @@ func progressReporter(w webview2.WebView) func(done, total int) {
 			w.Eval(fmt.Sprintf("window.ccProgress && window.ccProgress(%d,%d,%s)", d, t, eta))
 		})
 	}
+}
+
+// asyncResolveJS builds the JS statement that delivers a result computed off
+// the UI thread back into the page: bmSessionInsight and bmHistory both
+// return immediately from their bound Go function and finish their real
+// work in a goroutine (see their own comments, v0.2.1 hang patch), then call
+// this to hand the result to a small page-side resolver by key (a sessionID
+// or a request id) instead of through go-webview2's own auto-generated
+// per-call Promise, which only resolves with whatever the bound function
+// returns synchronously. encoding/json's default HTML escaping makes a
+// literal "</script>" impossible in either json.Marshal call below, the same
+// property report.Render's own doc comment relies on.
+func asyncResolveJS(resolverName, key string, data any) (string, error) {
+	keyJSON, err := json.Marshal(key)
+	if err != nil {
+		return "", err
+	}
+	dataJSON, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("window.%s && window.%s(%s, %s)", resolverName, resolverName, keyJSON, dataJSON), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -713,23 +816,34 @@ func (a *app) rebuild(refreshSlow bool, progress func(done, total int)) (time.Ti
 	}
 	a.mu.Unlock()
 
+	collectStart := time.Now()
 	payload, err := a.cache.Collect(&cfg, opts, progress)
+	log.Printf("stage Collect (total): %v", time.Since(collectStart))
 	if err != nil {
 		return time.Time{}, err
+	}
+	{
+		var mem runtime.MemStats
+		runtime.ReadMemStats(&mem)
+		log.Printf("debug: after Collect, HeapAlloc=%d bytes, Sys=%d bytes", mem.HeapAlloc, mem.Sys)
 	}
 	// Reflects whatever the most recent WSL probe (if any ran this pass, or
 	// the last pass that did) actually found; empty when WSL is off, not
 	// installed, or found nothing.
 	wslDistros := scan.WSLDistroNames()
 	logSourceScan(a.cache.Sources, a.cache.Files)
+	marshalStart := time.Now()
 	blob, err := json.Marshal(payload)
 	if err != nil {
 		return time.Time{}, err
 	}
+	log.Printf("stage json.Marshal: %v, %d bytes", time.Since(marshalStart), len(blob))
+	renderStart := time.Now()
 	html, err := report.Render(blob)
 	if err != nil {
 		return time.Time{}, err
 	}
+	log.Printf("stage report.Render: %v", time.Since(renderStart))
 
 	a.mu.Lock()
 	a.wslDistros = wslDistros
@@ -737,9 +851,11 @@ func (a *app) rebuild(refreshSlow bool, progress func(done, total int)) (time.Ti
 	html = a.applyAppChrome(html)
 	a.mu.Unlock()
 
+	writeStart := time.Now()
 	if err := os.WriteFile(a.htmlPath, []byte(html), 0o600); err != nil {
 		return time.Time{}, err
 	}
+	log.Printf("stage WriteFile: %v, %d bytes", time.Since(writeStart), len(html))
 	return built, nil
 }
 
