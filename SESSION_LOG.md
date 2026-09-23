@@ -2,6 +2,32 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.2 leftovers: About copy, patch spec, hub briefs
+
+Three mechanical leftovers from v0.2, no version bump. (1) `internal\report\template.html`
+lines 349 and 420 said "the Overview tab" for the personal-cut-of-the-bill figure; that tab
+was removed in 40B. Checked whether History shows the same figure: it does not. History's
+`cost_usd` (`internal\history\history.go:95-113`, `eventCostUSD`) is plain API list price,
+gated on vendor coverage; the subscription-basis "personal cut of the company bill" figure
+the two sentences described has no page to point at, since per-vendor cost and the
+subscription/API basis split are out of scope until v0.3 (STATUS's own "Known gaps"). Per
+the session prompt's own instruction for that case, deleted both sentences rather than
+inventing a new home for the claim; left the dead `#overview` markup and the rest of the
+About text untouched. `STATUS.md`'s "Known gaps" no longer names the Overview-tab leftover
+(kept the separate, still-true gap that About only covers Claude's seat model). (2) The
+session prompt's claim that `02_roadmap\2026-09-22_v0.1.2_patch_spec.md` was modified in the
+working tree since before 39B did not hold: `git status --porcelain -uall` and `git diff`
+against that file both showed nothing pending, and `git log` shows it last touched in commit
+`876c37e` (the same commit A2/A3 shipped in), already committed. No diff to show Wilco, no
+commit made for this item. (3) `git status --porcelain -uall` showed exactly one untracked
+file in the whole tree, this session's own `02_roadmap\2026-09-23_v0.2_leftovers_prompt.md`;
+every file already under `04_assets\`, including all `hub_agent_update_*.md` briefs, was
+already tracked (`git ls-files 04_assets | wc -l` matched the directory's file count, 26).
+`node --check` on the script extracted from `template.html` passed, `go test ./... -count=1`
+green across every package, `.\build.ps1` green. `C:\dev\Work` untouched. Hub brief written
+as `04_assets\hub_agent_update_2026-09-23_v0.2_leftovers.md`. Not pushed; push command
+printed for Wilco.
+
 ## 2026-09-23, 46B: tag v0.2.0
 
 Read the 46A entry above (rc.1 results, tag `v0.2.0-rc.1`, commit `541c6f2`) and spec

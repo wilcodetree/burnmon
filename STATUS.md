@@ -95,8 +95,7 @@ empty.
   export, merge), macOS and Linux builds: all out of scope for v0.2, named as such in the
   spec's section 3.
 - `internal\report\template.html`'s About section still describes only Claude's own
-  seat/allowance model and still says "Overview tab" in two places, a pre-P1 naming
-  leftover; not touched this pass (README/STATUS/docs scope only, no template changes).
+  seat/allowance model, not the other vendors.
 - Scoring has produced zero scored weeks as of this commit; the forecast chart is
   expected to show the gate text until partway through week 44.
 
