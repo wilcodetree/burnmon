@@ -2,6 +2,83 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, 46A: release candidate, Done-when and VERIFY pass
+
+Ran with two Claude Code sessions, one Cowork session and two Codex sessions genuinely
+running concurrently (`burnmon-cli live --json`: agents `claude-code` x2, `cowork` x1,
+`codex` x2). Section 5, all six items pass, evidence this session's own, not carried from
+45B: (1) `template.html`'s hash router defaults any unknown/empty hash to `now`
+(`TAB_IDS.indexOf` fallback, line 2072) and stays unreachable for `overview`, which is not
+in `TAB_IDS`; `vendorstrip.Build` run directly against the real store returned honest
+per-agent totals for all five agents plus a total row (Claude Code 21.8M/601M/3.75B
+today/week/month tokens, Codex 4.1M/50.4M/116M, Copilot CLI, Cowork, Hermes all present);
+`burnmon-cli live --json` showed a re-prefill finding, cause "first turn after resume",
+confidence 0.4, on this session's own turn 1; the chart-drawing code (`drawNowChart`) is
+byte-identical to 44B's own 5-minute live-watched version (only `template.html` line 983
+changed since, an unrelated footer fix in 45B), so that verification still holds and was
+not repeated. (2) `history.Build` run directly against the real store with
+`{period: week, vendor: codex}` returned one call's totals (159,870,436 tokens, 217
+sessions, 1,842 turns), matching the "two clicks" (period dropdown, vendor dropdown)
+design; no project-level "for ZND" filter exists, same reading as 45B. (3) built a
+synthetic genuine v0.1 store from scratch (migration1's exact `events`/`cursors`/`meta`
+DDL, no `schema_version` table, no `owner` column, 250 rows across 10 sessions) rather
+than reusing `TestMigrateRealV01Store`'s real-store copy, since the real store on this
+laptop is now itself already at schema 5 and copying it no longer exercises a genuine
+pre-migration file (the same real-time drift 45B flagged for forecast scoring); ran it
+through `store.Open`, got 250 of 250 events back, `schema_version` read 5: zero event
+loss confirmed against a real pre-migration schema, not a no-op re-open. (4) Hermes (4
+events) and Copilot CLI (24 events) both present in the real store today, both resolve
+through the same `AGENT_LABELS` map every other agent uses ("Hermes", "Copilot CLI"),
+never a raw agent key. (5) `forecast.Build` run directly against the real store returned
+`locked: true` with the gate text verbatim ("forecast unlocks after the first scored week
+(week 46)") and `scored_weeks: 0`; the real ISO week is still 2026-W39, the same real-time
+constraint 45B found, unchanged. (6) swept `template.html` source directly (not just the
+generated report): zero genuine Dutch words (the only `\bən\b`-shaped hits were `lang="en"`
+and `en-US` locale strings), zero em dashes outside the seven already-flagged instances in
+the `#overview` section (`id="card_this"`, `card_last`, `o_top`, `o_seat`), which stays
+unreachable through both the tab bar and hash routing per item (1)'s check, and every
+remaining `claudecost` string in source is the documented exception (successor note, the
+pre-rename config fallback name). One nuance this session caught that 45B's report-only
+grep did not: the most recent generated report (`reports\burnmon-report-20260923-094045.html`)
+embeds real historical session titles verbatim as data, and several of Wilco's own real
+Claude Code session titles from the actual claudecost project quote "claudecost-app" and
+one quotes a colleague's Dutch permission message ("mag je deze gebruiken met naam en
+toenaam"); this is ingested user data, not BurnMon's own copy, and the shared reply
+contract's own rule (preserve verbatim source evidence, don't rewrite quotations to pass a
+prose check) applies to it the same way it would to any other quoted material, so it was
+left untouched. Section 6, VERIFY carried, what the code assumes today and where labeled:
+Claude Code cache TTL, 60 minutes (subscription-seat default, `pricing.go`
+`DefaultClaudeCodeCacheTTLMinutes`, checked against code.claude.com/docs/en/costs
+2026-09-22), applied in `insight.reprefillCause`'s gap-since-previous-turn branch, shown
+in the spike drawer's cause text ("gap N min, exceeds 60 min cache TTL") when it fires;
+Claude Code auto-compact threshold, documented (`ClaudeCodeAutoCompactTokens`, ~967,000
+for a 1M-token beta window) but not applied by any rule since burnmon's own `ContextWindows`
+table prices the 200K standard tier, not the 1M beta, and `compaction` detects a
+compaction by its effect (a >30% context drop) rather than comparing to this number, so
+nothing in the UI currently labels this figure; Hermes context window, confirmed absent
+from the data entirely (not merely unverified), so the Now card's gauge falls back to
+"context window unknown" for every Hermes session in practice (`hermes.go`'s own comment,
+`contextWindowKnown`); Copilot CLI `data.db` layout, confirmed false in 43B on a live
+install (real file is `session-store.db`, usage rows arrive per API call not at session
+close) and the adapter was rebuilt around that finding, so nothing in the UI still assumes
+"totals at session end" for Copilot CLI, it shows the same growing-total treatment as
+Hermes; Copilot VS Code OTel file export, corrected to yes (2026-09-23 note above the 43B
+entry in this log) but not wired into any adapter, so nothing in the UI labels it either
+way yet, a v0.3 scope call still open for Wilco; Codex subagent structure in the trail,
+confirmed there is none: Codex has no Claude-style `ParentID` nesting, only a flat
+`thread_source`/`source.subagent` flag on internal auto-review sub-runs
+("codex-auto-review"/"guardian_review") that `readSessionMeta` filters out as noise before
+a session ever reaches the Now page, so Codex sessions never show a "subagents" nesting
+the way Claude ones do, by design, not by gap. No failure found this pass, so nothing was
+fixed. Noted, not acted on: `04_assets\hub_agent_update_2026-09-23_45b_done_when_pass.md`
+is still untracked from 45B, left as found since ticking someone else's session's commit
+is not this session's call. `go test ./... -count=1` and `.\build.ps1` both green.
+`C:\dev\Work` untouched. No open call was hit that needed stopping to ask. Hub brief
+written as `04_assets\hub_agent_update_2026-09-23_46a_rc_done_when.md`, real date, not the
+session prompt's literal `2026-11-1X` placeholder, matching every other brief already in
+this folder and the house date-prefix rule; the roadmap's week labels (39-46) are
+build-order names, not calendar weeks, per 45B's own finding, unchanged since.
+
 ## 2026-09-23, 45B: buffer, Done-when run, scoring week check
 
 Checklist showed 39B through 45A all ticked, so this buffer session ran the section 5
