@@ -16,7 +16,7 @@
 // attributes, keyed for dedup by gen_ai.response.id. That id is not always
 // a wire "request" 1:1: a real multi-step agent turn recorded four lines
 // sharing one response id, each with different token counts (60281/434,
-// 91502/369, 95281/256, 103664/1197 tokens, in file order) — read as the
+// 91502/369, 95281/256, 103664/1197 tokens, in file order): read as the
 // same in-flight response being re-emitted as it grows, so "last write
 // wins per request" (the spec's own phrase, decision #8 of the v0.3 grill)
 // means keyed on response.id, keep the line last seen in file order, not

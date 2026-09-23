@@ -58,7 +58,7 @@ B1: the whole `cmd\burnmon` package was Windows-only (`//go:build windows` on th
 `main.go`, `go-webview2` imported unconditionally), so darwin/linux did not merely lack a
 window, they did not compile at all. Split into `app.go` (no build tag: the `app` struct,
 `rebuild`, live/poll wiring including the new `startCopilotVSCPoll`, Settings, and the HTML
-chrome `rebuild` injects — none of it touches a Windows API), `main.go` (unchanged
+chrome `rebuild` injects, none of it touches a Windows API), `main.go` (unchanged
 `//go:build windows`, now only the WebView2 window itself, its `w.Bind` calls, and the
 single-instance/WebView2-missing-fallback Win32 bits), and a new `main_other.go`
 (`//go:build !windows`): per decision #3 of the grill ("macOS and Linux: Pure-Go builds,
