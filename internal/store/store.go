@@ -181,8 +181,8 @@ func (s *Store) UpsertEvents(events []schema.Event) error {
 INSERT INTO events (
 	vendor, agent, surface, session_id, request_id, parent_id, at, model,
 	project, title, input, cache_write, cache_read, output, reasoning,
-	vendor_cost, window_used, window_reset, tools, owner
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	vendor_cost, window_used, window_reset, tools, owner, client
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT (vendor, session_id, request_id) DO UPDATE SET
 	agent = excluded.agent, surface = excluded.surface,
 	session_id = excluded.session_id, parent_id = excluded.parent_id,
@@ -192,7 +192,7 @@ ON CONFLICT (vendor, session_id, request_id) DO UPDATE SET
 	output = excluded.output, reasoning = excluded.reasoning,
 	vendor_cost = excluded.vendor_cost, window_used = excluded.window_used,
 	window_reset = excluded.window_reset, tools = excluded.tools,
-	owner = excluded.owner
+	owner = excluded.owner, client = excluded.client
 WHERE excluded.output > events.output
 `)
 	if err != nil {
@@ -214,7 +214,7 @@ WHERE excluded.output > events.output
 			e.At.UTC().Format(time.RFC3339Nano), e.Model, e.Project, e.Title,
 			e.Input, nullInt(e.CacheWrite), nullInt(e.CacheRead), e.Output,
 			nullInt(e.Reasoning), nullFloat(e.VendorCost), nullFloat(e.WindowUsed),
-			windowReset, string(toolsJSON), e.Owner,
+			windowReset, string(toolsJSON), e.Owner, e.Client,
 		)
 		if err != nil {
 			return fmt.Errorf("store: upsert %s/%s: %w", e.Vendor, e.RequestID, err)
@@ -544,7 +544,7 @@ func nullFloat(p *float64) any {
 
 const eventColumns = `vendor, agent, surface, session_id, request_id, parent_id, at, model,
 	project, title, input, cache_write, cache_read, output, reasoning,
-	vendor_cost, window_used, window_reset, tools, owner`
+	vendor_cost, window_used, window_reset, tools, owner, client`
 
 // scanEvents reads every row of rows (already SELECTed with eventColumns'
 // exact column list and order) into Events. Shared by AllEvents and
@@ -563,7 +563,7 @@ func scanEvents(rows *sql.Rows) ([]schema.Event, error) {
 		if err := rows.Scan(&e.Vendor, &e.Agent, &e.Surface, &e.SessionID, &e.RequestID,
 			&e.ParentID, &atStr, &e.Model, &e.Project, &e.Title, &e.Input,
 			&cacheWrite, &cacheRead, &e.Output, &reasoning, &vendorCost, &windowUsed,
-			&windowReset, &toolsJSON, &e.Owner); err != nil {
+			&windowReset, &toolsJSON, &e.Owner, &e.Client); err != nil {
 			return nil, err
 		}
 		var err error
@@ -832,26 +832,29 @@ func sessionIDFromPath(path string) string {
 }
 
 // ReownEvents recomputes every event's owner via ownerFor(project) (P6's
-// light client map, re-run after an owner rule change) and updates every
-// row whose owner actually changes, in one transaction. Returns the number
-// of rows updated. Used by `burnmon-cli reown`.
-func (s *Store) ReownEvents(ownerFor func(project string) string) (int, error) {
-	rows, err := s.db.Query(`SELECT vendor, session_id, request_id, project, owner FROM events`)
+// light client map) and its client via clientFor(project) (K1, v0.3), re-run
+// after an owner or client rule change, and updates every row whose owner or
+// client actually changes, in one transaction. Returns the number of rows
+// updated. Used by `burnmon-cli reown`.
+func (s *Store) ReownEvents(ownerFor, clientFor func(project string) string) (int, error) {
+	rows, err := s.db.Query(`SELECT vendor, session_id, request_id, project, owner, client FROM events`)
 	if err != nil {
 		return 0, fmt.Errorf("store: list events for reown: %w", err)
 	}
 	type update struct {
-		vendor, sessionID, requestID, owner string
+		vendor, sessionID, requestID, owner, client string
 	}
 	var updates []update
 	for rows.Next() {
-		var vendor, sessionID, requestID, project, owner string
-		if err := rows.Scan(&vendor, &sessionID, &requestID, &project, &owner); err != nil {
+		var vendor, sessionID, requestID, project, owner, client string
+		if err := rows.Scan(&vendor, &sessionID, &requestID, &project, &owner, &client); err != nil {
 			rows.Close()
 			return 0, fmt.Errorf("store: scan event for reown: %w", err)
 		}
-		if want := ownerFor(project); want != owner {
-			updates = append(updates, update{vendor, sessionID, requestID, want})
+		wantOwner := ownerFor(project)
+		wantClient := clientFor(project)
+		if wantOwner != owner || wantClient != client {
+			updates = append(updates, update{vendor, sessionID, requestID, wantOwner, wantClient})
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -868,13 +871,13 @@ func (s *Store) ReownEvents(ownerFor func(project string) string) (int, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
-	stmt, err := tx.Prepare(`UPDATE events SET owner = ? WHERE vendor = ? AND session_id = ? AND request_id = ?`)
+	stmt, err := tx.Prepare(`UPDATE events SET owner = ?, client = ? WHERE vendor = ? AND session_id = ? AND request_id = ?`)
 	if err != nil {
 		return 0, err
 	}
 	defer stmt.Close()
 	for _, u := range updates {
-		if _, err := stmt.Exec(u.owner, u.vendor, u.sessionID, u.requestID); err != nil {
+		if _, err := stmt.Exec(u.owner, u.client, u.vendor, u.sessionID, u.requestID); err != nil {
 			return 0, fmt.Errorf("store: reown %s/%s: %w", u.vendor, u.requestID, err)
 		}
 	}

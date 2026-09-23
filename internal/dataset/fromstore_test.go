@@ -111,6 +111,103 @@ func TestSessionsFromEventsCountsUnpricedOpenAIModel(t *testing.T) {
 	}
 }
 
+// TestBuildSessionActiveMinutesSumsGapsUnderCutoff guards K2's active-time
+// formula: gaps at or under active_idle_minutes count in full, a gap
+// strictly above it counts 0.
+func TestBuildSessionActiveMinutesSumsGapsUnderCutoff(t *testing.T) {
+	cfg := pricing.Defaults()
+	base := time.Date(2026, 9, 22, 10, 0, 0, 0, time.UTC)
+	events := []schema.Event{
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r1", Model: cfg.Families()[0],
+			At: base, Input: 1, Output: 1},
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r2", Model: cfg.Families()[0],
+			At: base.Add(5 * time.Minute), Input: 1, Output: 1}, // gap 5m, counts
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r3", Model: cfg.Families()[0],
+			At: base.Add(5*time.Minute + 10*time.Minute), Input: 1, Output: 1}, // gap 10m, exactly at cutoff, counts
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r4", Model: cfg.Families()[0],
+			At: base.Add(5*time.Minute + 10*time.Minute + 11*time.Minute), Input: 1, Output: 1}, // gap 11m, above cutoff, counts 0
+	}
+	sessions := SessionsFromEvents(events, &cfg)
+	if len(sessions) != 1 {
+		t.Fatalf("got %d sessions, want 1", len(sessions))
+	}
+	s := sessions[0]
+	want := 15.0 // 5 + 10 + 0
+	if s.ActiveMinutes != want {
+		t.Fatalf("ActiveMinutes = %v, want %v (5m + 10m-at-cutoff counted, 11m-over-cutoff zeroed)", s.ActiveMinutes, want)
+	}
+}
+
+// TestBuildSessionActiveMinutesZeroForSingleEvent guards the degenerate
+// case: no gaps means no active time, not NaN or negative.
+func TestBuildSessionActiveMinutesZeroForSingleEvent(t *testing.T) {
+	cfg := pricing.Defaults()
+	events := []schema.Event{
+		{Vendor: "anthropic", SessionID: "solo", RequestID: "r1", Model: cfg.Families()[0],
+			At: time.Now().UTC(), Input: 1, Output: 1},
+	}
+	sessions := SessionsFromEvents(events, &cfg)
+	if len(sessions) != 1 {
+		t.Fatalf("got %d sessions, want 1", len(sessions))
+	}
+	if sessions[0].ActiveMinutes != 0 {
+		t.Fatalf("ActiveMinutes = %v, want 0 for a single-event session", sessions[0].ActiveMinutes)
+	}
+}
+
+// TestBuildSessionActiveMinutesZeroWhenAllEventsSameInstant guards the
+// degenerate case of several events sharing one timestamp (a burst, or a
+// synthetic zero-gap replay): every gap is 0, so ActiveMinutes is 0, not
+// negative or NaN.
+func TestBuildSessionActiveMinutesZeroWhenAllEventsSameInstant(t *testing.T) {
+	cfg := pricing.Defaults()
+	at := time.Date(2026, 9, 22, 10, 0, 0, 0, time.UTC)
+	events := []schema.Event{
+		{Vendor: "anthropic", SessionID: "burst", RequestID: "r1", Model: cfg.Families()[0], At: at, Input: 1, Output: 1},
+		{Vendor: "anthropic", SessionID: "burst", RequestID: "r2", Model: cfg.Families()[0], At: at, Input: 1, Output: 1},
+		{Vendor: "anthropic", SessionID: "burst", RequestID: "r3", Model: cfg.Families()[0], At: at, Input: 1, Output: 1},
+	}
+	sessions := SessionsFromEvents(events, &cfg)
+	if len(sessions) != 1 {
+		t.Fatalf("got %d sessions, want 1", len(sessions))
+	}
+	if sessions[0].ActiveMinutes != 0 {
+		t.Fatalf("ActiveMinutes = %v, want 0 for same-instant events", sessions[0].ActiveMinutes)
+	}
+}
+
+// TestBuildSessionCarriesClient guards K1's client propagation into
+// scan.Session, mirroring how Owner is already carried.
+func TestBuildSessionCarriesClient(t *testing.T) {
+	cfg := pricing.Defaults()
+	events := []schema.Event{
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r1", Model: cfg.Families()[0],
+			At: time.Now().UTC(), Input: 1, Output: 1, Client: "Talon"},
+	}
+	sessions := SessionsFromEvents(events, &cfg)
+	if sessions[0].Client != "Talon" {
+		t.Fatalf("Client = %q, want Talon", sessions[0].Client)
+	}
+}
+
+// TestActiveMinutesByClientSumsAcrossSessions guards K2's per-client
+// rollup: the sum of its sessions' ActiveMinutes.
+func TestActiveMinutesByClientSumsAcrossSessions(t *testing.T) {
+	cfg := pricing.Defaults()
+	base := time.Date(2026, 9, 22, 9, 0, 0, 0, time.UTC)
+	events := []schema.Event{
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r1", Model: cfg.Families()[0], At: base, Input: 1, Output: 1, Client: "Talon"},
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r2", Model: cfg.Families()[0], At: base.Add(4 * time.Minute), Input: 1, Output: 1, Client: "Talon"},
+		{Vendor: "anthropic", SessionID: "s2", RequestID: "r1", Model: cfg.Families()[0], At: base, Input: 1, Output: 1, Client: "Talon"},
+		{Vendor: "anthropic", SessionID: "s2", RequestID: "r2", Model: cfg.Families()[0], At: base.Add(6 * time.Minute), Input: 1, Output: 1, Client: "Talon"},
+	}
+	sessions := SessionsFromEvents(events, &cfg)
+	byClient := ActiveMinutesByClient(sessions)
+	if byClient["Talon"] != 10 {
+		t.Fatalf("ActiveMinutesByClient[Talon] = %v, want 10 (4 + 6)", byClient["Talon"])
+	}
+}
+
 func TestSessionsFromEventsGroupsByVendorAndSessionID(t *testing.T) {
 	cfg := pricing.Defaults()
 	events := []schema.Event{

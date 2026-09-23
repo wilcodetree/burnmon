@@ -28,7 +28,7 @@
       "claude-sonnet-5": {"label": "Claude Sonnet 5", "in": 2.0, "cache_write_5m": 2.50, "cache_write_1h": 4.0, "cache_read": 0.20, "out": 10.0}
     }
   },
-  "_comment_owners": "v0.2 P6, the light client map. Empty (shown here) is the default: one owner, no owner column shown anywhere. Ordered rules, first match wins, unmatched paths get \"personal\": \"owners\": [{\"match\": \"C:\\\\dev\\\\Work\\\\*\", \"owner\": \"Valona\"}, {\"match\": \"C:\\\\ZND\\\\*\", \"owner\": \"ZND\"}]. Applied at ingest; after changing the rules, re-apply them to sessions already in the store with `burnmon-cli reown`.",
+  "_comment_owners": "v0.2 P6, the light client map, extended in v0.3 K1 with an optional client and remote per rule. Empty (shown here) is the default: one owner, no owner or client column shown anywhere. Ordered rules, first match wins for owner (path only, unchanged since v0.2); client is resolved separately, a remote rule first (matched against the project's git origin remote, a case-insensitive substring of its URL), then a path rule, else \"unassigned\". Example: \"owners\": [{\"match\": \"C:\\\\dev\\\\Work\\\\*\", \"owner\": \"Valona\"}, {\"match\": \"C:\\\\ZND\\\\projects\\\\dsi\\\\*\", \"owner\": \"ZND\", \"client\": \"Talon\", \"remote\": \"github.com/multica-ai/dsi\"}]. Applied at ingest; after changing the rules, re-apply them to sessions already in the store with `burnmon-cli reown`.",
   "owners": [],
   "_comment_wsl": "wsl_scan, extra_sources and wsl_interval_hours are new in v0.7.0. The three values below are shown at their defaults (auto-scan, nothing extra, 4-hour WSL cadence), so leaving this block out entirely is equivalent. Set wsl_scan to \"off\" if you do not want the app touching a WSL distro at all.",
   "wsl_scan": "auto",

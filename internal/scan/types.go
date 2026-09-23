@@ -36,6 +36,9 @@ type Session struct {
 	// Owner is P6's light client map result, "" when no owner rules are
 	// configured (one owner, no owner column shown anywhere).
 	Owner          string               `json:"owner,omitempty"`
+	// Client is K1's client map result, "unassigned" when Owners is
+	// configured but nothing matched, "" when the store predates K1.
+	Client         string               `json:"client,omitempty"`
 	Surface        string               `json:"surface"`
 	CWD            string               `json:"-"`
 	Start          string               `json:"start"`
@@ -60,6 +63,12 @@ type Session struct {
 	// yet, e.g. "codex-auto-review"). Zero cost, not zero usage; surfaced
 	// separately so the dashboard does not silently under-report.
 	Unpriced int64 `json:"unpriced_tokens,omitempty"`
+
+	// ActiveMinutes is K2's active time: the sum of gaps between
+	// consecutive events, any gap strictly above the configured
+	// active_idle_minutes counting 0. "active time, from transcript
+	// timestamps, not billable" (spec label, surfaced by the UI in V3-3).
+	ActiveMinutes float64 `json:"active_minutes"`
 }
 
 // ToolGroup maps a raw tool name to the thing a human recognises: the

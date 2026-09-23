@@ -23,6 +23,7 @@ var All = []Migration{
 	{4, "tool_calls.path column (I3)", migration4},
 	{5, "forecast_scores table (F1)", migration5},
 	{6, "session_id-only index on events (v0.2.1 hang patch)", migration6},
+	{7, "client column on events (v0.3 K1 client map)", migration7},
 }
 
 // migration1 records the v0.1 schema as version 1 without changing it: the
@@ -143,5 +144,16 @@ CREATE TABLE IF NOT EXISTS forecast_scores (
 // full scans of the whole events table. See SESSION_LOG.md.
 func migration6(tx *sql.Tx) error {
 	_, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_events_session_id ON events (session_id);`)
+	return err
+}
+
+// migration7 adds K1's client column: the same shape as migration2's owner
+// column (empty default, applied at ingest, reown re-applies it after a
+// rule change). A v0.2 store or a v0.2 burnmon.json with owners-only rules
+// keeps every event's client at '' until the next reown, at which point
+// ClientFor's "unassigned" default takes over (Owners non-empty, no rule
+// sets a Client).
+func migration7(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE events ADD COLUMN client TEXT NOT NULL DEFAULT ''`)
 	return err
 }

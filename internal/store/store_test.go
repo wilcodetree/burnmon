@@ -289,8 +289,8 @@ func TestFreshStoreAtHeadVersion(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version: %v", err)
 	}
-	if version != 6 {
-		t.Fatalf("schema_version = %d, want 6", version)
+	if version != 7 {
+		t.Fatalf("schema_version = %d, want 7", version)
 	}
 }
 
@@ -517,8 +517,8 @@ func TestMigrateRealV01Store(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&version); err != nil {
 		t.Fatalf("read schema_version after migrate: %v", err)
 	}
-	if version != 6 {
-		t.Fatalf("schema_version after migrate = %d, want 6", version)
+	if version != 7 {
+		t.Fatalf("schema_version after migrate = %d, want 7", version)
 	}
 
 	got, err := st.AllEvents()
@@ -567,7 +567,8 @@ func TestReownEvents(t *testing.T) {
 		}
 		return "Valona"
 	}
-	n, err := st.ReownEvents(ownerFor)
+	clientFor := func(string) string { return "" }
+	n, err := st.ReownEvents(ownerFor, clientFor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,12 +591,91 @@ func TestReownEvents(t *testing.T) {
 		t.Fatalf("s2 Owner = %q, want Valona", bySession["s2"].Owner)
 	}
 
-	n2, err := st.ReownEvents(ownerFor)
+	n2, err := st.ReownEvents(ownerFor, clientFor)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n2 != 0 {
 		t.Fatalf("second ReownEvents updated %d row(s), want 0 (already reowned)", n2)
+	}
+}
+
+// TestReownEventsReappliesClient guards K1's reown extension: ReownEvents
+// recomputes client the same way it recomputes owner, only rows whose
+// client actually changes are written, and a repeat call is a no-op.
+func TestReownEventsReappliesClient(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	events := []schema.Event{
+		{Vendor: "anthropic", Agent: "claude-code", Surface: "cli", SessionID: "s1", RequestID: "r1",
+			Model: "claude-x", At: base, Input: 1, Output: 1, Project: `C:\ZND\projects\dsi`, Client: ""},
+	}
+	if err := st.UpsertEvents(events); err != nil {
+		t.Fatal(err)
+	}
+
+	ownerFor := func(string) string { return "ZND" }
+	clientFor := func(project string) string {
+		if strings.HasPrefix(strings.ToLower(project), `c:\znd\projects\dsi`) {
+			return "Talon"
+		}
+		return "unassigned"
+	}
+	n, err := st.ReownEvents(ownerFor, clientFor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("ReownEvents updated %d row(s), want 1", n)
+	}
+
+	got, err := st.AllEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Client != "Talon" {
+		t.Fatalf("Client = %q, want Talon", got[0].Client)
+	}
+
+	n2, err := st.ReownEvents(ownerFor, clientFor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n2 != 0 {
+		t.Fatalf("second ReownEvents updated %d row(s), want 0 (already reowned)", n2)
+	}
+}
+
+// TestMigration7AddsClientColumn guards the client column itself: a fresh
+// store accepts and round-trips Client through UpsertEvents/AllEvents.
+func TestMigration7AddsClientColumn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "burnmon.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	events := []schema.Event{
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", RequestID: "r1",
+			At: time.Now().UTC(), Model: "claude-sonnet-5", Input: 1, Output: 1,
+			Owner: "ZND", Client: "Talon"},
+	}
+	if err := st.UpsertEvents(events); err != nil {
+		t.Fatalf("UpsertEvents: %v", err)
+	}
+	got, err := st.AllEvents()
+	if err != nil {
+		t.Fatalf("AllEvents: %v", err)
+	}
+	if len(got) != 1 || got[0].Client != "Talon" {
+		t.Fatalf("got %+v, want one event with Client=Talon", got)
 	}
 }
 

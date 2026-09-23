@@ -165,7 +165,20 @@ func runReown(args []string) int {
 	}
 	defer st.Close()
 
-	n, err := st.ReownEvents(cfg.OwnerFor)
+	// Memoize ClientFor per project: ReownEvents calls it once per stored
+	// row, and a store can hold hundreds of thousands of rows sharing far
+	// fewer distinct project paths (same reasoning as dataset.ingest's own
+	// clientCache).
+	clientCache := map[string]string{}
+	clientFor := func(project string) string {
+		if v, ok := clientCache[project]; ok {
+			return v
+		}
+		v := cfg.ClientFor(project)
+		clientCache[project] = v
+		return v
+	}
+	n, err := st.ReownEvents(cfg.OwnerFor, clientFor)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not reown events:", err)
 		return 1

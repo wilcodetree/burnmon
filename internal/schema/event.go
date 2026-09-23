@@ -24,6 +24,12 @@ type Event struct {
 	// owner rules (P6's default: one owner, no owner column shown anywhere).
 	Owner string
 
+	// Client is K1's client map result (pricing.Config.ClientFor) for this
+	// event's Project, applied at ingest. "unassigned" when Owners is
+	// non-empty but nothing matched; "" only when the store predates K1 and
+	// has never been reowned (migration 7 backfills existing rows to "").
+	Client string
+
 	// Title is not in the v0.1 spec's Event type. It is the session's
 	// cleaned first-user-message text, carried per event so the store alone
 	// (not a file rescan) can reconstruct a session's display title:

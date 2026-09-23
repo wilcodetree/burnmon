@@ -93,13 +93,21 @@ type Subscription struct {
 }
 
 // OwnerRule is one ordered rule of P6's light client map: the first rule
-// whose Match matches a session's project path wins.
+// whose Match matches a session's project path wins the owner. K1 (v0.3)
+// adds Client and Remote: Client is this rule's client label, matched by a
+// separate pass in ClientFor (remote rules before path rules, across the
+// whole list, not interleaved with owner's first-match-wins order); Remote,
+// when set, is a plain case-insensitive substring pattern matched against
+// the project's git origin remote URL (e.g. "github.com/multica-ai/burnmon"
+// matches both an https and a git@ remote for that repo).
 type OwnerRule struct {
 	// Match is a path prefix, "*"-suffixed (e.g. `C:\dev\Work\*`). Matched
 	// case-insensitively as a plain prefix; the trailing "*" carries no
 	// other glob meaning.
-	Match string `json:"match"`
-	Owner string `json:"owner"`
+	Match  string `json:"match"`
+	Owner  string `json:"owner"`
+	Client string `json:"client,omitempty"`
+	Remote string `json:"remote,omitempty"`
 }
 
 type Config struct {
@@ -130,6 +138,13 @@ type Config struct {
 	// path. Non-empty means every path gets an owner: the first matching
 	// rule's Owner, or "personal" when no rule matches.
 	Owners []OwnerRule `json:"owners"`
+
+	// ActiveIdleMinutes is K2's active-time cutoff: a gap between two
+	// consecutive events strictly greater than this many minutes counts as
+	// 0 toward active time (the user stepped away); a gap at or below it
+	// counts in full. Zero or absent means the compiled-in 10-minute
+	// default (ActiveIdleMinutesOrDefault).
+	ActiveIdleMinutes float64 `json:"active_idle_minutes"`
 
 	// OpenAIPrices is the Codex price book, keyed by exact model id (e.g.
 	// "gpt-5.6-terra"), populated with only the ids seen on Wilco's laptop
@@ -257,22 +272,87 @@ func (c *Config) ContextWindow(model string) (int64, bool) {
 	return w, ok
 }
 
-// OwnerFor returns projectPath's owner per P6's light client map: "" when
-// Owners is empty (default: one owner, no owner column shown anywhere),
-// else the first rule whose Match prefixes projectPath (case-insensitive),
+// OwnerFor returns projectPath's owner per P6's light client map / K1's
+// unified match order: "" when Owners is empty (default: one owner, no
+// owner column shown anywhere), else the owner of the rule matchRule picks,
 // else "personal" when Owners is non-empty but nothing matched.
 func (c *Config) OwnerFor(projectPath string) string {
 	if len(c.Owners) == 0 {
 		return ""
 	}
-	lp := strings.ToLower(projectPath)
-	for _, r := range c.Owners {
-		prefix := strings.ToLower(strings.TrimSuffix(r.Match, "*"))
-		if strings.HasPrefix(lp, prefix) {
-			return r.Owner
+	owner, _ := c.matchRule(projectPath)
+	return owner
+}
+
+// DefaultActiveIdleMinutes is K2's compiled-in idle cutoff, used when
+// ActiveIdleMinutes is zero or absent.
+const DefaultActiveIdleMinutes = 10
+
+// ActiveIdleMinutesOrDefault returns the configured idle cutoff, falling
+// back to DefaultActiveIdleMinutes.
+func (c *Config) ActiveIdleMinutesOrDefault() float64 {
+	if c.ActiveIdleMinutes > 0 {
+		return c.ActiveIdleMinutes
+	}
+	return DefaultActiveIdleMinutes
+}
+
+// ClientFor returns projectPath's client per K1's client map: "unassigned"
+// when Owners is empty, or when a rule matches but does not itself set a
+// Client. See matchRule for the match order.
+func (c *Config) ClientFor(projectPath string) string {
+	if len(c.Owners) == 0 {
+		return "unassigned"
+	}
+	_, client := c.matchRule(projectPath)
+	return client
+}
+
+// matchRule is K1's single unified match, used by both OwnerFor and
+// ClientFor so one matched rule decides owner and client together (spec:
+// "Match order per session: remote rule first ..., then path rule, then
+// owner default with client unassigned" - one order, one winning rule, not
+// two independent lookups). Order:
+//  1. If projectPath resolves to a git origin remote (gitRemoteURL), the
+//     first rule whose non-empty Remote matches that URL (remoteMatches,
+//     a whole-path-segment match, not a bare substring) wins: its Owner and
+//     Client (empty Client becomes "unassigned").
+//  2. Otherwise, the first rule whose non-empty Match prefixes projectPath
+//     (case-insensitive) wins the same way.
+//  3. Otherwise owner "personal", client "unassigned".
+//
+// A rule with an empty Match and no matching Remote never wins by path (an
+// empty prefix would otherwise match every path): Critical fix, a
+// remote-only rule must not silently become "match everything" for owner.
+func (c *Config) matchRule(projectPath string) (owner, client string) {
+	if remote, ok := gitRemoteURL(projectPath); ok {
+		for _, r := range c.Owners {
+			if r.Remote == "" {
+				continue
+			}
+			if remoteMatches(remote, r.Remote) {
+				return r.Owner, orUnassigned(r.Client)
+			}
 		}
 	}
-	return "personal"
+	lp := strings.ToLower(projectPath)
+	for _, r := range c.Owners {
+		if r.Match == "" {
+			continue
+		}
+		prefix := strings.ToLower(strings.TrimSuffix(r.Match, "*"))
+		if strings.HasPrefix(lp, prefix) {
+			return r.Owner, orUnassigned(r.Client)
+		}
+	}
+	return "personal", "unassigned"
+}
+
+func orUnassigned(client string) string {
+	if client == "" {
+		return "unassigned"
+	}
+	return client
 }
 
 // Defaults mirrors the PRICES and SUBSCRIPTION blocks of

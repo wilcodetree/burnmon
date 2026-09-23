@@ -2,6 +2,71 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.3 V3-2: client map (K1), active time (K2)
+
+Read `02_roadmap\2026-09-23_v0.3_spec.md` section 2.2 K1/K2. K1: `OwnerRule` gains optional
+`client` and `remote` fields. A new unified `Config.matchRule(projectPath)` (used by both
+`OwnerFor` and `ClientFor`) matches per spec order: a rule whose `remote` matches the project's
+git origin remote (read directly from `.git\config` in the new `internal\pricing\gitremote.go`,
+no git binary, walking up to find `.git`, handling a plain checkout, a worktree's `.git` file
+with its `commondir` chain, and a submodule) wins first; otherwise a rule whose `match` path
+prefixes the project wins; otherwise owner `"personal"`, client `"unassigned"`. The one winning
+rule decides owner and client together, not two independent lookups: an Opus code-review pass
+after the first implementation caught a Critical bug in the original (independent) version, a
+remote-only rule (no `match`) made `OwnerFor`'s path prefix check empty, so it matched every
+path and leaked a client's owner onto every other project, including Valona's. Fixed by the
+unification above (a rule with an empty `match` and no matching `remote` never wins). The same
+review caught two more real issues, both fixed and covered by new tests: (1) remote matching was
+a bare substring, so a pattern for one repo (`github.com/org/dsi`) also matched a sibling
+(`.../dsi-engine`); fixed with `remoteMatches`, a whole-path-segment match bounded by `/` on
+both sides. (2) the git worktree case never actually worked: a worktree's `.git` file points at
+`<main>/.git/worktrees/<name>`, which has no `config` of its own, only a `commondir` file
+pointing back at the real `.git` directory; `gitRemoteURL` now follows that chain and resolves a
+relative `gitdir:` against the `.git` file's own directory rather than the process cwd. Ruling
+kept from the first pass: an SSH remote (`git@github.com:org/repo.git`) and an https remote for
+the same repo must match the same `"host/path"`-shaped pattern, so `remoteMatches` normalizes
+the SSH form (`normalizeRemote`) before comparing; a test against the two literal URL shapes
+caught a real bug in this too (the normalize step was only applied on one side) before it
+shipped. `client` lands as a new column on `events` (migration 7, additive) alongside `owner`;
+the spec's own text calls it "migration 6", but `migrations.go` already has a real `Version: 6`
+(the v0.2.1 session_id index), so the spec's number is stale, not a live instruction, and this is
+migration 7 instead (noted here per the plan's Global Constraints). `burnmon-cli reown`'s
+`Store.ReownEvents` now takes both `ownerFor` and `clientFor` and reapplies both in one pass; its
+call site in `cmd\burnmon-cli\main.go` memoizes `clientFor` per project (same reasoning as the
+ingest-side cache below), since it otherwise means one `.git\config` read per stored row. Added a
+test loading a literal v0.2 `burnmon.json` (owners-only, no `client`/`remote`) and confirming it
+loads unchanged and `OwnerFor`/`ClientFor` behave exactly as documented. `burnmon.example.json`'s
+owners comment now shows one commented `client`+`remote` rule. K2:
+`internal\dataset\fromstore.go`'s `buildSession` now also sorts each session's event timestamps
+into `time.Time`s and sums consecutive gaps (`activeTimeMinutes`), any gap strictly above
+`active_idle_minutes` (config, default 10 via `ActiveIdleMinutesOrDefault`) counting 0; exactly
+at the cutoff still counts, per spec wording ("above" not "at or above"), a test pins the
+exactly-10-minute case explicitly, and another pins several same-instant events at 0 active
+minutes (no NaN, no negative). `scan.Session` gains `Client` and `ActiveMinutes`; a new
+`dataset.ActiveMinutesByClient` sums sessions' `ActiveMinutes` per client for the per-client
+rollup K2 asks for (no UI this session, per the spec). A separate performance fix, also from the
+plan's own Task 3 scope: `internal\dataset\dataset.go`'s ingest loop memoizes `ClientFor` per
+project path across a whole ingest pass, since many events from the same file share one project
+path and `ClientFor`'s remote check reads a file from disk. Spot-check (plan assumption A8): ran
+against the real local store (`%LOCALAPPDATA%\burnmon\burnmon.db`, auto-migrated 6 to 7 on open)
+for the three earliest sessions starting 2026-09-22 UTC: session `0fe88daa` (259 calls,
+06:54 to 08:54 UTC, 119.8 active minutes), session `7b13b2f8` (51 calls, 07:06 to 07:47 UTC,
+41.4 active minutes), session `agent-a2b5c1fb` (16 calls, 07:07 to 07:16 UTC, 9.4 active
+minutes). Comparison against `C:\ZND\10_holding\03_logs\time\` could not be completed: that
+folder does not exist anywhere under `C:\ZND\10_holding` (confirmed by listing `03_logs\`), so
+there is no time-log entry for 2026-09-22 to compare against; A8's "if an entry exists" clause
+covers this case. The three figures above stand as the recorded spot-check output, unverified
+against an external log. Owner and client came back empty on all three real sessions: the real
+`burnmon.json` carries no `owners` rules yet, so `matchRule` correctly falls through to its
+no-rules-configured default for both; a real client rule plus `burnmon-cli reown` is needed to
+see a populated `client` column on real sessions. Full suite green (`go test ./... -count=1`),
+`.\build.ps1` green. No UI in this session, per K1/K2's own scope. Deferred (not fixed this
+session, ledgered as minors from the Opus review): `normalizeRemote` does not reshape an
+`ssh://` remote with an explicit port or a non-`git` SSH user; per-client active time is a plain
+sum of that client's sessions, so two overlapping sessions (an agent subsession inside its
+parent, seen in the spot-check above) can push a client's total past real wall-clock time, worth
+revisiting when K4's export numbers are checked against Talon's own time log.
+
 ## 2026-09-23, v0.3 V3-1: price books restructured into dated JSON, C2 cost function
 
 Read `02_roadmap\2026-09-23_v0.3_spec.md` sections 1 and 2.1 C1/C2 and

@@ -452,6 +452,20 @@ func (c *Cache) ingest(cfg *pricing.Config, files []string, trustSlow map[string
 	// Snapshot once, not per file: RootsByAdapter does not change mid-pass,
 	// and files can number in the thousands.
 	roots := c.RootsSnapshot()
+	// clientCache memoizes ClientFor per project path across this whole
+	// ingest pass: ClientFor's remote match reads .git\config from disk
+	// (gitRemoteURL), and every event from the same file (often thousands,
+	// v0.1 scale) shares the same project path, so recomputing it per event
+	// would mean the same file read over and over in a hot loop.
+	clientCache := map[string]string{}
+	clientFor := func(project string) string {
+		if v, ok := clientCache[project]; ok {
+			return v
+		}
+		v := cfg.ClientFor(project)
+		clientCache[project] = v
+		return v
+	}
 	for i, f := range files {
 		a := adapterForPath(f, roots)
 		if a == nil {
@@ -515,6 +529,7 @@ func (c *Cache) ingest(cfg *pricing.Config, files []string, trustSlow map[string
 		// every read.
 		for j := range events {
 			events[j].Owner = cfg.OwnerFor(events[j].Project)
+			events[j].Client = clientFor(events[j].Project)
 		}
 		// F1: commit in batches of 1,000 rather than one transaction for the
 		// whole file, so a first pass over a large existing rollout (a

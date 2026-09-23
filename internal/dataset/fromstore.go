@@ -3,6 +3,7 @@ package dataset
 import (
 	"math"
 	"sort"
+	"time"
 
 	"burnmon/internal/pricing"
 	"burnmon/internal/scan"
@@ -56,23 +57,29 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 	}
 
 	var stamps []string
+	var times []time.Time
 	for _, e := range events {
 		if !e.At.IsZero() {
 			stamps = append(stamps, e.At.Format("2006-01-02T15:04:05.000Z"))
+			times = append(times, e.At)
 		}
 	}
 	if len(stamps) == 0 {
 		return nil
 	}
 	sort.Strings(stamps)
+	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
 
-	title, owner, sessionID, surface := "", "", events[0].SessionID, events[0].Surface
+	title, owner, client, sessionID, surface := "", "", "", events[0].SessionID, events[0].Surface
 	for _, e := range events {
 		if title == "" && e.Title != "" {
 			title = e.Title
 		}
 		if owner == "" && e.Owner != "" {
 			owner = e.Owner
+		}
+		if client == "" && e.Client != "" {
+			client = e.Client
 		}
 	}
 	if title == "" {
@@ -186,10 +193,13 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		}
 	}
 
+	activeMinutes := activeTimeMinutes(times, cfg.ActiveIdleMinutesOrDefault())
+
 	return &scan.Session{
 		SessionID:      sessionID,
 		Title:          title,
 		Owner:          owner,
+		Client:         client,
 		Surface:        surface,
 		CWD:            cwd,
 		Start:          stamps[0],
@@ -209,5 +219,42 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		Daily:          daily,
 		Long:           callsN > scan.LongSessionCalls,
 		Unpriced:       unpriced,
+		ActiveMinutes:  activeMinutes,
 	}
+}
+
+// activeTimeMinutes is K2's active time: the sum of gaps between
+// consecutive, sorted timestamps, any gap strictly greater than
+// idleCutoffMinutes counting 0 rather than the real gap (spec: "any gap
+// above active_idle_minutes counts zero"; exactly at the cutoff still
+// counts). A session with 0 or 1 timestamps has no gaps, so 0.
+func activeTimeMinutes(sorted []time.Time, idleCutoffMinutes float64) float64 {
+	if len(sorted) < 2 {
+		return 0
+	}
+	cutoff := time.Duration(idleCutoffMinutes * float64(time.Minute))
+	var total time.Duration
+	for i := 1; i < len(sorted); i++ {
+		gap := sorted[i].Sub(sorted[i-1])
+		if gap <= cutoff {
+			total += gap
+		}
+	}
+	return total.Minutes()
+}
+
+// ActiveMinutesByClient sums each session's ActiveMinutes into its Client
+// (K2: "per client as the sum of its sessions"). A session with Client ==
+// "" (a store not yet reowned since K1 landed) is omitted rather than
+// bucketed under "": callers that want an "unknown" bucket can check for it
+// separately via the sessions list itself.
+func ActiveMinutesByClient(sessions []*scan.Session) map[string]float64 {
+	out := map[string]float64{}
+	for _, s := range sessions {
+		if s.Client == "" {
+			continue
+		}
+		out[s.Client] += s.ActiveMinutes
+	}
+	return out
 }
