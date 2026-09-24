@@ -37,6 +37,14 @@ import (
 //go:embed page.html
 var pageHTML string
 
+// heatmapPayload is bdevActivityHeatmap's return shape: renderHeatmap
+// (page.html) only ever reads payload.rows, so this carries just that
+// field rather than the rest of history.Payload (Totals, Vendors, Owners),
+// which the merged closed+today rows below don't populate meaningfully.
+type heatmapPayload struct {
+	Rows []history.Row `json:"rows"`
+}
+
 func init() {
 	// go-webview2 pumps a Win32 message loop tied to the thread that
 	// created the window; keep that on one OS thread for the life of the
@@ -103,7 +111,7 @@ func main() {
 		log.Println("using config overrides from", cfgFile)
 	}
 
-	a := &app{sys: sys, sampler: sysmon.NewSampler(), st: st, cfg: cfg}
+	a := &app{sys: sys, sampler: sysmon.NewSampler(), st: st, cfg: cfg, initialCollectDone: make(chan struct{})}
 	a.cache.Store = st
 	a.startSampling()
 	a.startRetentionPrune(7)
@@ -193,36 +201,64 @@ func main() {
 	}
 
 	// bdevActivityHeatmap: phase 2b's "N active days" grid, design doc
-	// section 9. history.Build is the same function the History tab's
-	// bmHistory binding runs; no new aggregation query. Per-day tokens and
-	// headline cost for the rolling 26 weeks (182 days). Runs off the UI
-	// thread and resolves through bdevAsyncResolveJS: a 182-day EventsSince
-	// plus history.Build's own aggregation is exactly the "can run past
-	// 50ms on a large store" case cmd\burnmon's own bmHistory binding was
-	// already moved off the UI thread for (see that binding's comment);
-	// this one is polled every minute rather than on demand, so blocking
-	// the window on it would be worse, not better. dayStart is UTC
-	// midnight, matching bdevCacheBreakdown's own day boundary, so the
-	// 182-day window does not shift by an hour across a DST change.
+	// section 9. Wilco's own finding (2026-09-24): the original version
+	// ran a fresh 182-day EventsSince plus history.Build on every 1-minute
+	// poll, 3.34s for 52,728 rows against the real store, about 5.5 percent
+	// of one core on average, alone over this workstream's 2 percent CPU
+	// target (moving it off the UI thread, done in the same commit that
+	// first added it, fixed the freeze but not that CPU cost). Every day
+	// except today is closed, its events never change once the day is
+	// over, so app.closedDayRows caches the 182-day pass and only
+	// recomputes it once per UTC day (and only once the startup backfill
+	// has finished, see closedDayRows' own comment); this binding now runs
+	// that (cheap on every call except the rare day-rollover/pre-backfill
+	// one) plus a fresh query for today alone (a single day's rows, not
+	// 182), and merges the two. dayStart comes back from closedDayRows
+	// itself rather than a second time.Now() call, so the two queries
+	// can never straddle different UTC days (fixed after review). Runs
+	// off the UI thread and resolves through bdevAsyncResolveJS for the
+	// same reason as before: even the cheap path still touches the store.
 	if err := w.Bind("bdevActivityHeatmap", func() {
 		go func() {
 			a.mu.Lock()
 			cfg := a.cfg
 			a.mu.Unlock()
 			start := time.Now()
-			now := time.Now().UTC()
-			dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-			since := dayStart.AddDate(0, 0, -181)
-			events, err := st.EventsSince(since)
+
+			closed, today, dayStart, cacheHit, err := a.closedDayRows(st, &cfg)
 			if err != nil {
-				log.Println("bdevActivityHeatmap: EventsSince:", err)
+				log.Println("bdevActivityHeatmap: closedDayRows:", err)
 				return
 			}
-			payload := history.Build(events, &cfg, history.Filter{Period: "day"})
-			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
-				log.Printf("bdevActivityHeatmap: %v for %d rows", elapsed, len(events))
+
+			todayEvents, err := st.EventsSince(dayStart)
+			if err != nil {
+				log.Println("bdevActivityHeatmap: EventsSince(today):", err)
+				return
 			}
-			js, err := bdevAsyncResolveJS("__bdevActivityHeatmapResolve", payload)
+			todayPayload := history.Build(todayEvents, &cfg, history.Filter{Period: "day"})
+
+			rows := make([]history.Row, 0, len(closed)+1)
+			rows = append(rows, closed...)
+			foundToday := false
+			for _, r := range todayPayload.Rows {
+				if r.Key == today {
+					rows = append(rows, r)
+					foundToday = true
+				}
+			}
+			if !foundToday {
+				rows = append(rows, history.Row{Key: today})
+			}
+
+			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+				state := "closed cache miss, rebuilt"
+				if cacheHit {
+					state = "closed cache hit"
+				}
+				log.Printf("bdevActivityHeatmap: %v (%s, %d today rows scanned)", elapsed, state, len(todayEvents))
+			}
+			js, err := bdevAsyncResolveJS("__bdevActivityHeatmapResolve", heatmapPayload{Rows: rows})
 			if err != nil {
 				log.Println("bdevActivityHeatmap: encode result:", err)
 				return

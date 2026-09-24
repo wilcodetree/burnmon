@@ -23,7 +23,9 @@ import (
 	"burnmon/internal/adapter/copilotvsc"
 	"burnmon/internal/adapter/hermes"
 	"burnmon/internal/dataset"
+	"burnmon/internal/history"
 	"burnmon/internal/pricing"
+	"burnmon/internal/schema"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
 	"burnmon/internal/watch"
@@ -80,6 +82,80 @@ type app struct {
 	mu     sync.Mutex
 	cfg    pricing.Config
 	latest sysmon.Sample
+
+	// heatmapMu guards the activity heatmap's closed-day cache (Wilco's own
+	// finding, 2026-09-24: bdevActivityHeatmap ran a fresh 182-day
+	// EventsSince plus history.Build on every 1-minute poll, 3.34s/52,728
+	// rows measured against the real store, about 5.5 percent of one core
+	// on average, alone over this workstream's 2 percent CPU target). Every
+	// day except today is closed (its events never change once the day is
+	// over), so that 182-day pass only needs to run once per UTC day; each
+	// minute now only recomputes today's own (much smaller) row and merges
+	// it onto the cached closed days. See closedDayRows below.
+	heatmapMu     sync.Mutex
+	heatmapClosed []history.Row
+	heatmapAsOf   string // "YYYY-MM-DD" UTC: the day heatmapClosed was computed for
+
+	// initialCollectDone is closed by startInitialCollect once its one-time
+	// backfill (dataset.Cache.Collect) returns. closedDayRows must not cache
+	// its result before that: the backfill is still writing past-day events
+	// into the store while the page's very first heatmap poll fires (fixed
+	// after review, 2026-09-24 - the first version cached whatever
+	// closedDayRows saw on that first call, potentially a half-backfilled
+	// store, and then never rebuilt until the next UTC midnight).
+	initialCollectDone chan struct{}
+}
+
+// closedDayRows returns the per-day token/cost rows for every day strictly
+// before today (UTC), caching the whole 182-day pass and recomputing it
+// only when the UTC date has rolled over since the last computation (once
+// a day, not once a minute) - but only once the app's one-time startup
+// backfill (startInitialCollect) has finished; before that, every call
+// recomputes fresh rather than locking in a result built from a store that
+// is still being backfilled. Returns today's own date string and UTC
+// midnight alongside, so the caller derives "today"'s own window from the
+// exact same now() this call used, rather than calling time.Now() a second
+// time and risking a day-rollover mismatch between the two (also fixed
+// after review).
+func (a *app) closedDayRows(st *store.Store, cfg *pricing.Config) (closed []history.Row, today string, dayStart time.Time, cacheHit bool, err error) {
+	now := time.Now().UTC()
+	dayStart = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	today = dayStart.Format("2006-01-02")
+
+	a.heatmapMu.Lock()
+	if a.heatmapAsOf == today {
+		closed = a.heatmapClosed
+		a.heatmapMu.Unlock()
+		return closed, today, dayStart, true, nil
+	}
+	a.heatmapMu.Unlock()
+
+	since := dayStart.AddDate(0, 0, -181)
+	events, err := st.EventsSince(since)
+	if err != nil {
+		return nil, "", time.Time{}, false, err
+	}
+	closedEvents := make([]schema.Event, 0, len(events))
+	for _, e := range events {
+		if e.At.Before(dayStart) {
+			closedEvents = append(closedEvents, e)
+		}
+	}
+	payload := history.Build(closedEvents, cfg, history.Filter{Period: "day"})
+
+	backfillDone := false
+	select {
+	case <-a.initialCollectDone:
+		backfillDone = true
+	default:
+	}
+	if backfillDone {
+		a.heatmapMu.Lock()
+		a.heatmapClosed = payload.Rows
+		a.heatmapAsOf = today
+		a.heatmapMu.Unlock()
+	}
+	return payload.Rows, today, dayStart, false, nil
 }
 
 // startLiveWatch starts an fsnotify watcher on the native Claude/Codex
@@ -281,6 +357,7 @@ func (a *app) startSampling() {
 // resolves and walks WSL roots rather than waiting for a later refresh.
 func (a *app) startInitialCollect() {
 	go func() {
+		defer close(a.initialCollectDone)
 		a.mu.Lock()
 		cfg := a.cfg
 		a.mu.Unlock()
