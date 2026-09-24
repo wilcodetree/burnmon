@@ -26,6 +26,8 @@ import (
 	webview2 "github.com/jchv/go-webview2"
 
 	"burnmon/internal/adapter/codex"
+	"burnmon/internal/advisor"
+	"burnmon/internal/devexport"
 	"burnmon/internal/history"
 	"burnmon/internal/live"
 	"burnmon/internal/scan"
@@ -64,6 +66,11 @@ func init() {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "export" {
+		os.Exit(runExport(os.Args[2:]))
+		return
+	}
+
 	dataDir := appDataDir()
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return
@@ -333,6 +340,101 @@ func main() {
 	}); err != nil {
 		log.Println("could not bind bdevCacheBreakdown:", err)
 	}
+
+	// bdevAdvisorNow: phase 4's "TODAY'S READ" panel. Runs the advisor rule
+	// engine (internal/advisor) over the last advisorWindow of turns and
+	// system samples, off the UI thread: bdevActivityHeatmap's own review
+	// finding (2026-09-24) proved even a "cheap" per-poll store read can
+	// freeze the UI thread if it runs there directly, so this follows the
+	// same async-resolve pattern rather than returning synchronously.
+	if err := w.Bind("bdevAdvisorNow", func() {
+		go func() {
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			now := time.Now()
+			since := now.Add(-advisorWindow)
+
+			events, err := st.EventsSince(since)
+			if err != nil {
+				log.Println("bdevAdvisorNow: EventsSince:", err)
+				return
+			}
+			sysHistory, err := sys.RecentSamples(since)
+			if err != nil {
+				log.Println("bdevAdvisorNow: RecentSamples:", err)
+				return
+			}
+			groups, err := sys.RecentProcessGroups(since)
+			if err != nil {
+				log.Println("bdevAdvisorNow: RecentProcessGroups:", err)
+				return
+			}
+			turns := live.BuildTurns(events, &cfg, since, now)
+			findings := advisor.Analyze(advisor.Input{
+				Now: now, Turns: turns, SysmonHistory: sysHistory, ProcessGroups: groups,
+			}, &cfg, advisor.DefaultThresholds)
+
+			js, err := bdevAsyncResolveJS("__bdevAdvisorResolve", findings)
+			if err != nil {
+				log.Println("bdevAdvisorNow: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
+	}); err != nil {
+		log.Println("could not bind bdevAdvisorNow:", err)
+	}
+
+	// bdevExport is the header EXPORT button (design doc "Export (AI-ready
+	// bundle)"): the last 24 hours, not redacted (the CLI's --redact flag
+	// covers the redacted case), written to dataDir\exports\. Shares
+	// buildExportBundle (export_run.go) with the `export` CLI subcommand
+	// so the two paths can never disagree on what an export contains.
+	type exportResultPayload struct {
+		OK            bool   `json:"ok"`
+		Error         string `json:"error,omitempty"`
+		Dir           string `json:"dir,omitempty"`
+		SummaryBytes  int    `json:"summary_bytes,omitempty"`
+		DataJSONBytes int    `json:"data_json_bytes,omitempty"`
+		DailyCSVBytes int    `json:"daily_csv_bytes,omitempty"`
+	}
+	if err := w.Bind("bdevExport", func() {
+		go func() {
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			until := time.Now()
+			since := until.Add(-24 * time.Hour)
+
+			var payload exportResultPayload
+			b, err := buildExportBundle(st, sys, &cfg, since, until)
+			if err != nil {
+				payload = exportResultPayload{OK: false, Error: err.Error()}
+			} else {
+				outDir := filepath.Join(dataDir, "exports")
+				res, werr := devexport.Write(outDir, b)
+				if werr != nil {
+					payload = exportResultPayload{OK: false, Error: werr.Error()}
+				} else {
+					payload = exportResultPayload{
+						OK: true, Dir: res.Dir,
+						SummaryBytes: res.SummaryBytes, DataJSONBytes: res.DataJSONBytes, DailyCSVBytes: res.DailyCSVBytes,
+					}
+				}
+			}
+			js, jerr := bdevAsyncResolveJS("__bdevExportResolve", payload)
+			if jerr != nil {
+				log.Println("bdevExport: encode result:", jerr)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
+	}); err != nil {
+		log.Println("could not bind bdevExport:", err)
+	}
+
+	startUICheckServer(w)
 
 	w.SetHtml(pageHTML)
 	w.Run()

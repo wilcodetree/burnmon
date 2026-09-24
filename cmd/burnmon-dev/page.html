@@ -29,6 +29,8 @@ header{
 #cmd:focus{border-color:var(--amber)}
 .chip{padding:3px 10px; font-weight:700; font-size:12px; letter-spacing:.06em; white-space:nowrap;
   background:rgba(255,215,95,.14); color:var(--yel); border:1px solid rgba(255,215,95,.4)}
+button.chip{font:inherit; cursor:pointer}
+button.chip:disabled{opacity:.5; cursor:default}
 .hstat{font-size:12px; color:var(--dim); white-space:nowrap}
 .hstat b{color:var(--txt); font-weight:600; font-variant-numeric:tabular-nums}
 .headline{display:flex; align-items:baseline; gap:5px; white-space:nowrap; flex:0 0 auto}
@@ -137,6 +139,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   <div class="hstat">CPU <b id="hdrCPU">-</b></div>
   <div class="hstat">RAM <b id="hdrRAM">-</b></div>
   <div class="hstat" id="hdrClock">-</div>
+  <button class="chip" id="exportBtn" style="background:rgba(77,166,255,.14);color:var(--blu);border-color:rgba(77,166,255,.4)" title="Export the last 24 hours to an AI-ready bundle">EXPORT</button>
+  <div class="hstat" id="exportStatus"></div>
 </header>
 <main>
   <section class="zone burn">
@@ -192,7 +196,10 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         <div class="panelhead">Heatmap, harness &times; minute (CPU-weighted)</div>
         <div class="heatmapwrap" style="flex:1; overflow-y:auto"><div id="harnessHeatmap"></div></div>
       </div>
-      <div class="panel" style="flex:0 0 auto"><div class="placeholder" style="padding:14px">Today's Read (the advisor panel) lands in phase 4.</div></div>
+      <div class="panel" style="flex:0 0 auto; max-height:220px; display:flex; flex-direction:column">
+        <div class="panelhead">Today's read</div>
+        <div class="ticker" id="advisorFindings" style="max-height:180px"></div>
+      </div>
     </div>
   </section>
 </main>
@@ -801,6 +808,77 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     el.innerHTML = html;
   }
 
+  // renderAdvisorFindings draws phase 4's "TODAY'S READ" panel: one line
+  // per advisor.Finding (internal/advisor), newest first (the Go side
+  // already sorts them that way), each with its rule id, message and one
+  // concrete suggestion. rule_id colors reuse the turn ticker's own tag
+  // palette where a rule maps naturally onto an existing finding kind, and
+  // pick a free palette color for the three rules with no ticker
+  // equivalent (harness-runaway, hard-faults-memory, self-overhead).
+  var FINDING_RULE_COLOR = {
+    'heavy-turn-pressure': '#ff4b4b', 'harness-runaway': '#ffd75f',
+    'cache-hit-drop': '#38d3e3', 'context-window': '#ffd75f',
+    'hard-faults-memory': '#ff4b4b', 'self-overhead': '#d68cf0'
+  };
+  function renderAdvisorFindings(findings){
+    var el = document.getElementById('advisorFindings');
+    if(!el) return;
+    var html = '';
+    (findings || []).slice(0, 20).forEach(function(f){
+      var time = new Date(f.at).toLocaleTimeString();
+      var color = FINDING_RULE_COLOR[f.rule_id] || '#ffa028';
+      html += '<div class="trow" style="white-space:normal; align-items:flex-start">' +
+        '<span class="t">' + time + '</span>' +
+        '<span class="tag" style="color:' + color + ';border-color:' + color + '">' + f.rule_id + '</span>' +
+        '<span class="m">' + f.message + '. ' + f.suggestion + '</span></div>';
+    });
+    el.innerHTML = html || '<div class="placeholder" style="padding:10px">No findings in the last hour</div>';
+  }
+  // Same async-resolve pattern as bdevActivityHeatmap: the binding returns
+  // immediately and delivers its real result (computed off the Go side's
+  // UI thread) through this resolver.
+  window.__bdevAdvisorResolve = renderAdvisorFindings;
+
+  function pollAdvisor(){
+    if(!window.bdevAdvisorNow) return;
+    window.bdevAdvisorNow();
+  }
+
+  function fmtBytesPlain(n){
+    if(n == null) return '-';
+    var units = ['B','KB','MB'];
+    var v = n, i = 0;
+    while(v >= 1024 && i < units.length - 1){ v /= 1024; i++; }
+    return v.toFixed(v < 10 && i > 0 ? 1 : 0) + ' ' + units[i];
+  }
+
+  window.__bdevExportResolve = function(result){
+    var btn = document.getElementById('exportBtn');
+    var status = document.getElementById('exportStatus');
+    if(btn) btn.disabled = false;
+    if(!status) return;
+    if(!result || !result.ok){
+      status.textContent = 'export failed' + (result && result.error ? ': ' + result.error : '');
+      status.style.color = 'var(--red)';
+      return;
+    }
+    status.textContent = 'exported ' + fmtBytesPlain(result.summary_bytes + result.data_json_bytes + result.daily_csv_bytes) +
+      ' to ' + result.dir;
+    status.style.color = 'var(--grn)';
+  };
+
+  function setupExportButton(){
+    var btn = document.getElementById('exportBtn');
+    if(!btn) return;
+    btn.addEventListener('click', function(){
+      if(!window.bdevExport) return;
+      btn.disabled = true;
+      var status = document.getElementById('exportStatus');
+      if(status){ status.textContent = 'exporting...'; status.style.color = 'var(--dim)'; }
+      window.bdevExport();
+    });
+  }
+
   function pollProcessGroups(){
     if(!window.bdevProcessGroupsNow || !window.bdevProcessGroupsHistory) return;
     Promise.all([window.bdevProcessGroupsNow(), window.bdevProcessGroupsHistory(60)])
@@ -818,13 +896,16 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   setInterval(pollVendorStrip, 60000);
   setInterval(pollActivityHeatmap, 60000);
   setInterval(pollSysmonHistory, 10000);
+  setInterval(pollAdvisor, 15000);
   setInterval(renderClock, 1000);
   renderClock();
+  setupExportButton();
   poll();
   pollSysmonHistory();
   pollBurn();
   pollVendorStrip();
   pollActivityHeatmap();
+  pollAdvisor();
 })();
 </script>
 </body>
