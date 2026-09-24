@@ -19,8 +19,8 @@ body{
   display:flex; flex-direction:column;
 }
 header{
-  flex:0 0 auto; height:44px; background:#000; border-bottom:2px solid var(--amber);
-  display:flex; align-items:center; gap:14px; padding:0 16px;
+  flex:0 0 auto; min-height:44px; background:#000; border-bottom:2px solid var(--amber);
+  display:flex; align-items:center; flex-wrap:wrap; gap:6px 14px; padding:6px 16px;
 }
 .logo{font-size:17px; font-weight:700; color:#fff; letter-spacing:1px; white-space:nowrap}
 .logo span{color:var(--amber)}
@@ -31,6 +31,10 @@ header{
   background:rgba(255,215,95,.14); color:var(--yel); border:1px solid rgba(255,215,95,.4)}
 .hstat{font-size:12px; color:var(--dim); white-space:nowrap}
 .hstat b{color:var(--txt); font-weight:600; font-variant-numeric:tabular-nums}
+.headline{display:flex; align-items:baseline; gap:5px; white-space:nowrap; flex:0 0 auto}
+.hltotal{font-size:19px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums}
+.hlunit{font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em}
+.hlsub{font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums}
 
 main{flex:1; min-height:0; display:flex; flex-direction:column; padding:4px; gap:4px}
 .zone{display:flex; flex-direction:column; min-height:0}
@@ -92,15 +96,37 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
 .tag.context-runway{color:var(--yel); border-color:var(--yel)}
 .tag.re-prefill{color:var(--cyn); border-color:var(--cyn)}
 .tag.compaction{color:var(--mag); border-color:var(--mag)}
+
+/* vendor strip row expand */
+tbody tr.vrow{cursor:pointer}
+tbody tr.vrow:hover{background:var(--panel2)}
+tr.vexpand td{padding:6px 8px 8px 24px; color:var(--txt); font-size:11px; background:#0d1219; border-top:1px dashed var(--bd)}
+tr.vexpand b{font-variant-numeric:tabular-nums}
+
+/* activity heatmap, phase 2b */
+.phead-sub{float:right; color:var(--dim); font-weight:400; text-transform:none; letter-spacing:0}
+.heatmapwrap{padding:8px 10px; overflow-x:auto}
+.heatgrid{display:flex; gap:2px}
+.heatcol{display:flex; flex-direction:column; gap:2px}
+.heatcell{width:9px; height:9px; background:var(--bd); border-radius:1px}
+.heatcell.active{background:var(--grn)}
+.heatcell.empty{background:transparent}
+.heatmonths{display:flex; gap:2px; margin-top:3px}
+.heatmonth{width:9px; font-size:8px; color:var(--dim); overflow:visible; white-space:nowrap}
 </style>
 </head>
 <body>
 <header>
   <div class="logo">BURN<span>MON</span> DEV</div>
+  <div class="headline">
+    <span class="hltotal" id="hlToday">-</span><span class="hlunit">tok today</span>
+    <span class="hlsub">&middot; <span id="hlWeek">-</span> wk &middot; <span id="hlMonth">-</span> mo</span>
+  </div>
   <input id="cmd" placeholder="/ search sessions, vendors, findings&hellip;" autocomplete="off" spellcheck="false">
   <div class="chip" id="pressureChip">PRESSURE -</div>
   <div class="hstat" id="hdrSessions">- sessions</div>
   <div class="hstat"><b id="hdrBurnRate">-</b>/min</div>
+  <div class="hstat"><b id="hdrTokMin">-</b> tok/min</div>
   <div class="hstat">CPU <b id="hdrCPU">-</b></div>
   <div class="hstat">RAM <b id="hdrRAM">-</b></div>
   <div class="hstat" id="hdrClock">-</div>
@@ -120,6 +146,10 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
           <thead><tr><th></th><th>Today</th><th>Week</th><th>Month</th></tr></thead>
           <tbody id="vendorStrip"></tbody>
         </table>
+      </div>
+      <div class="panel" style="flex:0 0 auto">
+        <div class="panelhead">Activity <span id="heatmapActiveDays" class="phead-sub"></span></div>
+        <div class="heatmapwrap"><div id="heatmapGrid"></div></div>
       </div>
       <div class="panel" style="flex:1">
         <div class="panelhead">Turn ticker</div>
@@ -163,6 +193,40 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
   // segments would visibly swap position between bars.
   var AGENT_ORDER = ['claude-code', 'cowork', 'codex', 'hermes', 'copilot-cli', 'copilot-vscode', 'other'];
   function agentColor(agent){ return AGENT_COLOR[agent] || '#66788c'; }
+
+  var REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // animateNumber (token-monitor's own recipe, reimplemented): one RAF tween
+  // per element, easeOutQuart, cancelling any tween already running on that
+  // element so a fast poll cadence never lets an old loop overwrite a
+  // newer value. State (_animVal, _animRAF) lives on the element itself, so
+  // callers must reuse the same DOM node across polls rather than
+  // rebuilding it each time (see ensureVendorRow).
+  function animateNumber(el, newVal, duration, formatFn){
+    if(!el || newVal == null) return;
+    if(REDUCED_MOTION){
+      el.textContent = formatFn(newVal);
+      el._animVal = newVal;
+      return;
+    }
+    var from = el._animVal != null ? el._animVal : newVal;
+    if(el._animRAF) cancelAnimationFrame(el._animRAF);
+    if(from === newVal){ el.textContent = formatFn(newVal); el._animVal = newVal; return; }
+    var start = performance.now();
+    function tick(now){
+      var t = Math.min(1, (now - start) / duration);
+      var eased = 1 - Math.pow(1 - t, 4);
+      var val = from + (newVal - from) * eased;
+      el.textContent = formatFn(val);
+      if(t < 1){
+        el._animRAF = requestAnimationFrame(tick);
+      } else {
+        el._animVal = newVal;
+        el._animRAF = null;
+      }
+    }
+    el._animRAF = requestAnimationFrame(tick);
+  }
 
   function fmtTokens(n){
     if(n == null) return '-';
@@ -299,18 +363,168 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
     el.innerHTML = html || '<div class="placeholder" style="flex:0 0 auto;padding:10px">No sessions running</div>';
   }
 
-  function renderVendorStrip(payload){
-    var el = document.getElementById('vendorStrip');
-    if(!el) return;
-    var rows = (payload && payload.rows) || [];
-    var html = '';
-    rows.forEach(function(r){
-      html += '<tr><td><span class="dot" style="background:' + agentColor(r.agent) + '"></span>' + r.agent_label + '</td>' +
-        '<td class="num">' + fmtTokens(r.today) + '</td>' +
-        '<td class="num">' + fmtTokens(r.week) + '</td>' +
-        '<td class="num">' + fmtTokens(r.month) + '</td></tr>';
+  // Vendor strip rows are created once per agent and updated in place on
+  // every poll (rather than rebuilt via innerHTML), so animateNumber's
+  // per-element tween state survives across polls and a row's expanded
+  // cache-breakdown detail is not wiped out from under an open click.
+  var vendorRowEls = {};
+  var expandedVendor = null;
+  var expandRowEl = null;
+
+  function collapseVendorExpand(){
+    if(expandRowEl){ expandRowEl.remove(); expandRowEl = null; }
+    expandedVendor = null;
+  }
+
+  function toggleVendorExpand(agent){
+    if(expandedVendor === agent){ collapseVendorExpand(); return; }
+    collapseVendorExpand();
+    var rec = vendorRowEls[agent];
+    if(!rec) return;
+    expandedVendor = agent;
+    var tr = document.createElement('tr');
+    tr.className = 'vexpand';
+    var td = document.createElement('td');
+    td.colSpan = 4;
+    td.textContent = 'Loading cache breakdown…';
+    tr.appendChild(td);
+    rec.tr.parentNode.insertBefore(tr, rec.tr.nextSibling);
+    expandRowEl = tr;
+    if(!window.bdevCacheBreakdown) return;
+    window.bdevCacheBreakdown(agent).then(function(t){
+      if(expandedVendor !== agent) return; // collapsed, or another row opened, while this was in flight
+      t = t || {};
+      var miss = (t.fresh || 0) + (t.cache_w || 0);
+      var hit = t.cache_r || 0;
+      var denom = miss + hit;
+      var rate = denom > 0 ? (100 * hit / denom) : 0;
+      td.innerHTML = 'Input today: <b>' + fmtTokens(miss) + '</b> miss / <b style="color:var(--grn)">' +
+        fmtTokens(hit) + '</b> hit &middot; Output: <b>' + fmtTokens(t.out || 0) +
+        '</b> &middot; Hit rate: <b>' + rate.toFixed(0) + '%</b>';
+    }).catch(function(err){
+      console.error('bdevCacheBreakdown failed', err);
+      if(expandedVendor === agent) td.textContent = 'Cache breakdown unavailable';
     });
-    el.innerHTML = html;
+  }
+
+  function ensureVendorRow(tbody, agent, label){
+    var rec = vendorRowEls[agent];
+    if(rec) return rec;
+    var tr = document.createElement('tr');
+    tr.className = 'vrow';
+    var tdName = document.createElement('td');
+    tdName.innerHTML = '<span class="dot" style="background:' + agentColor(agent) + '"></span>' + label;
+    var tdToday = document.createElement('td'); tdToday.className = 'num';
+    var tdWeek = document.createElement('td'); tdWeek.className = 'num';
+    var tdMonth = document.createElement('td'); tdMonth.className = 'num';
+    tr.appendChild(tdName); tr.appendChild(tdToday); tr.appendChild(tdWeek); tr.appendChild(tdMonth);
+    tr.addEventListener('click', function(){ toggleVendorExpand(agent); });
+    tbody.appendChild(tr);
+    rec = { tr: tr, today: tdToday, week: tdWeek, month: tdMonth };
+    vendorRowEls[agent] = rec;
+    return rec;
+  }
+
+  function renderVendorStrip(payload){
+    var tbody = document.getElementById('vendorStrip');
+    if(!tbody) return;
+    var rows = (payload && payload.rows) || [];
+    var seen = {};
+    rows.forEach(function(r){
+      seen[r.agent] = true;
+      var rec = ensureVendorRow(tbody, r.agent, r.agent_label);
+      animateNumber(rec.today, r.today, 400, fmtTokens);
+      animateNumber(rec.week, r.week, 400, fmtTokens);
+      animateNumber(rec.month, r.month, 400, fmtTokens);
+    });
+    Object.keys(vendorRowEls).forEach(function(agent){
+      if(seen[agent]) return;
+      if(expandedVendor === agent) collapseVendorExpand();
+      vendorRowEls[agent].tr.remove();
+      delete vendorRowEls[agent];
+    });
+  }
+
+  function renderHeadline(total){
+    total = total || {};
+    animateNumber(document.getElementById('hlToday'), total.today || 0, 1000, fmtTokens);
+    animateNumber(document.getElementById('hlWeek'), total.week || 0, 1000, fmtTokens);
+    animateNumber(document.getElementById('hlMonth'), total.month || 0, 1000, fmtTokens);
+  }
+
+  var MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function mondayOnOrBefore(d){
+    var m = new Date(d.getTime());
+    var diff = (d.getUTCDay() + 6) % 7; // 0=Monday .. 6=Sunday
+    m.setUTCDate(d.getUTCDate() - diff);
+    return m;
+  }
+
+  // renderHeatmap lays internal/history's own per-day rows out as a
+  // GitHub-style grid: Monday-start weeks (this codebase's own ISO-week
+  // convention, used elsewhere for the same "week" concept), one column
+  // per week, oldest first, 182 days (26 weeks) ending today.
+  function renderHeatmap(payload){
+    var grid = document.getElementById('heatmapGrid');
+    var activeEl = document.getElementById('heatmapActiveDays');
+    if(!grid) return;
+    var byDate = {};
+    ((payload && payload.rows) || []).forEach(function(r){ byDate[r.key] = r; });
+
+    var now = new Date();
+    var today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    var start = new Date(today.getTime());
+    start.setUTCDate(start.getUTCDate() - 181);
+    var gridStart = mondayOnOrBefore(start);
+    var weeks = Math.floor((today.getTime() - gridStart.getTime()) / 604800000) + 1;
+
+    var cols = [];
+    var activeDays = 0;
+    for(var w = 0; w < weeks; w++){
+      var col = [];
+      for(var d = 0; d < 7; d++){
+        var day = new Date(gridStart.getTime());
+        day.setUTCDate(gridStart.getUTCDate() + w * 7 + d);
+        if(day < start || day > today){ col.push(null); continue; }
+        var key = day.toISOString().slice(0, 10);
+        var row = byDate[key];
+        var tokens = row ? row.tokens : 0;
+        var cost = row && row.cost_usd != null ? row.cost_usd : null;
+        if(tokens > 0) activeDays++;
+        col.push({ date: key, tokens: tokens, cost: cost });
+      }
+      cols.push(col);
+    }
+
+    var max = 1;
+    cols.forEach(function(col){ col.forEach(function(c){ if(c && c.tokens > max) max = c.tokens; }); });
+
+    var html = '<div class="heatgrid">';
+    cols.forEach(function(col){
+      html += '<div class="heatcol">';
+      col.forEach(function(c){
+        if(!c){ html += '<i class="heatcell empty"></i>'; return; }
+        var active = c.tokens > 0;
+        var op = active ? (0.15 + 0.85 * Math.min(1, c.tokens / max)) : 0;
+        var title = c.date + ': ' + fmtTokens(c.tokens) + ' tok' + (c.cost != null ? ', ' + fmtCost(c.cost) : '');
+        html += '<i class="heatcell' + (active ? ' active' : '') + '" style="opacity:' + op.toFixed(2) + '" title="' + title + '"></i>';
+      });
+      html += '</div>';
+    });
+    html += '</div><div class="heatmonths">';
+    var lastMonth = null;
+    cols.forEach(function(col){
+      var first = null;
+      for(var i = 0; i < col.length; i++){ if(col[i]){ first = col[i]; break; } }
+      var m = first ? new Date(first.date + 'T00:00:00Z').getUTCMonth() : null;
+      var label = (m !== null && m !== lastMonth) ? MONTH_ABBR[m] : '';
+      if(m !== null) lastMonth = m;
+      html += '<div class="heatmonth">' + label + '</div>';
+    });
+    html += '</div>';
+    grid.innerHTML = html;
+    if(activeEl) activeEl.textContent = activeDays + ' active days';
   }
 
   function renderTicker(turns){
@@ -334,10 +548,11 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
 
   var lastSysmonHistory = [];
 
-  // recentBuckets returns the chart's last N seconds' worth of buckets, for
-  // a rate that reflects a short trailing window rather than only the
+  // recentBuckets returns the chart's last N seconds' worth of buckets,
+  // for a rate that reflects a short trailing window rather than only the
   // current, still-filling bucket (which reads low right after a bucket
-  // boundary and would otherwise make the $/min chip jump every tick).
+  // boundary and would otherwise make both the $/min chip and tok/min jump
+  // every tick).
   function recentBuckets(chart, seconds, bucketSeconds){
     var n = Math.max(1, Math.round(seconds / Math.max(bucketSeconds, 1)));
     return chart.slice(-n);
@@ -346,14 +561,28 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
   function renderHeaderBurn(snap){
     var sessionsEl = document.getElementById('hdrSessions');
     if(sessionsEl) sessionsEl.textContent = (snap.sessions || []).length + ' sessions';
+    var chart = snap.chart || [];
+    var bucketSeconds = snap.bucket_seconds || 60;
+    var recent = recentBuckets(chart, 300, bucketSeconds);
+    var minutes = recent.length * bucketSeconds / 60;
+
     var rateEl = document.getElementById('hdrBurnRate');
     if(rateEl){
-      var chart = snap.chart || [];
-      var bucketSeconds = snap.bucket_seconds || 60;
-      var recent = recentBuckets(chart, 300, bucketSeconds);
-      var minutes = recent.length * bucketSeconds / 60;
       var cost = recent.reduce(function(sum, b){ return sum + (b.cost || 0); }, 0);
       rateEl.textContent = fmtCost(minutes > 0 ? cost / minutes : 0);
+    }
+
+    var tokMinEl = document.getElementById('hdrTokMin');
+    if(tokMinEl){
+      var tokens = 0;
+      recent.forEach(function(bucket){
+        var bySession = bucket.by_session || {};
+        Object.keys(bySession).forEach(function(sid){
+          var c = bySession[sid];
+          tokens += (c.fresh || 0) + (c.cache_write || 0) + (c.cache_read || 0) + (c.output || 0);
+        });
+      });
+      tokMinEl.textContent = fmtTokens(minutes > 0 ? tokens / minutes : 0);
     }
   }
 
@@ -372,8 +601,24 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
 
   function pollVendorStrip(){
     if(!window.bdevVendorStrip) return;
-    window.bdevVendorStrip().then(renderVendorStrip)
-      .catch(function(err){ console.error('bdevVendorStrip failed', err); });
+    window.bdevVendorStrip().then(function(payload){
+      renderVendorStrip(payload);
+      renderHeadline(payload && payload.total);
+    }).catch(function(err){ console.error('bdevVendorStrip failed', err); });
+  }
+
+  // bdevActivityHeatmap returns immediately (its real work runs off the
+  // Go side's UI thread, see main.go's own comment) and delivers its
+  // result through this resolver instead of the call's own Promise, which
+  // would just resolve with undefined. A 182-day scan is not something to
+  // run on bdevBurnNow's 2s cadence either, so this polls at the same
+  // 1-minute cadence as the vendor strip: "today"'s heatmap cell can lag
+  // up to a minute.
+  window.__bdevActivityHeatmapResolve = renderHeatmap;
+
+  function pollActivityHeatmap(){
+    if(!window.bdevActivityHeatmap) return;
+    window.bdevActivityHeatmap();
   }
 
   function pollSysmonHistory(){
@@ -408,6 +653,7 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
   setInterval(poll, 2000);
   setInterval(pollBurn, 2000);
   setInterval(pollVendorStrip, 60000);
+  setInterval(pollActivityHeatmap, 60000);
   setInterval(pollSysmonHistory, 10000);
   setInterval(renderClock, 1000);
   renderClock();
@@ -415,6 +661,7 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
   pollSysmonHistory();
   pollBurn();
   pollVendorStrip();
+  pollActivityHeatmap();
 })();
 </script>
 </body>

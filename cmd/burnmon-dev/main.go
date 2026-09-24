@@ -5,13 +5,17 @@
 // side (burn) and the machine (system) on one screen, one time axis.
 // 04_assets\2026-09-24_burnmon_dev_design.md is the design this follows.
 // Phase 1 wired the system-side sampler and both viewports' empty panels;
-// phase 2 (this one) starts the same live watch and adapter polls
-// cmd\burnmon\app.go runs, into the same shared burnmon.db, and wires the
-// burn zone (chart, session cards, vendor strip, turn ticker) against it.
+// phase 2 starts the same live watch and adapter polls cmd\burnmon\app.go
+// runs, into the same shared burnmon.db, and wires the burn zone (chart,
+// session cards, vendor strip, turn ticker) against it. Phase 2b (this
+// pass) adds the token-monitor items: headline running total, tok/min,
+// the activity heatmap and cache-hit breakdown, design doc section 9.
 package main
 
 import (
 	_ "embed"
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,6 +26,7 @@ import (
 	webview2 "github.com/jchv/go-webview2"
 
 	"burnmon/internal/adapter/codex"
+	"burnmon/internal/history"
 	"burnmon/internal/live"
 	"burnmon/internal/scan"
 	"burnmon/internal/store"
@@ -187,6 +192,85 @@ func main() {
 		log.Println("could not bind bdevVendorStrip:", err)
 	}
 
+	// bdevActivityHeatmap: phase 2b's "N active days" grid, design doc
+	// section 9. history.Build is the same function the History tab's
+	// bmHistory binding runs; no new aggregation query. Per-day tokens and
+	// headline cost for the rolling 26 weeks (182 days). Runs off the UI
+	// thread and resolves through bdevAsyncResolveJS: a 182-day EventsSince
+	// plus history.Build's own aggregation is exactly the "can run past
+	// 50ms on a large store" case cmd\burnmon's own bmHistory binding was
+	// already moved off the UI thread for (see that binding's comment);
+	// this one is polled every minute rather than on demand, so blocking
+	// the window on it would be worse, not better. dayStart is UTC
+	// midnight, matching bdevCacheBreakdown's own day boundary, so the
+	// 182-day window does not shift by an hour across a DST change.
+	if err := w.Bind("bdevActivityHeatmap", func() {
+		go func() {
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			start := time.Now()
+			now := time.Now().UTC()
+			dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+			since := dayStart.AddDate(0, 0, -181)
+			events, err := st.EventsSince(since)
+			if err != nil {
+				log.Println("bdevActivityHeatmap: EventsSince:", err)
+				return
+			}
+			payload := history.Build(events, &cfg, history.Filter{Period: "day"})
+			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+				log.Printf("bdevActivityHeatmap: %v for %d rows", elapsed, len(events))
+			}
+			js, err := bdevAsyncResolveJS("__bdevActivityHeatmapResolve", payload)
+			if err != nil {
+				log.Println("bdevActivityHeatmap: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
+	}); err != nil {
+		log.Println("could not bind bdevActivityHeatmap:", err)
+	}
+
+	// bdevCacheBreakdown: phase 2b's click-to-expand cache-hit breakdown,
+	// scoped to vendor-strip (harness) rows, design doc section 9. Today's
+	// events for that vendor through the same history.Build, returning its
+	// Totals (Fresh/CacheW/CacheR/Out) directly rather than a new struct.
+	if err := w.Bind("bdevCacheBreakdown", func(vendor string) (history.Totals, error) {
+		a.mu.Lock()
+		cfg := a.cfg
+		a.mu.Unlock()
+		now := time.Now().UTC()
+		dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		events, err := st.EventsSince(dayStart)
+		if err != nil {
+			return history.Totals{}, err
+		}
+		today := now.Format("2006-01-02")
+		payload := history.Build(events, &cfg, history.Filter{Period: "day", From: today, To: today, Vendor: vendor})
+		return payload.Totals, nil
+	}); err != nil {
+		log.Println("could not bind bdevCacheBreakdown:", err)
+	}
+
 	w.SetHtml(pageHTML)
 	w.Run()
+}
+
+// bdevAsyncResolveJS mirrors cmd\burnmon\main.go's own asyncResolveJS: a
+// binding that returns immediately and finishes its real work in a
+// goroutine hands the result to a page-side resolver this way instead of
+// through go-webview2's own per-call Promise, which only resolves with
+// whatever the bound function returns synchronously. encoding/json's
+// default HTML escaping rules out a literal "</script>" in the marshalled
+// JSON. No reqID here (unlike bmHistory): bdevActivityHeatmap is a fixed
+// periodic poll with no filter to correlate against, so the latest
+// resolved call simply overwrites whatever the page is showing.
+func bdevAsyncResolveJS(resolverName string, data any) (string, error) {
+	dataJSON, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("window.%s && window.%s(%s)", resolverName, resolverName, dataJSON), nil
 }
