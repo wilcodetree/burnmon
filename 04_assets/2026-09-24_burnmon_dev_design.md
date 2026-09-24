@@ -237,7 +237,54 @@ section 6, and `harness.go`'s mapping table).
 - Exact heatmap colour scale (opacity steps) for the system zone's harness x minute heatmap
   (CPU-weighted, a different grid from the burn zone's activity heatmap in section 9 below):
   phase 3.
-- Export bundle's exact `summary.md` prompt wording and `data.json` field names: phase 4.
+- Export bundle's exact `summary.md` prompt wording and `data.json` field names: phase 4, resolved below.
+
+## 10. Phase 4: advisor and export (added 2026-09-24)
+
+- **Advisor** (`internal/advisor`): one table-driven file, `rules` is a
+  `[]{ID, Eval}` slice, every threshold lives in one `Thresholds` struct
+  (`DefaultThresholds`). Six rules: heavy-turn-pressure, harness-runaway,
+  cache-hit-drop, context-window, hard-faults-memory, self-overhead.
+  `Analyze(Input, *pricing.Config, Thresholds) []Finding` is pure; the
+  binding (`bdevAdvisorNow`) builds `Input` from a 60-minute window
+  (`advisorWindow`, `cmd\burnmon-dev\export_run.go`) and runs off the UI
+  thread via the existing `bdevAsyncResolveJS` pattern, same reasoning as
+  `bdevActivityHeatmap`'s own review finding (even a "cheap" per-poll store
+  read must not run on the UI thread). `live.BuildTurns` (new, exported
+  wrapper around the previously-unexported `buildTurns`) supplies turns
+  over that window instead of the Now page's fixed 30-minute chart window.
+- **Export** (`internal/devexport`): `Assemble` (events, sysmon samples,
+  process-group samples, machine profile, window, findings) to a `Bundle`,
+  then `BuildSummaryMD`/`BuildDataJSON`/`BuildDailyCSV` (pure, string/bytes
+  out) and `Redact` (stable sha256-based hashes for project/owner/client,
+  no per-run salt). `Write` (write.go) is the only function that touches
+  disk, creating `DIR\burnmon-dev_<yyyy-mm-dd_hhmm>\`. Never reads
+  `schema.Event.Title` (prompt-derived text) anywhere in the package, so
+  "never export prompt or response text" holds by construction; guarded by
+  `TestAssemble_NeverExportsPromptOrResponseText`.
+- **Machine profile** (`internal/sysmon/machineprofile_windows.go`):
+  gopsutil for CPU/RAM/OS, `wmic`/`powercfg` shell-outs (fixed arguments,
+  no user input) for GPU name and power plan/source; a stub keeps the
+  package building on non-Windows.
+- **CLI**: `burnmon-dev.exe export --since --until --out DIR [--redact]`
+  (`cmd\burnmon-dev\export_run.go`), `--since`/`--until` accept `YYYY-MM-DD`
+  or RFC3339, default window is the 24 hours before `--until` (default
+  now). Shares `buildExportBundle` with the header button's `bdevExport`
+  binding, which always exports the last 24 hours, not redacted, to
+  `dataDir\exports\`.
+- **UI**: the "Today's Read" panel (previously a phase-4 placeholder) polls
+  `bdevAdvisorNow` every 15s; the header gains an EXPORT button and a
+  status line, both wired to `bdevExport`'s own async-resolve result.
+- **uicheck**: `tools\uicheck` gained a parallel dev-eval-channel path for
+  burnmon-dev.exe (`cmd\burnmon-dev\uicheck_devserver.go`, port 9334, env
+  `BURNMON_DEV_UICHECK`, window title "BurnMon Dev"), driven by
+  `scripts\uicheck-dev.ps1` (called by `scripts\uicheck.ps1` itself when a
+  target check name starts with "d"). Four checks: `d0` (advisor panel
+  renders), `d1` (export button writes real files), `d2`/`d3` (both
+  viewports, screenshot plus a scrollHeight/innerHeight overflow check).
+  Measured on this laptop: this exe's own cold start (window plus the
+  startup backfill) can take upward of 80s, well past burnmon.exe's own
+  20s eval-port wait budget, so `uicheck-dev.ps1`'s own wait is 120s.
 
 ## 9. Phase 2b: token-monitor items (added 2026-09-24, after phase 2 closed)
 

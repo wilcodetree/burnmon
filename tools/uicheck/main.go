@@ -15,6 +15,15 @@ import (
 	"strings"
 )
 
+// isDevCheck reports whether name targets burnmon-dev.exe (its own window
+// title and dev eval port) rather than burnmon.exe: every check name this
+// package registers for burnmon-dev.exe starts with "d" (scripts\uicheck.ps1
+// and the design doc's own "uicheck d* cases" convention), matching the
+// existing "w" prefix's own (informal) meaning for burnmon.exe.
+func isDevCheck(name string) bool {
+	return strings.HasPrefix(name, "d")
+}
+
 type checkFunc func(hwnd uintptr, args []string) error
 
 // checks is the registry every W-item's check lives in; scripts\uicheck.ps1
@@ -56,12 +65,24 @@ func main() {
 	var hwnd uintptr
 	if !selfManaged[name] {
 		var err error
-		hwnd, err = findBurnmonWindow()
-		if err != nil {
-			fatal("%v", err)
-		}
-		if err := ensureWindowSize(hwnd); err != nil {
-			fatal("%v", err)
+		if isDevCheck(name) {
+			currentEvalAddr = evalAddrDev
+			hwnd, err = findBurnmonDevWindow()
+			if err != nil {
+				fatal("%v", err)
+			}
+			// Each d* check sets its own window size (the design doc's two
+			// distinct viewports, 1152x2048 and 1024x1152), rather than one
+			// size main.go picks for every check the way burnmon.exe's own
+			// fixed 1280x860 does.
+		} else {
+			hwnd, err = findBurnmonWindow()
+			if err != nil {
+				fatal("%v", err)
+			}
+			if err := ensureWindowSize(hwnd); err != nil {
+				fatal("%v", err)
+			}
 		}
 	}
 

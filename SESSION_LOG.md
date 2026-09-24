@@ -303,6 +303,77 @@ Monitor mode sections removed, adapter/pages/cost/forecast/config sections rewri
 v0.3.1). Not pushed, not tagged, not committed by this session: see the hub brief and the
 commands handed to Wilco.
 
+## 2026-09-24, v0.4 WS2 phase 4: advisor panel and export
+
+Built the "TODAY'S READ" advisor panel and the AI-ready export bundle on
+`burnmon-dev`, following `02_roadmap\2026-09-24_ws2_burnmon_dev.md`'s phase
+4 scope. `internal/advisor` (six table-driven rules: heavy-turn-pressure,
+harness-runaway, cache-hit-drop, context-window, hard-faults-memory,
+self-overhead), `internal/devexport` (pure `Assemble`/`BuildSummaryMD`/
+`BuildDataJSON`/`BuildDailyCSV`/`Redact`, `Write` the only disk-touching
+function), `internal/sysmon/machineprofile*.go`, the `export` CLI
+subcommand and `bdevAdvisorNow`/`bdevExport` bindings, and a page.html
+panel plus header button. Built test-first throughout (advisor and
+devexport both have real fire/no-fire unit tests, including a dedicated
+privacy test that a prompt/response-text fixture never reaches any of the
+three export files).
+
+A fresh Opus review agent over the whole diff, before committing, caught
+one real must-fix (`live.BuildTurns` had silently inherited the Now page's
+50-turn ticker cap, so a 24-hour export's advisor pass only ever saw its
+newest 50 turns, and could make harness-runaway fire a false positive for
+a harness whose real turns had aged out of that cap) plus several
+should-fix items, all applied and re-verified before commit: heavy-turn-
+pressure no longer counts cache reads toward "heavy" (nearly every late-
+session turn was crossing 200K on cache read alone); both per-turn rules
+now collapse a sustained episode into one finding via a 5-minute cooldown
+instead of one finding per matching turn; `Redact` now salts its hash with
+a per-install random value (`redact_salt`, generated once) instead of an
+unsalted 8-hex-character hash that a short, guessable name like a client
+folder could realistically be reverse-brute-forced from; the export folder
+name now includes seconds and uses local time (was colliding on two
+exports in the same UTC minute); `--until` on a bare `YYYY-MM-DD` now
+means through the end of that day (was excluding the whole day, since
+Assemble's window is exclusive at the upper bound); and a documented
+caveat that `burnmon-dev.exe`, built `-H windowsgui`, needs
+`Start-Process -Wait -RedirectStandardOutput` (or an output redirect) for
+the `export` subcommand's own stdout to be visible from a shell.
+
+Ran a real 24-hour export against the live store both times (before and
+after the review fixes): `summary.md` reads as a genuinely usable prompt
+(machine profile, totals per harness/model, top 10 expensive turns, real
+pressure episodes, advisor findings, known limits); real sizes measured
+this session ranged from about 3.4KB to 11.5KB for `summary.md` (well
+under the ~30KB budget; a synthetic 720-turn stress test in
+`devexport_test.go` also stays under budget), 1.1-1.6MB for `data.json`
+(no size budget applies), under 1KB for `daily.csv`. The advisor's own
+self-overhead rule fired on real data both times, correctly naming
+`burnmon-dev.exe`'s own known shared-ingest memory climb (design doc,
+"both exes climb to about 900 MB... a BurnMon bug on main, handled in a
+separate session") rather than a false alarm.
+
+Built a parallel `tools\uicheck`/`scripts\uicheck-dev.ps1` dev-eval-channel
+path for `burnmon-dev.exe` (port 9334, env `BURNMON_DEV_UICHECK`, window
+title "BurnMon Dev": none of this existed before this session) since the
+plan's own verify list calls for "uicheck d* cases". Four checks (`d0`-
+`d3`) all ran and passed against the real running window this session:
+advisor panel populates with real findings, the header EXPORT button
+writes real files end to end (click through the dev eval channel, then
+confirmed on disk), and both viewports screenshot with no content
+clipping (`d2` at this session's own screen came within about 16px width /
+39px height of the 1152x2048 target; `d3`'s known "system zone scrolls
+here" gap, design doc section 2.2, "not wired yet", is unchanged by this
+phase and was not asserted away). This laptop's own cold start for
+`burnmon-dev.exe` (window plus startup backfill) measured up to ~90s this
+session, well past `burnmon.exe`'s 20s equivalent wait budget; the dev
+script's own wait is 120s.
+
+`go vet ./...`, `go test ./... -count=1` (every package, including the new
+ones) and `.\build.ps1` all green; `node --check`-equivalent parse on
+page.html's script tag clean. Committed on `burnmon-dev`, not pushed,
+tagged or merged, per house process. Left alone, per the plan's own scope:
+the shared memory/handle-growth bug, plan limits, phase 5.
+
 ## 2026-09-24, v0.3 V3-6: release candidate, Done-when and VERIFY pass, v0.3.0
 
 Read `02_roadmap\2026-09-23_v0.3_spec.md` sections 5 (Done when) and 6 (VERIFY carried).

@@ -7,18 +7,38 @@
 # own page. Run from the repo root in PowerShell:
 #   .\scripts\uicheck.ps1                 # runs every registered check
 #   .\scripts\uicheck.ps1 w0 w1           # runs only the named checks
+#   .\scripts\uicheck.ps1 d0 d1 d2 d3     # runs burnmon-dev.exe's own checks
+#
+# A "d"-prefixed check targets burnmon-dev.exe instead: its own dev eval
+# channel (BURNMON_DEV_UICHECK=1, cmd\burnmon-dev\uicheck_devserver.go),
+# port 9334 (not burnmon.exe's 9333) and window title "BurnMon Dev" (not
+# "BurnMon"), so either exe can be driven without the other's channel or
+# window getting in the way (the design doc's own normal case: both running
+# at once). This script only runs one exe's checks per invocation; do not
+# mix a "w" and a "d" check in the same call.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
+
+$targetChecks = $args
+if ($targetChecks.Count -eq 0) {
+    $targetChecks = @("w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8")
+}
+
+$devChecks = $targetChecks | Where-Object { $_.StartsWith("d") }
+$otherChecks = $targetChecks | Where-Object { -not $_.StartsWith("d") }
+if ($devChecks.Count -gt 0 -and $otherChecks.Count -gt 0) {
+    Write-Host "uicheck: cannot mix a burnmon-dev.exe check ($($devChecks -join ', ')) with a burnmon.exe check ($($otherChecks -join ', ')) in one call; run them separately."
+    exit 1
+}
+if ($devChecks.Count -gt 0) {
+    & "$PSScriptRoot\uicheck-dev.ps1" @targetChecks
+    exit $LASTEXITCODE
+}
 
 $exe = Join-Path (Get-Location) "burnmon.exe"
 if (-not (Test-Path $exe)) {
     Write-Host "burnmon.exe not found; run .\build.ps1 first."
     exit 1
-}
-
-$targetChecks = $args
-if ($targetChecks.Count -eq 0) {
-    $targetChecks = @("w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8")
 }
 # Self-managed checks (tools\uicheck\main.go's own selfManaged map: w1 tests
 # startup itself) start and stop their own burnmon.exe instance, so each must

@@ -46,6 +46,12 @@ var (
 
 const windowTitle = "BurnMon"
 
+// windowTitleDev is burnmon-dev.exe's own window title (cmd\burnmon-dev
+// app.go's windowTitle constant), distinct from "BurnMon" so FindWindowW's
+// exact-match lookup never confuses the two exes when both run at once
+// (the design doc's own normal-case scenario).
+const windowTitleDev = "BurnMon Dev"
+
 // Without this, GetWindowRect/ClientToScreen/PrintWindow all return
 // DPI-virtualized coordinates and a scaled-down bitmap for a DPI-aware
 // window like burnmon.exe's (any WebView2 host is DPI-aware by default),
@@ -84,6 +90,20 @@ func findBurnmonWindowFast() uintptr {
 	}
 	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
 	return hwnd
+}
+
+// findBurnmonDevWindow is findBurnmonWindow for burnmon-dev.exe's own
+// window title.
+func findBurnmonDevWindow() (uintptr, error) {
+	title, err := windows.UTF16PtrFromString(windowTitleDev)
+	if err != nil {
+		return 0, err
+	}
+	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
+	if hwnd == 0 {
+		return 0, fmt.Errorf("no window titled %q found; is burnmon-dev.exe running?", windowTitleDev)
+	}
+	return hwnd, nil
 }
 
 func isWindow(hwnd uintptr) bool {
@@ -136,6 +156,14 @@ func windowTitleText(hwnd uintptr) string {
 // previous run or manual resize. Every check calls this first so results
 // are deterministic and comparable across runs.
 func ensureWindowSize(hwnd uintptr) error {
+	return ensureWindowSizeWH(hwnd, 1280, 860)
+}
+
+// ensureWindowSizeWH is ensureWindowSize with an explicit size, for
+// burnmon-dev.exe's own two viewports (1152x2048 primary, 1024x1152
+// secondary, design doc "Viewports") rather than burnmon.exe's fixed
+// 1280x860.
+func ensureWindowSizeWH(hwnd uintptr, width, height int32) error {
 	const swRestore = 9
 	procShowWindow.Call(hwnd, swRestore)
 	// BitBlt-based screenshot (screenshot, win32.go) samples whatever DWM
@@ -148,7 +176,7 @@ func ensureWindowSize(hwnd uintptr) error {
 	// forces it to the front regardless, the standard trick for that.
 	const hwndTopmost = ^uintptr(0) // -1
 	const swpShowWindow = 0x0040
-	ret, _, err := procSetWindowPos.Call(hwnd, hwndTopmost, 100, 100, 1280, 860, swpShowWindow)
+	ret, _, err := procSetWindowPos.Call(hwnd, hwndTopmost, 100, 100, uintptr(width), uintptr(height), swpShowWindow)
 	if ret == 0 {
 		return fmt.Errorf("SetWindowPos: %w", err)
 	}

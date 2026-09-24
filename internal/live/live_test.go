@@ -256,6 +256,46 @@ func TestBuildSnapshot_Turns(t *testing.T) {
 	}
 }
 
+// TestBuildSnapshot_TurnsCappedAtTicker guards I3's own "capped at 50
+// lines" for the Now page's turn ticker (snap.Turns, via BuildSnapshot).
+func TestBuildSnapshot_TurnsCappedAtTicker(t *testing.T) {
+	now := time.Now().UTC()
+	var events []schema.Event
+	for i := 0; i < 60; i++ {
+		events = append(events, schema.Event{
+			Vendor: "anthropic", Agent: "claude-code", SessionID: "s", RequestID: "r" + string(rune('a'+i)),
+			Model: "claude-sonnet-5", At: now.Add(time.Duration(i) * time.Second), Input: 100, Output: 50,
+		})
+	}
+	snap := BuildSnapshot(events, testConfig(), now.Add(time.Minute))
+	if len(snap.Turns) != turnTickerCap {
+		t.Fatalf("want the ticker capped at %d turns, got %d", turnTickerCap, len(snap.Turns))
+	}
+}
+
+// TestBuildTurns_NoCapOverTickerLimit is the regression for the bug review
+// caught, 2026-09-24: BuildTurns (the exported function phase 4's advisor
+// rule engine and export bundle both call, over an arbitrary window wider
+// than the Now page's 30-minute chart) must return every real turn in the
+// window, not silently inherit the Now page ticker's 50-turn cap. A caller
+// that only ever saw the newest 50 turns of a busy day would under-count
+// totals and could make a rule like "this harness had zero turns" fire for
+// a harness whose real turns had simply aged out of the cap.
+func TestBuildTurns_NoCapOverTickerLimit(t *testing.T) {
+	now := time.Now().UTC()
+	var events []schema.Event
+	for i := 0; i < 60; i++ {
+		events = append(events, schema.Event{
+			Vendor: "anthropic", Agent: "claude-code", SessionID: "s", RequestID: "r" + string(rune('a'+i)),
+			Model: "claude-sonnet-5", At: now.Add(time.Duration(i) * time.Minute), Input: 100, Output: 50,
+		})
+	}
+	turns := BuildTurns(events, testConfig(), now.Add(-time.Hour), now.Add(2*time.Hour))
+	if len(turns) != 60 {
+		t.Fatalf("want all 60 turns uncapped, got %d", len(turns))
+	}
+}
+
 // TestSnapshotChangesOnAppend is the v0.1 Step 3 done-when: "a test feeds a
 // fixture append to a temp trail and asserts the snapshot changes." Parses a
 // real trail file through the claude adapter twice, incrementally, exactly
