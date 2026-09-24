@@ -1,11 +1,11 @@
 # BurnMon Dev, design (phase 0)
 
 Date: 2026-09-24
-Status: phases 0-2 built against this note (this session, 2026-09-24); this session did not
-itself confirm Wilco's phase 0 sign-off happened out of band before phase 1 started. The small
-corrections below against what phases 1-2 actually built are this session's own changes,
-flagged inline rather than folded in silently (found by this session's own pre-commit Opus
-review of the phase 0-2 diff).
+Status: phases 0-2 and 2b built against this note (this session, 2026-09-24); this session did
+not itself confirm Wilco's phase 0 sign-off happened out of band before phase 1 started. Section
+9 (added after phase 2 closed) and the small corrections against what phases 1-2 actually built
+are this session's own changes, flagged inline rather than folded in silently (the corrections
+came from this session's own pre-commit Opus review of the phase 0-2 diff).
 Plan: `02_roadmap\2026-09-24_ws2_burnmon_dev.md`
 Read for this pass: `AGENTS.md`, `C:\ZND\AGENTS.md`, `STATUS.md`, `SESSION_LOG.md` (top entry),
 `C:\ZND\projects\perfadvisor\README.md` and its `docs\`,
@@ -139,6 +139,7 @@ only spacing. Nothing below 1000 px wide is required (plan, Viewports).
 | Session cards | `live.Snapshot.Sessions` via `bdevBurnNow`, unchanged |
 | Vendor strip | `internal\vendorstrip`, called directly, unchanged |
 | Turn ticker | `live.Snapshot.Turns`, each already carrying its own `Finding` (`live` runs `internal\insight` internally to build it; `cmd\burnmon-dev` does not call `internal\insight` directly, correcting this row's original wording) |
+| Headline total, tok/min, activity heatmap, cache-hit breakdown (phase 2b) | see section 9 |
 | CPU total + per-core heat grid | `internal\sysmon` (copied perfadvisor `cpu.Percent`, per-core) |
 | Memory / disk / network / GPU tiles + sparklines | `internal\sysmon` live sample plus `burnmon-dev.db` history for the sparkline |
 | Process groups per harness | `internal\sysmon` process table (gopsutil) grouped by the mapping rules (section 4), summed CPU/RAM/IO, sparkline from `burnmon-dev.db` |
@@ -177,15 +178,17 @@ Reused verbatim (`C:\ZND\_archive\marketadvisor\internal\server\web\index.html`)
 - Font: `--mono: Consolas,"Cascadia Mono","IBM Plex Mono",monospace` (a custom property, so every
   rule that sets its own `font` shorthand still gets the full stack instead of resetting to a
   bare generic `monospace`, `13px/1.45` on `body`, dense mono type.
-- `header`: black background, 2px solid `var(--amber)` bottom border, fixed `height:44px`
-  through phase 2 (phase 2b's header content needs it to wrap instead; that CSS change lands
-  with that phase).
+- `header`: black background, 2px solid `var(--amber)` bottom border, `min-height:44px` (wraps
+  to two lines at the secondary viewport if the header's chips overflow one, needed once phase
+  2b's headline block joined the header).
 - Panel headers (`.panelhead`, this file originally called it `.phead`): uppercase,
   `var(--amber)`, **11px** (not 12px), `letter-spacing:.08em` (not `.1em`), `font-weight:700`,
   background `#10151d`, bottom border `var(--bd)`.
 - Panel body (`.panel`): background `var(--panel)`, border `var(--bd)`.
 - Heatmap tiles: same `.tile` recipe (padding, `min-height`, hover outline `var(--amber)`),
-  intensity by opacity on the same green/red pair rather than a new palette.
+  intensity by opacity on the same green/red pair rather than a new palette. (The burn zone's
+  own activity heatmap, section 9, reuses this same opacity-intensity idea, not the `.tile`
+  markup itself.)
 - Grid: marketadvisor's 8px `gap`/`padding` narrows to 4px at the zone/panel level (`main`,
   `.zonebody`) in BurnMon Dev, since this is a WebView2 page on a fixed viewport with more panels
   to fit, not a resizable browser tab. Individual components keep whatever gap actually fits
@@ -232,7 +235,51 @@ section 6, and `harness.go`'s mapping table).
   and the advisor panel, since it needs the real `PressureInfo` ranges from a live machine to
   calibrate against, not a guess at phase 0.
 - Exact heatmap colour scale (opacity steps) for the system zone's harness x minute heatmap
-  (CPU-weighted): phase 3.
+  (CPU-weighted, a different grid from the burn zone's activity heatmap in section 9 below):
+  phase 3.
 - Export bundle's exact `summary.md` prompt wording and `data.json` field names: phase 4.
-- Phase 2b (token-monitor items: headline running total, tok/min, activity heatmap,
-  cache-hit breakdown) is next; its own design section lands with that phase's own commit.
+
+## 9. Phase 2b: token-monitor items (added 2026-09-24, after phase 2 closed)
+
+Plan section "Taken from token-monitor", items 1-4 (item 5, export, is phase 4). No new
+store or SQL: every number below comes from a package the burn zone already calls
+(`internal/history`, `internal/vendorstrip`, `live.Snapshot`), reused as-is.
+
+- **Headline total with running numbers.** Header gains a headline block: today's token
+  total (large), week and month beside it (small), from `bdevVendorStrip`'s existing
+  `Total` row (`Today`/`Week`/`Month`), already polled every 60s. `animateNumber` (RAF,
+  easeOutQuart, ~1000ms for the headline, ~400ms for vendor-strip row cells, cancels an
+  in-flight tween before starting the next, `tabular-nums`, instant under
+  `prefers-reduced-motion`) replaces the plain `textContent` writes. **Bar fills are not
+  smoothed in 2b**: the burn chart's bars and the session cards' context bars are rebuilt
+  wholesale via `innerHTML` on every poll (`renderBars`, `renderSessionCards`), so a CSS
+  `transition` on their height/width has no previous value to animate from and would be
+  dead weight; an earlier draft of this note claimed otherwise, caught by this session's
+  own pre-commit Opus review. Smoothing those would need the same reuse-the-DOM-node
+  approach `ensureVendorRow` already uses for the vendor strip, deferred rather than
+  done here, since neither the brief's Done-when nor phase 2b's own scope requires it.
+- **Burn-rate framing.** `hdrTokMin` next to the existing `$/min` chip: tokens summed
+  across `bdevBurnNow`'s already-polled chart buckets falling in the last 5 minutes,
+  divided by 5, formatted with the same `fmtTokens` the rest of the page uses ("about
+  1.2M tok/min"). No new binding: `bdevBurnNow`'s chart already carries this.
+- **Activity heatmap, "N active days".** New `bdevActivityHeatmap` binding: `EventsSince`
+  (182 days back) into `history.Build(events, cfg, Filter{Period:"day"})`, the same
+  function the History tab's `bmHistory` runs, returning per-day `Tokens` and
+  `CostUSD`. The page lays that out as a 26-ish-column x 7-row grid (Monday-start weeks,
+  matching this codebase's own ISO-week convention elsewhere), one cell per day,
+  intensity by tokens (opacity scale against the window's own max, not a fixed
+  threshold), month labels under the grid where the month changes, "N active days"
+  (tokens > 0) in the panel header, hover title `yyyy-mm-dd: tokens, cost`. Placed in the
+  burn zone, between the vendor strip and the turn ticker; the ticker (`flex:1`, already
+  scrolling) absorbs the added height so neither viewport gains a scrollbar on the page
+  itself. Polled once a minute, same cadence as the vendor strip: a 182-day scan is not
+  something to run on `bdevBurnNow`'s 2s cadence (F1's own "windowed, not whole-table"
+  reasoning, `internal/store/store.go`'s `EventsSince` doc comment).
+- **Cache-hit breakdown.** Clicking a vendor-strip row calls a new `bdevCacheBreakdown
+  (vendor string)` binding: today's events for that vendor through the same
+  `history.Build`, returning its `Totals` (`Fresh`, `CacheW`, `CacheR`, `Out`) directly,
+  no new struct. The row expands a detail line: input miss (`Fresh+CacheW`) vs. hit
+  (`CacheR`), output, and hit rate. Scoped to harness rows only, not harness-or-model:
+  the vendor strip has no model dimension today, and phase 2b does not add one (that
+  would be a new panel outside this section's brief items, not a reuse of an existing
+  one): a ruling, not a silent narrowing, recorded here per house process.
