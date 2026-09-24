@@ -115,6 +115,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .heatcell.empty{background:transparent}
 .heatmonths{display:flex; gap:2px; margin-top:3px}
 .heatmonth{width:9px; font-size:8px; color:var(--dim); overflow:visible; white-space:nowrap}
+
+/* harness x minute heatmap, phase 3 */
+.heatrow{display:flex; align-items:center; gap:6px; margin-bottom:2px}
+.heatrow-label{width:120px; flex:0 0 auto; font-size:11px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.heatrow-cells{display:flex; gap:1px; flex-wrap:nowrap}
 </style>
 </head>
 <body>
@@ -140,6 +145,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       <div class="burnchart panel">
         <div class="bars" id="burnBars"></div>
         <svg class="cpuline" id="cpuLine" preserveAspectRatio="none"></svg>
+        <svg class="cpuline" id="turnMarkers" preserveAspectRatio="none"></svg>
       </div>
       <div class="cards" id="sessionCards"></div>
       <div class="panel" style="flex:0 0 auto">
@@ -175,7 +181,18 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
           <div class="tile"><b>GPU</b><div class="v" id="tileGPU">-</div></div>
         </div>
       </div>
-      <div class="panel" style="flex:1"><div class="placeholder">Process groups, the harness&times;minute heatmap and Today's Read land in phase 3, once internal/sysmon's harness classifier is wired to a live process scan.</div></div>
+      <div class="panel" style="flex:0 0 auto">
+        <div class="panelhead">Process groups</div>
+        <table>
+          <thead><tr><th></th><th>CPU</th><th>RAM</th><th>IO/s</th><th>Trend</th></tr></thead>
+          <tbody id="processGroups"></tbody>
+        </table>
+      </div>
+      <div class="panel" style="flex:1; display:flex; flex-direction:column">
+        <div class="panelhead">Heatmap, harness &times; minute (CPU-weighted)</div>
+        <div class="heatmapwrap" style="flex:1; overflow-y:auto"><div id="harnessHeatmap"></div></div>
+      </div>
+      <div class="panel" style="flex:0 0 auto"><div class="placeholder" style="padding:14px">Today's Read (the advisor panel) lands in phase 4.</div></div>
     </div>
   </section>
 </main>
@@ -348,6 +365,37 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     svg.innerHTML = pts.length
       ? '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#4da6ff" stroke-width="1.5" opacity="0.85" vector-effect="non-scaling-stroke"/>'
       : '';
+  }
+
+  // renderTurnMarkers draws one small tick per turn at its real position in
+  // the 30-minute window (design doc: "agent turns as markers on the
+  // system charts"), interpolated linearly between the chart's first and
+  // last bucket timestamps rather than snapped to the nearest bucket, so a
+  // burst of turns inside one bucket still spreads out left-to-right. A
+  // turn with a finding (insight.Finding) draws taller and in that
+  // finding's own tag colour; a plain turn draws short and dim.
+  var FINDING_MARKER_COLOR = {
+    'expensive-turn': '#ff4b4b', 'context-runway': '#ffd75f',
+    're-prefill': '#38d3e3', 'compaction': '#d68cf0'
+  };
+  function renderTurnMarkers(turns, chart){
+    var svg = document.getElementById('turnMarkers');
+    if(!svg) return;
+    if(!chart || chart.length < 2 || !turns || !turns.length){ svg.innerHTML = ''; return; }
+    var t0 = new Date(chart[0].at).getTime();
+    var t1 = new Date(chart[chart.length - 1].at).getTime();
+    if(t1 <= t0){ svg.innerHTML = ''; return; }
+    var html = '';
+    turns.forEach(function(t){
+      var x = 100 * (new Date(t.at).getTime() - t0) / (t1 - t0);
+      if(x < 0 || x > 100) return;
+      var color = t.finding ? (FINDING_MARKER_COLOR[t.finding.Kind] || '#ffa028') : 'rgba(255,255,255,.25)';
+      var y2 = t.finding ? 100 : 12;
+      html += '<line x1="' + x.toFixed(1) + '" y1="0" x2="' + x.toFixed(1) + '" y2="' + y2 +
+        '" stroke="' + color + '" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    });
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.innerHTML = html;
   }
 
   function renderSessionCards(sessions){
@@ -595,6 +643,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       var agentBySession = agentBySessionMap(snap.sessions, snap.turns);
       renderBars(snap.chart, agentBySession);
       renderCPULine(lastSysmonHistory, snap.chart);
+      renderTurnMarkers(snap.turns, snap.chart);
       renderSessionCards(snap.sessions);
       renderTicker(snap.turns);
       renderHeaderBurn(snap);
@@ -630,6 +679,16 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     }).catch(function(err){ console.error('bdevSysmonHistory failed', err); });
   }
 
+  function renderPressureChip(score){
+    var el = document.getElementById('pressureChip');
+    if(!el) return;
+    el.textContent = 'PRESSURE ' + score;
+    var color = score < 45 ? 'var(--grn)' : score < 75 ? 'var(--yel)' : 'var(--red)';
+    el.style.color = color;
+    el.style.borderColor = color;
+    el.style.background = 'transparent';
+  }
+
   function poll(){
     if(!window.bdevSysmonNow){ return; }
     window.bdevSysmonNow().then(function(sm){
@@ -647,13 +706,115 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       var net = document.getElementById('tileNet');
       if(net) net.textContent = fmtBytes(sm.NetDownBps + sm.NetUpBps);
       var gpu = document.getElementById('tileGPU');
-      if(gpu) gpu.textContent = (sm.GPUPct || 0).toFixed(0) + '%';
+      if(gpu) gpu.textContent = (sm.GPUPct >= 0 ? sm.GPUPct.toFixed(0) : '-') + '%';
       renderCores(sm.Cores);
+      renderPressureChip(sm.pressure_score);
     }).catch(function(err){ console.error('bdevSysmonNow failed', err); });
+  }
+
+  var HARNESS_LABEL = {
+    'claude': 'Claude Code', 'claude-desktop': 'Claude Desktop', 'codex': 'Codex',
+    'copilot-cli': 'Copilot CLI', 'copilot-vscode': 'Copilot (VS Code)', 'hermes': 'Hermes',
+    'wsl': 'WSL', 'burnmon-dev': 'BurnMon Dev', 'node': 'node (unclassified)'
+  };
+  // internal/sysmon's Harness values are their own vocabulary ("claude",
+  // not "claude-code"), separate from AGENT_COLOR above, which is keyed by
+  // schema.Event.Agent (the burn side's own vocabulary); this table is
+  // deliberately its own map rather than reusing AGENT_COLOR with the
+  // wrong keys.
+  var HARNESS_COLOR = {
+    'claude': '#ffa028', 'claude-desktop': '#ffc46b', 'codex': '#4da6ff',
+    'copilot-cli': '#38d3e3', 'copilot-vscode': '#38d3e3', 'hermes': '#d68cf0',
+    'wsl': '#66788c', 'burnmon-dev': '#66788c', 'node': '#66788c'
+  };
+  function harnessColor(h){ return HARNESS_COLOR[h] || '#66788c'; }
+
+  function renderProcessGroups(now, historyRows){
+    var tbody = document.getElementById('processGroups');
+    if(!tbody) return;
+    var byHarness = {};
+    (historyRows || []).forEach(function(r){
+      (byHarness[r.Harness] || (byHarness[r.Harness] = [])).push(r);
+    });
+    var order = (now || []).slice().sort(function(a, b){ return b.CPUPct - a.CPUPct; });
+    var html = '';
+    order.forEach(function(row){
+      var series = (byHarness[row.Harness] || []).slice(-30);
+      var maxCPU = series.reduce(function(m, r){ return Math.max(m, r.CPUPct); }, 1);
+      var pts = series.map(function(r, i){
+        var x = series.length > 1 ? (i / (series.length - 1)) * 42 : 0;
+        var y = 12 - Math.min(12, 12 * r.CPUPct / maxCPU);
+        return x.toFixed(1) + ',' + y.toFixed(1);
+      }).join(' ');
+      html += '<tr><td><span class="dot" style="background:' + harnessColor(row.Harness) + '"></span>' +
+        (HARNESS_LABEL[row.Harness] || row.Harness) + '</td>' +
+        '<td class="num">' + row.CPUPct.toFixed(0) + '%</td>' +
+        '<td class="num">' + (row.MemMB / 1024).toFixed(1) + 'G</td>' +
+        '<td class="num">' + fmtBytes(row.IOBps) + '</td>' +
+        '<td><svg width="42" height="12" viewBox="0 0 42 12">' +
+        (pts ? '<polyline points="' + pts + '" fill="none" stroke="' + harnessColor(row.Harness) + '" stroke-width="1.2"/>' : '') +
+        '</svg></td></tr>';
+    });
+    tbody.innerHTML = html || '<tr><td colspan="5" style="color:var(--dim);padding:8px">No classified processes yet</td></tr>';
+  }
+
+  // renderHarnessHeatmap buckets the same history rows into one-minute
+  // columns per harness, CPU-weighted (design doc section 3): the sum of
+  // every sample's CPUPct for that harness inside that minute, so a
+  // harness with several processes each briefly busy still reads as a warm
+  // cell rather than diluted by however many 2s ticks landed in it.
+  function renderHarnessHeatmap(rows){
+    var el = document.getElementById('harnessHeatmap');
+    if(!el) return;
+    if(!rows || !rows.length){ el.innerHTML = ''; return; }
+
+    var byHarness = {};
+    var minMin = Infinity, maxMin = -Infinity;
+    rows.forEach(function(r){
+      var minuteKey = Math.floor(new Date(r.Ts).getTime() / 60000);
+      minMin = Math.min(minMin, minuteKey);
+      maxMin = Math.max(maxMin, minuteKey);
+      var byMin = (byHarness[r.Harness] || (byHarness[r.Harness] = {}));
+      byMin[minuteKey] = (byMin[minuteKey] || 0) + r.CPUPct;
+    });
+    var harnesses = Object.keys(byHarness).sort(function(a, b){
+      var sa = Object.values(byHarness[a]).reduce(function(x, y){ return x + y; }, 0);
+      var sb = Object.values(byHarness[b]).reduce(function(x, y){ return x + y; }, 0);
+      return sb - sa;
+    });
+    var cols = maxMin - minMin + 1;
+    var max = 1;
+    harnesses.forEach(function(h){
+      Object.keys(byHarness[h]).forEach(function(m){ if(byHarness[h][m] > max) max = byHarness[h][m]; });
+    });
+
+    var html = '';
+    harnesses.forEach(function(h){
+      html += '<div class="heatrow"><span class="heatrow-label">' + (HARNESS_LABEL[h] || h) + '</span><span class="heatrow-cells">';
+      for(var m = minMin; m <= maxMin; m++){
+        var v = byHarness[h][m] || 0;
+        var op = v > 0 ? (0.12 + 0.85 * Math.min(1, v / max)) : 0;
+        html += '<i class="heatcell' + (v > 0 ? ' active' : '') + '" style="background:' + harnessColor(h) + ';opacity:' + op.toFixed(2) + '"></i>';
+      }
+      html += '</span></div>';
+    });
+    el.innerHTML = html;
+  }
+
+  function pollProcessGroups(){
+    if(!window.bdevProcessGroupsNow || !window.bdevProcessGroupsHistory) return;
+    Promise.all([window.bdevProcessGroupsNow(), window.bdevProcessGroupsHistory(60)])
+      .then(function(results){
+        var now = results[0], history = results[1];
+        renderProcessGroups(now, history);
+        renderHarnessHeatmap(history);
+      })
+      .catch(function(err){ console.error('process groups poll failed', err); });
   }
 
   setInterval(poll, 2000);
   setInterval(pollBurn, 2000);
+  setInterval(pollProcessGroups, 10000);
   setInterval(pollVendorStrip, 60000);
   setInterval(pollActivityHeatmap, 60000);
   setInterval(pollSysmonHistory, 10000);

@@ -16,12 +16,13 @@ import (
 // over the tick window is useful. Not safe for concurrent use; call Tick
 // from one goroutine, matching perfadvisor's own sample() (internal/tui/
 // sample.go), the source this file's approach is copied from (perfadvisor
-// main 2ed8046). GPU and PDH pressure counters are not wired yet: Sample's
-// GPUPct stays 0 until phase 3 adds them alongside the system zone.
+// main 2ed8046). pdh holds one PDH query for the process's lifetime
+// (pressure_windows.go), opened lazily on the first Tick.
 type Sampler struct {
 	prevIO  map[string]disk.IOCountersStat
 	prevNet *gnet.IOCountersStat
 	prevAt  time.Time
+	pdh     pdhState
 }
 
 func NewSampler() *Sampler { return &Sampler{} }
@@ -74,17 +75,18 @@ func (s *Sampler) Tick() (Sample, error) {
 		s.prevNet = &cur
 	}
 
+	pt := s.pdh.readTick()
+	if pt.ok {
+		sm.CPUQueue = pt.cpuQueue
+		sm.CPUPerfPct = pt.cpuPerfPct
+		sm.DiskQueueLen = pt.diskQueue
+		sm.DiskLatMs = pt.diskLatMs
+		sm.HardFaults = pt.hardFaults
+		sm.GPUPct = pt.gpuPct
+	} else {
+		sm.CPUQueue, sm.CPUPerfPct, sm.DiskQueueLen, sm.DiskLatMs, sm.HardFaults, sm.GPUPct = -1, -1, -1, -1, -1, -1
+	}
+
 	s.prevAt = now
 	return sm, nil
-}
-
-// deltaU64 returns cur-old, or 0 when a counter went backwards (a driver
-// reset, a device that disappeared and came back under the same key): a
-// wrapped uint64 subtraction would otherwise report a spurious multi-
-// exabyte spike for one tick.
-func deltaU64(cur, old uint64) uint64 {
-	if cur < old {
-		return 0
-	}
-	return cur - old
 }

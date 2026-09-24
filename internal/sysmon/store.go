@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -47,7 +48,12 @@ CREATE TABLE IF NOT EXISTS sysmon_samples (
 	disk_write_bps REAL NOT NULL,
 	net_down_bps   REAL NOT NULL,
 	net_up_bps     REAL NOT NULL,
-	gpu_pct        REAL NOT NULL
+	gpu_pct        REAL NOT NULL,
+	cpu_queue      REAL NOT NULL DEFAULT -1,
+	cpu_perf_pct   REAL NOT NULL DEFAULT -1,
+	disk_queue_len REAL NOT NULL DEFAULT -1,
+	disk_lat_ms    REAL NOT NULL DEFAULT -1,
+	hard_faults    REAL NOT NULL DEFAULT -1
 );
 CREATE TABLE IF NOT EXISTS process_group_samples (
 	ts       INTEGER NOT NULL,
@@ -58,6 +64,33 @@ CREATE TABLE IF NOT EXISTS process_group_samples (
 );
 CREATE INDEX IF NOT EXISTS idx_process_group_samples_ts ON process_group_samples(ts);
 `
+
+// pressureColumns is phase 3's additive migration for a sysmon_samples
+// table created before the pressure signals existed (this workstream has
+// no versioned migration table yet, unlike internal/store's schema_version:
+// one small ALTER TABLE per new column, each ignored specifically for
+// "duplicate column name", is enough for a store this size). A brand-new
+// database never hits this path: the CREATE TABLE above already has every
+// column.
+var pressureColumns = []string{
+	`ALTER TABLE sysmon_samples ADD COLUMN cpu_queue REAL NOT NULL DEFAULT -1`,
+	`ALTER TABLE sysmon_samples ADD COLUMN cpu_perf_pct REAL NOT NULL DEFAULT -1`,
+	`ALTER TABLE sysmon_samples ADD COLUMN disk_queue_len REAL NOT NULL DEFAULT -1`,
+	`ALTER TABLE sysmon_samples ADD COLUMN disk_lat_ms REAL NOT NULL DEFAULT -1`,
+	`ALTER TABLE sysmon_samples ADD COLUMN hard_faults REAL NOT NULL DEFAULT -1`,
+}
+
+func addPressureColumns(db *sql.DB) error {
+	for _, stmt := range pressureColumns {
+		if _, err := db.Exec(stmt); err != nil {
+			if strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
+			return fmt.Errorf("sysmon: %s: %w", stmt, err)
+		}
+	}
+	return nil
+}
 
 // Open creates path's parent folder if needed and opens (creating if
 // absent) the SQLite file at path, then ensures both tables exist. Safe to
@@ -87,6 +120,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("sysmon: create schema: %w", err)
 	}
+	if err := addPressureColumns(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db}, nil
 }
 
@@ -102,15 +139,20 @@ func (s *Store) InsertSample(sm Sample) error {
 	}
 	_, err = s.db.Exec(`
 		INSERT INTO sysmon_samples
-			(ts, cpu_pct, cores, mem_used_mb, mem_total_mb, disk_read_bps, disk_write_bps, net_down_bps, net_up_bps, gpu_pct)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(ts, cpu_pct, cores, mem_used_mb, mem_total_mb, disk_read_bps, disk_write_bps, net_down_bps, net_up_bps, gpu_pct,
+			 cpu_queue, cpu_perf_pct, disk_queue_len, disk_lat_ms, hard_faults)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(ts) DO UPDATE SET
 			cpu_pct=excluded.cpu_pct, cores=excluded.cores, mem_used_mb=excluded.mem_used_mb,
 			mem_total_mb=excluded.mem_total_mb, disk_read_bps=excluded.disk_read_bps,
 			disk_write_bps=excluded.disk_write_bps, net_down_bps=excluded.net_down_bps,
-			net_up_bps=excluded.net_up_bps, gpu_pct=excluded.gpu_pct`,
+			net_up_bps=excluded.net_up_bps, gpu_pct=excluded.gpu_pct,
+			cpu_queue=excluded.cpu_queue, cpu_perf_pct=excluded.cpu_perf_pct,
+			disk_queue_len=excluded.disk_queue_len, disk_lat_ms=excluded.disk_lat_ms,
+			hard_faults=excluded.hard_faults`,
 		sm.Ts.UnixMilli(), sm.CPUPct, string(cores), sm.MemUsedMB, sm.MemTotalMB,
-		sm.DiskReadBps, sm.DiskWriteBps, sm.NetDownBps, sm.NetUpBps, sm.GPUPct)
+		sm.DiskReadBps, sm.DiskWriteBps, sm.NetDownBps, sm.NetUpBps, sm.GPUPct,
+		sm.CPUQueue, sm.CPUPerfPct, sm.DiskQueueLen, sm.DiskLatMs, sm.HardFaults)
 	if err != nil {
 		return fmt.Errorf("sysmon: insert sample: %w", err)
 	}
@@ -120,7 +162,8 @@ func (s *Store) InsertSample(sm Sample) error {
 // RecentSamples returns every sample at or after since, oldest first.
 func (s *Store) RecentSamples(since time.Time) ([]Sample, error) {
 	rows, err := s.db.Query(`
-		SELECT ts, cpu_pct, cores, mem_used_mb, mem_total_mb, disk_read_bps, disk_write_bps, net_down_bps, net_up_bps, gpu_pct
+		SELECT ts, cpu_pct, cores, mem_used_mb, mem_total_mb, disk_read_bps, disk_write_bps, net_down_bps, net_up_bps, gpu_pct,
+			cpu_queue, cpu_perf_pct, disk_queue_len, disk_lat_ms, hard_faults
 		FROM sysmon_samples WHERE ts >= ? ORDER BY ts ASC`, since.UnixMilli())
 	if err != nil {
 		return nil, fmt.Errorf("sysmon: query samples: %w", err)
@@ -133,7 +176,8 @@ func (s *Store) RecentSamples(since time.Time) ([]Sample, error) {
 		var ts int64
 		var cores string
 		if err := rows.Scan(&ts, &sm.CPUPct, &cores, &sm.MemUsedMB, &sm.MemTotalMB,
-			&sm.DiskReadBps, &sm.DiskWriteBps, &sm.NetDownBps, &sm.NetUpBps, &sm.GPUPct); err != nil {
+			&sm.DiskReadBps, &sm.DiskWriteBps, &sm.NetDownBps, &sm.NetUpBps, &sm.GPUPct,
+			&sm.CPUQueue, &sm.CPUPerfPct, &sm.DiskQueueLen, &sm.DiskLatMs, &sm.HardFaults); err != nil {
 			return nil, fmt.Errorf("sysmon: scan sample: %w", err)
 		}
 		sm.Ts = time.UnixMilli(ts).UTC()

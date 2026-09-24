@@ -12,5 +12,8 @@ type Sampler struct{}
 func NewSampler() *Sampler { return &Sampler{} }
 
 func (s *Sampler) Tick() (Sample, error) {
-	return Sample{Ts: time.Now()}, nil
+	return Sample{
+		Ts: time.Now(), GPUPct: -1,
+		CPUQueue: -1, CPUPerfPct: -1, DiskQueueLen: -1, DiskLatMs: -1, HardFaults: -1,
+	}, nil
 }
