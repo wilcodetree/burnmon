@@ -25,7 +25,7 @@ if ($targetChecks.Count -eq 0) {
 # survives it) start and stop their own burnmon.exe instance, so each must
 # run before anything else here starts one, outside this script's own
 # Start-Process/wait-for-port flow.
-$selfManagedChecks = @("w1", "v3b")
+$selfManagedChecks = @("w1", "v3b", "u5")
 foreach ($sm in $selfManagedChecks) {
     if ($targetChecks -contains $sm) {
         Push-Location tools\uicheck

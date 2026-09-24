@@ -23,9 +23,11 @@ type ClassCounts struct {
 	Output     int64 `json:"output"`
 }
 
-// Bucket is one fixed whole-minute slot of the Now page's 30-minute sliding
-// chart (F3, widened from 10 seconds to 60 by N2, v0.2.2, SESSION_LOG.md):
-// always present in Snapshot.Chart, zero-valued when no turn landed in it,
+// Bucket is one fixed slot of the Now page's 30-minute sliding chart (F3,
+// widened from 10 seconds to 60 by N2, v0.2.2; U5, v0.3, lets a caller of
+// BuildSnapshot narrow that width back to 10 for monitor view's finer
+// braille columns, SESSION_LOG.md): always present in Snapshot.Chart,
+// zero-valued when no turn landed in it,
 // so the frontend never has to derive a dense timeline from a sparse one.
 // At is UTC; the frontend renders it in the viewer's local time (F3's fix
 // for the axis showing UTC while local read differently).
@@ -180,7 +182,16 @@ func contextOf(e schema.Event) int64 {
 // subagent (ParentID set) under its running parent when the parent is also
 // present, and builds the last 30 minutes of per-minute chart buckets from
 // every event in that window, running or not.
-func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Snapshot {
+// bucketSeconds is optional so every existing call (full view, tests, the
+// CLI) keeps working unchanged at the default 60-second width (U5, v0.3
+// 2026-09-23_v0.3_monitor_view_patch.md): monitor view is the only caller
+// that passes one, 10, so its braille chart has finer columns without a
+// second binding.
+func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time, bucketSeconds ...int) Snapshot {
+	bs := BucketSeconds
+	if len(bucketSeconds) > 0 && bucketSeconds[0] > 0 {
+		bs = bucketSeconds[0]
+	}
 	type group struct {
 		id     string
 		events []schema.Event
@@ -293,9 +304,9 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 	// bucket and now, and silently dropped any event landing in that gap
 	// (idx computed >= chartSlots) from every bucket, including the very
 	// turn a live poll just picked up.
-	windowEnd := now.Truncate(BucketSeconds * time.Second)
+	windowEnd := now.Truncate(time.Duration(bs) * time.Second)
 	if windowEnd.Before(now) {
-		windowEnd = windowEnd.Add(BucketSeconds * time.Second)
+		windowEnd = windowEnd.Add(time.Duration(bs) * time.Second)
 	}
 	windowStart := windowEnd.Add(-ChartWindow)
 	return Snapshot{
@@ -303,8 +314,8 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time) Sn
 		RunningWindowSeconds: cfg.RunningWindowSeconds(),
 		Sessions:             top,
 		WindowStart:          windowStart.UTC().Format(time.RFC3339),
-		BucketSeconds:        BucketSeconds,
-		Chart:                buildChart(events, cfg, windowStart, now),
+		BucketSeconds:        bs,
+		Chart:                buildChart(events, cfg, windowStart, now, bs),
 		Turns:                buildTurns(events, cfg, windowStart, now),
 	}
 }
@@ -525,17 +536,18 @@ func headlineForEvents(events []schema.Event, cfg *pricing.Config) *pricing.Basi
 // every real turn in the window by slot and by session, running or not: a
 // session that just fell out of the running window a moment ago still
 // belongs on the chart's tail.
-func buildChart(events []schema.Event, cfg *pricing.Config, windowStart, now time.Time) []Bucket {
-	slots := make([]Bucket, chartSlots)
+func buildChart(events []schema.Event, cfg *pricing.Config, windowStart, now time.Time, bucketSeconds int) []Bucket {
+	slotWidth := time.Duration(bucketSeconds) * time.Second
+	slots := make([]Bucket, int(ChartWindow/slotWidth))
 	for i := range slots {
-		slots[i].At = windowStart.Add(time.Duration(i) * BucketSeconds * time.Second).UTC().Format(time.RFC3339)
+		slots[i].At = windowStart.Add(time.Duration(i)*slotWidth).UTC().Format(time.RFC3339)
 	}
 	for _, e := range events {
 		if !isTurn(e) || e.At.IsZero() || e.At.Before(windowStart) || e.At.After(now) {
 			continue
 		}
-		idx := int(e.At.Sub(windowStart) / (BucketSeconds * time.Second))
-		if idx < 0 || idx >= chartSlots {
+		idx := int(e.At.Sub(windowStart) / slotWidth)
+		if idx < 0 || idx >= len(slots) {
 			continue
 		}
 		b := &slots[idx]

@@ -2,6 +2,71 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-23, v0.3 V3-3c: monitor view like perfadvisor (U5)
+
+Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_monitor_view_patch.md` and both
+reference images in `C:\ZND\projects\burnmon\testdata\uicheck\reference\`
+(`perfadvisor_history.png`, `monitor_mockup.jpg`), then perfadvisor's `graph()`
+(`C:\ZND\projects\perfadvisor\internal\tui\widgets.go`) and `graphLines()`
+(`C:\ZND\projects\perfadvisor\internal\tui\view.go`) before writing anything. Replaced U4's
+one-block-per-minute strip with a real braille line chart: `internal\live\live.go`'s
+`BuildSnapshot` gained an optional `bucketSeconds` argument (variadic, so every existing
+3-arg call keeps its default 60-second/30-slot chart unchanged), threaded into `buildChart`,
+which now sizes its slot count from that argument instead of the fixed `BucketSeconds`
+constant; `cmd\burnmon\main.go`'s `bmLive` binding takes the same optional int and passes it
+straight through, no new binding. `internal\report\template.html`: monitor view's own poll
+now calls `bmLive(10)` (10-second buckets, finer dot columns) while full view keeps
+`bmLive()` (60s); `renderMonitorChartText` rebuilds the whole chart panel per poll,
+`mtBrailleGraph` (a JS twin of `graph()`, U+2800 dots, later series drawn over earlier ones
+in a shared cell) draws one overlaid series per session appearing anywhere in the chart's
+30-minute window, scaled to one shared peak (not each series' own, since sessions are
+directly comparable, unlike perfadvisor's mixed-unit metrics), `sizeMonitorChart` picks the
+dot grid's row count from the panel's own real pixel height (about 35% of the window) via a
+hidden probe element, recomputed on resize. Wilco's own call on the patch's flagged open
+choice (candidates asked via AskUserQuestion): one legend row per running session, not one
+packed perfadvisor-style line, since full "agent · model · project" labels are much longer
+than perfadvisor's "cpu"/"ram"; "scaled to peak" sits right-aligned on the last row only,
+verified by a real-window read (`PeakRowIndex`/`PeakRowCount` in the new uicheck below).
+Session cards' box width is now computed from the longest line across every card rather
+than a hardcoded 30, so the right border stays one straight column at any content length,
+in a real CSS grid (four per row, wrapping) instead of the old flex-wrap. Monospace stack
+reordered to Cascadia Mono, JetBrains Mono, Consolas per the patch; braille glyph rendering
+was checked with a headless Edge screenshot of a standalone test page in each of the three
+fonts plus the combined stack (`C:\Users\WilcoDeTree\AppData\Local\Temp\claude\...\scratchpad\braille_font_test.png`,
+not committed): all four render real dot glyphs via the browser's own font-fallback, no
+extra fallback font needed. Real-window check: new self-managed `tools\uicheck\check_u5.go`
+(added to `scripts\uicheck.ps1`'s `$selfManagedChecks`, alongside `w1`/`v3b`), reads the
+chart panel's DOM state (title, legend row count, non-blank dot count, dot row count,
+minute label text, session box count and width equality, computed font-family) rather than
+a bare `window.LAST_NOW_SNAP` global: an earlier version of the check read that global and
+it always came back empty even with real sessions rendered, because the dev eval channel
+(`cmd\burnmon\uicheck_devserver.go`) runs in an isolated JS world that shares the page's DOM
+but not its plain script globals; DOM-based counts do not have that problem. Spawned two
+short-lived read-only subagents in this same repo to get genuinely concurrent running
+sessions for the screenshot rather than fabricate data. Before/after screenshots (stashing
+just `template.html` to rebuild the pre-patch exe for a true "before", not a mockup):
+`C:\ZND\projects\burnmon\testdata\uicheck\out\u5-before-monitor-dev.png` (old bug: tiny
+block strip top-right, labels cut off, "claude-code · claude-son") versus
+`C:\ZND\projects\burnmon\testdata\uicheck\out\u5-chart-monitor-dev.png` (full-width dark
+panel, "live burn, newest right", 5 overlaid braille series across 3 real running sessions,
+"scaled to peak 1.18M" right-aligned on the last legend row, minute labels 06:07..06:36
+fully visible after a fix for the last label clipping to its first character at the panel's
+right edge, 3 equal-width session card boxes, bigger vendor strip type). Matches
+`perfadvisor_history.png`'s dot-chart style and `monitor_mockup.jpg`'s panel layout; still
+differs in that the legend is one row per session rather than one packed line (Wilco's own
+choice, not a gap) and the mockup's 8 placeholder cards versus this run's 3 real ones (grid
+is confirmed 4-per-row via CSS, just not exercised past one row with only 3 sessions live).
+`node --check`, `go test ./... -count=1`, `.\build.ps1` and `.\scripts\uicheck.ps1 u5` all
+green. Also ran the full default suite (`w0`, `w2`-`w8`); `w8` (Now page's Chart.js cost-axis
+toggle, full view, untouched by this patch) fails on this build regardless of this session's
+changes, confirmed by stashing `template.html` back to its pre-patch state and re-running
+`w8` against that: identical failure ("cost axis stayed hidden after showing the cost
+series"), so a pre-existing issue outside U5's scope, not a regression; `w1` (fresh-launch
+timing, 1.5s window-appear budget) also failed once during this session, most likely the
+same kind of environment timing sensitivity given multiple burnmon.exe launches back to back
+under this session's own load, not isolated the same rigorous way for time reasons. Neither
+is touched by this patch's files.
+
 ## 2026-09-23, v0.3 V3-5: Copilot in VS Code and macOS/Linux builds (A4, B1)
 
 Read `02_roadmap\2026-09-23_v0.3_spec.md` sections 2.3 A4/2.4 B1 and the A3 correction entry

@@ -198,13 +198,28 @@ body.monitor-mode .wrap{padding-top:14px}
 body.monitor-mode #now_extra{display:none}
 body.monitor-mode.monitor-dev #now{display:none}
 #monitor_text_view{display:none;position:fixed;inset:0;z-index:900;overflow:auto;
-  background:#0B0F14;color:#C8F7D8;font-family:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
-  font-size:13px;line-height:1.35;padding:16px}
+  background:#0B0F14;color:#C8F7D8;font-family:"Cascadia Mono","JetBrains Mono",Consolas,monospace;
+  font-size:clamp(16px,1.1vw,20px);line-height:1.4;padding:16px}
 body.monitor-mode.monitor-dev #monitor_text_view{display:block}
-#mt_chart{white-space:pre;margin-bottom:16px}
-#mt_sessions{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+/* U5 (v0.3): the braille history chart, modelled on perfadvisor's
+   history-panel look, replaces U4's one-block-per-minute strip. */
+.mt-chart-panel{background:#0F1620;border:1px solid #232D3A;border-radius:8px;
+  padding:14px 18px;margin-bottom:18px}
+.mt-chart-title{font-size:clamp(18px,1.4vw,24px);font-weight:700;color:#C8F7D8;
+  margin-bottom:8px}
+.mt-chart-legend{margin-bottom:6px}
+.mt-chart-legend-row{display:flex;justify-content:space-between;align-items:baseline;
+  gap:16px;flex-wrap:wrap;margin-bottom:2px}
+.mt-chart-dash{font-weight:700}
+.mt-chart-rate{color:#8FA3BC;margin-left:6px}
+.mt-chart-peak{color:#5E7088;white-space:nowrap;font-size:0.85em}
+.mt-chart-dots{white-space:pre;line-height:1.05;margin:6px 0}
+.mt-chart-minutes{white-space:pre;color:#5E7088;font-size:0.85em}
+#mt_chart{margin-bottom:16px}
+#mt_sessions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
 .mt-session-box{white-space:pre;margin:0;cursor:pointer;color:#C8F7D8}
 .mt-session-box:hover{color:#EAF1F8}
+#mt_vendorstrip{font-size:clamp(20px,1.6vw,26px)}
 #mt_vendorstrip pre{white-space:pre;margin:0}
 </style>
 </head>
@@ -742,9 +757,10 @@ function tok(v){
 }
 // tokPrecise: W6 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md).
 // tok()'s whole-number rounding repeats consecutive axis ticks on the Now
-// chart ("3M, 3M, 2M, 2M"); this two-decimal variant is scoped to that
-// chart's own axis ticks and tooltip only, everywhere else on the page
-// keeps using tok() unchanged.
+// chart ("3M, 3M, 2M, 2M"); this two-decimal variant was scoped to that
+// chart's own axis ticks and tooltip, and now also to monitor-dev's braille
+// chart legend (U5, v0.3: "tokens per minute... two decimals", same
+// "scaled to peak" figure), everywhere else on the page keeps using tok().
 function tokPrecise(v){
   v = v||0;
   // U2 (v0.3): an empty axis tick used to read "0.00K" (fell through to the
@@ -1715,61 +1731,222 @@ function sessionSeriesColor(agent, occurrenceIndex){
   return shadeHex(base, mode === 'light' ? -occurrenceIndex*10 : occurrenceIndex*12);
 }
 
-// ---------- Monitor mode, dev-mode text rendering (U4) ----------
-// Real text over a monospace dark page: a block-character chart (one column
-// per minute over the same 30-minute window drawNowChart uses, one row per
-// session, vendor colours from VENDOR_COLOR_FAMILIES.dark, fixed regardless
-// of the theme toggle since the monitor text page is always dark), and
-// ASCII-bordered boxes for sessions and the vendor strip. No hover, no bar
-// click; a session box opens the I3 turn drawer for its last turn, same
-// openTurnDrawer every other click path already uses. Reads whatever
-// bmLive/bmVendorStrip last resolved (LAST_NOW_SNAP/LAST_VENDOR_STRIP,
-// refreshed by pollNow/pollVendorStrip's own timers): no new backend call.
-var MT_BLOCKS = ' ▁▂▃▄▅▆▇█';
-function mtBlockChar(v, max){
-  if(!(max > 0)) return ' ';
-  var idx = Math.round((v/max) * (MT_BLOCKS.length-1));
-  idx = Math.max(0, Math.min(MT_BLOCKS.length-1, idx));
-  return MT_BLOCKS[idx];
-}
+// ---------- Monitor mode, dev-mode text rendering (U4, braille chart U5) ----------
+// Real text over a monospace dark page. U5 (v0.3,
+// 02_roadmap\2026-09-23_v0.3_monitor_view_patch.md) replaces U4's
+// one-block-per-minute strip with a braille line chart modelled on
+// perfadvisor's "history, newest right" panel (internal\tui\widgets.go's
+// graph(), internal\tui\view.go's graphLines(), read before writing this):
+// one braille-dot series per running session, overlaid, vendor colours from
+// VENDOR_COLOR_FAMILIES.dark (fixed regardless of the theme toggle, since
+// the monitor text page is always dark). ASCII-bordered boxes for sessions
+// and the vendor strip stay U4's own. No hover, no bar click; a session box
+// opens the I3 turn drawer for its last turn, same openTurnDrawer every
+// other click path already uses. Reads whatever bmLive/bmVendorStrip last
+// resolved (LAST_NOW_SNAP/LAST_VENDOR_STRIP, refreshed by
+// pollNow/pollVendorStrip's own timers): no new backend call, only a wider
+// bucket count in the same Chart shape (bmLive(10) vs. bmLive()).
 function mtPad(s, w){ s = String(s); return s.length >= w ? s.slice(0,w) : s + new Array(w-s.length+1).join(' '); }
 function mtRepeat(ch, count){ return count > 0 ? new Array(count+1).join(ch) : ''; }
 
-// renderMonitorChartText mirrors drawNowChart's own bucket/session walk
-// (same chart array, same by_session shape, same sessionIds-from-buckets
-// approach) but renders bars as one block character per minute instead of a
-// Chart.js dataset, coloured per vendor via VENDOR_COLOR_FAMILIES.dark.
-function renderMonitorChartText(chart, sessions){
+// mtBrailleBits: braille dot bit for (row 0..3, col 0..1) inside one cell,
+// same layout as widgets.go's brailleBits.
+var MT_BRAILLE_BITS = [[0x01,0x08],[0x02,0x10],[0x04,0x20],[0x40,0x80]];
+
+// mtBrailleGraph is graph()'s JS twin: w x hCells cells (2w x 4hCells dots),
+// one entry per series, each vals on a 0..100 scale, newest value last.
+// Later series draw on top of earlier ones in a shared cell, same rule as
+// graph()'s own comment ("put the most important series last"); unlike
+// graph(), returns an array of {bits, color} cells rather than pre-rendered
+// strings, since the browser needs per-run <span> colouring rather than a
+// terminal's own ANSI colour per glyph.
+function mtBrailleGraph(w, hCells, seriesList){
+  if(w < 2) w = 2;
+  if(hCells < 1) hCells = 1;
+  var dw = w*2, dh = hCells*4;
+  var cells = new Array(w*hCells);
+  for(var i=0;i<cells.length;i++) cells[i] = {bits:0, color:null};
+  function setDot(x, y, color){
+    if(x<0||x>=dw||y<0||y>=dh) return;
+    var c = cells[(y>>2)*w + (x>>1)];
+    c.bits |= MT_BRAILLE_BITS[y%4][x%2];
+    c.color = color;
+  }
+  seriesList.forEach(function(s){
+    var vals = s.vals || [];
+    if(!vals.length) return;
+    var start = vals.length - dw;
+    var prevY = -1;
+    for(var x=0; x<dw; x++){
+      var i = start + x;
+      if(i < 0) continue;
+      var v = vals[i];
+      if(v < 0) v = 0;
+      if(v > 100) v = 100;
+      var y = dh - 1 - Math.round(v/100*(dh-1));
+      setDot(x, y, s.color);
+      if(prevY >= 0){
+        var step = y < prevY ? -1 : 1;
+        for(var yy=prevY+step; yy!==y && yy!==y+step; yy+=step) setDot(x, yy, s.color);
+      }
+      prevY = y;
+    }
+  });
+  var lines = [];
+  for(var cy=0; cy<hCells; cy++){
+    var rowHtml = '', runColor = undefined, runChars = '';
+    function flush(){
+      if(!runChars) return;
+      rowHtml += runColor ? '<span style="color:'+runColor+'">'+esc(runChars)+'</span>' : esc(runChars);
+      runChars = '';
+    }
+    for(var cx=0; cx<w; cx++){
+      var c = cells[cy*w+cx];
+      var ch = c.bits === 0 ? ' ' : String.fromCharCode(0x2800 + c.bits);
+      var col = c.bits === 0 ? null : c.color;
+      if(col !== runColor){ flush(); runColor = col; }
+      runChars += ch;
+    }
+    flush();
+    lines.push(rowHtml);
+  }
+  return lines;
+}
+
+// mtSessionTotal is one bucket's whole-class token total for one session,
+// the same sum every other Now-page reader of ClassCounts uses.
+function mtSessionTotal(bucket, id){
+  var v = (bucket.by_session||{})[id];
+  return v ? v.fresh + v.cache_write + v.cache_read + v.output : 0;
+}
+
+// mtTokensPerMinute sums the last 60 seconds of buckets for one session
+// (however many buckets that is at the chart's own bucket_seconds width),
+// the legend's "current tokens per minute" figure.
+function mtTokensPerMinute(chart, bucketSeconds, id){
+  var perMinute = Math.max(1, Math.round(60/(bucketSeconds||60)));
+  var slice = chart.slice(Math.max(0, chart.length-perMinute));
+  var sum = 0;
+  slice.forEach(function(b){ sum += mtSessionTotal(b, id); });
+  return sum;
+}
+
+// renderMonitorChartText builds the whole chart panel: title, one legend
+// row per running session (coloured dash, full "agent · model · project"
+// label, that session's tokens/min, "scaled to peak" on the last row only,
+// per Wilco's call on the U5 patch's open layout choice), the braille dot
+// chart itself (one column per Chart bucket, so the dot resolution follows
+// bmLive's own bucket_seconds argument), and a minute-label row every 5
+// minutes under it.
+function renderMonitorChartText(chart, sessions, bucketSeconds){
   chart = chart || [];
+  bucketSeconds = bucketSeconds || 60;
   var byId = {};
   flattenSessions(sessions || []).forEach(function(s){ byId[s.session_id] = s; });
   var sessionIds = [];
   chart.forEach(function(b){
     Object.keys(b.by_session||{}).forEach(function(id){ if(sessionIds.indexOf(id) === -1) sessionIds.push(id); });
   });
-  if(!sessionIds.length) return '(no running sessions)';
-  var max = 0;
+  if(!sessionIds.length){
+    return '<div class="mt-chart-panel"><div class="mt-chart-title">live burn, newest right</div>'
+      + '<div class="small" style="color:#5E7088">(no running sessions)</div></div>';
+  }
+
+  var peak = 0;
   chart.forEach(function(b){
-    Object.keys(b.by_session||{}).forEach(function(id){
-      var v = b.by_session[id];
-      var total = v.fresh + v.cache_write + v.cache_read + v.output;
-      if(total > max) max = total;
+    sessionIds.forEach(function(id){
+      var total = mtSessionTotal(b, id);
+      if(total > peak) peak = total;
     });
   });
-  var lines = sessionIds.map(function(id){
+
+  var seriesList = sessionIds.map(function(id){
     var s = byId[id];
     var agent = s ? s.agent : '';
     var color = VENDOR_COLOR_FAMILIES.dark[agent] || DEFAULT_SESSION_COLOR.dark;
-    var label = mtPad(s ? sessionChartLabel(s).replace(/<[^>]*>/g,'') : id.slice(0,8), 24).slice(0,24);
-    var row = chart.map(function(b){
-      var v = (b.by_session||{})[id];
-      var total = v ? v.fresh + v.cache_write + v.cache_read + v.output : 0;
-      return mtBlockChar(total, max);
-    }).join('');
-    return '<span style="color:'+color+'">'+esc(label)+' '+esc(row)+'</span>';
+    var vals = chart.map(function(b){ return peak > 0 ? mtSessionTotal(b, id)/peak*100 : 0; });
+    return {id: id, session: s, color: color, vals: vals};
   });
-  return lines.join('\n');
+
+  // w (character cells) is exactly half the bucket count, so bmLive's own
+  // bucket_seconds argument (10 in monitor view) is what sets the dot
+  // resolution, per the patch's "time resolution follows the dot columns";
+  // hCells is picked by sizeMonitorChart, based on the panel's real pixel
+  // height, and cached on <body> between polls.
+  var w = Math.max(2, Math.floor(chart.length/2));
+  var hCells = window.MT_CHART_HCELLS || 10;
+  var dotLines = mtBrailleGraph(w, hCells, seriesList);
+
+  var legendRows = seriesList.map(function(entry, i){
+    var label = entry.session ? sessionChartLabel(entry.session) : esc(entry.id.slice(0,8));
+    var rate = tokPrecise(mtTokensPerMinute(chart, bucketSeconds, entry.id)) + ' tok/min';
+    var peakHtml = (i === seriesList.length-1)
+      ? '<span class="mt-chart-peak">scaled to peak '+esc(tokPrecise(peak))+'</span>'
+      : '<span class="mt-chart-peak"></span>';
+    return '<div class="mt-chart-legend-row">'
+      + '<span><span class="mt-chart-dash" style="color:'+entry.color+'">──</span> '
+      + '<span style="color:'+entry.color+'">'+label+'</span>'
+      + '<span class="mt-chart-rate">'+esc(rate)+'</span></span>'
+      + peakHtml + '</div>';
+  });
+
+  // Minute labels every 5 minutes across w columns, local time (chart runs
+  // windowStart..now, ChartWindow fixed at 30 minutes regardless of bucket
+  // width).
+  var minuteCols = new Array(w+1).join(' ').split('');
+  var totalMinutes = (chart.length * bucketSeconds) / 60;
+  for(var m=0; m<=totalMinutes; m += 5){
+    var idx = Math.round(m/totalMinutes * (w-1));
+    var bucketIdx = Math.min(chart.length-1, Math.round(m*60/bucketSeconds));
+    var label = chart[bucketIdx] ? localHMS(chart[bucketIdx].at).slice(0,5) : '';
+    // Keep the label whole rather than clipping it at the panel's right
+    // edge (the last label, at the "now" column, would otherwise lose all
+    // but its first character).
+    if(idx + label.length > w) idx = Math.max(0, w - label.length);
+    for(var k=0; k<label.length && idx+k<w; k++) minuteCols[idx+k] = label[k];
+  }
+
+  return '<div class="mt-chart-panel">'
+    + '<div class="mt-chart-title">live burn, newest right</div>'
+    + '<div class="mt-chart-legend">' + legendRows.join('') + '</div>'
+    + '<pre class="mt-chart-dots">' + dotLines.join('\n') + '</pre>'
+    + '<div class="mt-chart-minutes">' + esc(minuteCols.join('')) + '</div>'
+    + '</div>';
 }
+
+// sizeMonitorChart picks the braille chart's row count (hCells) from the
+// panel's own available pixel height (spec: "about 35% of the window
+// height"), so the dot grid scales with the window the way the rest of
+// monitor-dev's bigger, clamp()-scaled type already does: measures one
+// rendered .mt-chart-dots line's pixel height via a probe element built in
+// the current font stack/size, at the panel's target height, then floors to
+// a whole number of rows. Cached on window.MT_CHART_HCELLS; recomputed on
+// resize (debounced) and on entering monitor-dev, never mid-poll, so the
+// dot grid does not jitter between two adjacent polls at the same window
+// size.
+function sizeMonitorChart(){
+  var panel = document.querySelector('#monitor_text_view');
+  if(!panel) return;
+  var targetH = Math.max(120, Math.round(window.innerHeight * 0.35));
+  var probe = document.createElement('pre');
+  probe.className = 'mt-chart-dots';
+  probe.style.position = 'absolute';
+  probe.style.visibility = 'hidden';
+  probe.textContent = String.fromCharCode(0x28FF);
+  panel.appendChild(probe);
+  var lineH = probe.getBoundingClientRect().height || 18;
+  panel.removeChild(probe);
+  window.MT_CHART_HCELLS = Math.max(4, Math.floor(targetH / lineH));
+}
+var mtResizeTimer = null;
+window.addEventListener('resize', function(){
+  if(!document.body.classList.contains('monitor-dev')) return;
+  clearTimeout(mtResizeTimer);
+  mtResizeTimer = setTimeout(function(){
+    sizeMonitorChart();
+    renderMonitorText(LAST_NOW_SNAP, LAST_VENDOR_STRIP);
+  }, 200);
+});
 
 // mtBox draws a fixed-width ASCII-bordered box around lines, the "text
 // boxes with ASCII borders" the spec asks for sessions and the vendor strip.
@@ -1783,14 +1960,25 @@ function mtBox(lines, width){
 // fields sessionCardDevBody shows (tokens, turn, last turn); clicking it
 // opens the I3 drawer for the session's last turn, same call every other
 // click path in this file already uses.
-function monitorSessionBoxHTML(s){
-  var width = 30;
-  var lines = [
-    mtPad((s.agent||'')+' · '+(s.surface||''), width-1),
-    mtPad(baseName(s.project) || '(no project)', width-1),
-    mtPad(tok(s.tokens)+' tok  '+money(s.cost||0), width-1),
-    mtPad('turn '+n(s.turn_count||0)+'  '+relTimeFrom(s.last_turn), width-1)
+// monitorSessionLines is one session's 4 content lines, unpadded: the same
+// fields sessionCardDevBody shows (tokens, turn, last turn).
+function monitorSessionLines(s){
+  return [
+    (s.agent||'')+' · '+(s.surface||''),
+    baseName(s.project) || '(no project)',
+    tok(s.tokens)+' tok  '+money(s.cost||0),
+    'turn '+n(s.turn_count||0)+'  '+relTimeFrom(s.last_turn)
   ];
+}
+
+// monitorSessionBoxHTML renders one session as an ASCII box at a shared
+// width (U5: "compute the box width in characters and pad every line to
+// it, so the right border is one straight column" across every box in the
+// grid, not a fixed magic number that truncates a long project name or
+// token/cost figure). Clicking it opens the I3 drawer for the session's
+// last turn, same call every other click path in this file already uses.
+function monitorSessionBoxHTML(s, width){
+  var lines = monitorSessionLines(s).map(function(l){ return mtPad(l, width-1); });
   var box = mtBox(lines, width);
   return '<pre class="mt-session-box" data-session="'+esc(s.session_id)+'" data-turn="'+(s.turn_count||0)+'">'+esc(box)+'</pre>';
 }
@@ -1825,11 +2013,17 @@ function renderMonitorText(snap, vendorPayload){
   var sessEl = document.getElementById('mt_sessions');
   var vsEl = document.getElementById('mt_vendorstrip');
   if(!chartEl || !sessEl || !vsEl) return;
-  chartEl.innerHTML = renderMonitorChartText(snap && snap.chart, snap && snap.sessions);
+  chartEl.innerHTML = renderMonitorChartText(snap && snap.chart, snap && snap.sessions, snap && snap.bucket_seconds);
   var sessions = (snap && snap.sessions) || [];
-  sessEl.innerHTML = sessions.length
-    ? sessions.map(monitorSessionBoxHTML).join('')
-    : '(no running sessions)';
+  if(sessions.length){
+    var width = 24;
+    sessions.forEach(function(s){
+      monitorSessionLines(s).forEach(function(l){ width = Math.max(width, l.length+2); });
+    });
+    sessEl.innerHTML = sessions.map(function(s){ return monitorSessionBoxHTML(s, width); }).join('');
+  } else {
+    sessEl.innerHTML = '(no running sessions)';
+  }
   vsEl.innerHTML = mtVendorStripText(vendorPayload);
 }
 
@@ -1855,7 +2049,10 @@ function applyViewMode(){
   document.body.classList.toggle('monitor-dev', monitor && !isBusiness());
   if(monitor){
     if(currentTab() !== 'now') showTab('now');
-    if(!isBusiness()) renderMonitorText(LAST_NOW_SNAP, LAST_VENDOR_STRIP);
+    if(!isBusiness()){
+      sizeMonitorChart();
+      renderMonitorText(LAST_NOW_SNAP, LAST_VENDOR_STRIP);
+    }
   }
 }
 
@@ -2269,7 +2466,12 @@ function pollNow(){
   // saved report; go-webview2 injects it asynchronously, after this script
   // has already started running.
   waitForBinding('bmLive', function(){
-    Promise.resolve(window.bmLive()).then(renderNow).catch(function(e){
+    // U5 (v0.3): monitor view's braille chart wants 10-second buckets for
+    // finer dot columns; the Now page's own Chart.js chart keeps the
+    // 60-second default. Same bmLive call, no new binding.
+    var monitorDev = document.body.classList.contains('monitor-dev');
+    var call = monitorDev ? window.bmLive(10) : window.bmLive();
+    Promise.resolve(call).then(renderNow).catch(function(e){
       if(empty){
         empty.classList.remove('hidden');
         empty.textContent = 'Could not read live sessions: ' + (e && e.message ? e.message : String(e));

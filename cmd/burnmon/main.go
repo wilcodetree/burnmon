@@ -299,7 +299,10 @@ func main() {
 	}
 
 	var bmLivePolls atomic.Uint64
-	if err := w.Bind("bmLive", func() (live.Snapshot, error) {
+	// bucketSeconds (U5, v0.3): monitor view's braille chart calls
+	// bmLive(10) for finer columns than the Now page's own bmLive(), no
+	// second binding; live.BuildSnapshot defaults to 60 when omitted.
+	if err := w.Bind("bmLive", func(bucketSeconds ...int) (live.Snapshot, error) {
 		callStart := time.Now()
 		a.mu.Lock()
 		cfg := a.cfg
@@ -318,7 +321,7 @@ func main() {
 			log.Printf("bound bmLive: %v total, %v waiting for the store (EventsSince error: %v)", time.Since(callStart), storeWait, err)
 			return live.Snapshot{}, err
 		}
-		snap := live.BuildSnapshot(events, &cfg, now)
+		snap := live.BuildSnapshot(events, &cfg, now, bucketSeconds...)
 		totalsStart := time.Now()
 		if err := live.ApplySessionTotals(snap.Sessions, st, &cfg); err != nil {
 			log.Println("bmLive: session totals:", err)

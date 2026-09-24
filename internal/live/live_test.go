@@ -193,6 +193,26 @@ func TestBuildSnapshot_ChartIsDense(t *testing.T) {
 	}
 }
 
+// TestBuildSnapshot_CustomBucketSeconds guards U5 (v0.3,
+// 2026-09-23_v0.3_monitor_view_patch.md): monitor view's braille chart calls
+// BuildSnapshot with an explicit 10-second bucket for finer columns, still
+// 30 minutes wide, so it must come back as 180 dense slots, not the 30
+// default callers get.
+func TestBuildSnapshot_CustomBucketSeconds(t *testing.T) {
+	now := time.Now().UTC()
+	events := []schema.Event{
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s", RequestID: "r1",
+			Model: "claude-sonnet-5", At: now.Add(-30 * time.Second), Input: 10, Output: 5},
+	}
+	snap := BuildSnapshot(events, testConfig(), now, 10)
+	if snap.BucketSeconds != 10 {
+		t.Fatalf("BucketSeconds = %d, want 10", snap.BucketSeconds)
+	}
+	if len(snap.Chart) != 180 {
+		t.Fatalf("want 180 dense slots at a 10-second bucket, got %d", len(snap.Chart))
+	}
+}
+
 // TestBuildSnapshot_Turns checks I3's ticker source: one TurnEvent per real
 // turn in the chart window (stale sessions included, unlike snap.Sessions),
 // newest first, with a re-prefill finding attached to its own turn only.
