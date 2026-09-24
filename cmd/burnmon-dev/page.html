@@ -32,7 +32,7 @@ header{
 .hstat{font-size:12px; color:var(--dim); white-space:nowrap}
 .hstat b{color:var(--txt); font-weight:600; font-variant-numeric:tabular-nums}
 .headline{display:flex; align-items:baseline; gap:5px; white-space:nowrap; flex:0 0 auto}
-.hltotal{font-size:19px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums}
+.hltotal{font-size:30px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums}
 .hlunit{font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em}
 .hlsub{font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums}
 
@@ -66,6 +66,8 @@ main{flex:1; min-height:0; display:flex; flex-direction:column; padding:4px; gap
 
 @media (max-aspect-ratio: 4/5){
   .tiles{grid-template-columns:repeat(4,1fr)}
+  header{min-height:56px}
+  .hltotal{font-size:40px}
 }
 
 /* burn zone */
