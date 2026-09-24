@@ -1,5 +1,6 @@
 burnmon.exe
 burnmon-cli.exe
+burnmon-dev.exe
 *.syso
 reports/
 usage_data.json
