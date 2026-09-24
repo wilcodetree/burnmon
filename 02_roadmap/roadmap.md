@@ -55,11 +55,14 @@ Priority order lives here and only here.
    axis not hiding with its series (`display:'auto'`). Spec:
    `2026-09-23_v0.2.3_window_check_patch.md`. **DONE 2026-09-23, committed locally, tag
    `v0.2.3` not yet pushed, see SESSION_LOG.md for the commands.**
-7. v0.3 (2026-10-09, moved from 2026-12-12), next, one release, two sessions a week: price
-   books, per-vendor cost, dev and business switch, client map (owner then client), active
-   time, export and merge, Copilot VS Code (OTel file), macOS and Linux in browser mode.
-   Slip order: platforms, then Copilot VS Code. Spec: `2026-09-23_v0.3_spec.md`. Session
-   prompts with the checklist: `2026-09-23_v0.3_session_prompts.md`. Grilled 2026-09-23.
+7. v0.3 (2026-10-09, moved from 2026-12-12), one release, two sessions a week plus a
+   release-candidate pass: price books, per-vendor cost, dev and business switch, client
+   map (owner then client), active time, export and merge, Copilot VS Code (OTel file),
+   macOS and Linux in browser mode, Now page fixes and monitor mode. Spec:
+   `2026-09-23_v0.3_spec.md`. Session prompts with the checklist:
+   `2026-09-23_v0.3_session_prompts.md`. Grilled 2026-09-23. **DONE 2026-09-24, tagged
+   `v0.3.0`, 15 days early, all Done-when items pass against the built exe and the real
+   local store, no fail carried into the tag** (V3-6, `SESSION_LOG.md`).
 8. Decision 2026-12-19.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.

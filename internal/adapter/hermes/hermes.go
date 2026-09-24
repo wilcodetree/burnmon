@@ -47,47 +47,43 @@ import (
 	"burnmon/internal/schema"
 )
 
-// DefaultDBPath is %LOCALAPPDATA%\Hermes\state.db on Windows, where every
-// Hermes install on this laptop has been found. B1 (v0.3, 2.4): macOS and
-// Linux default roots, VERIFY (no Hermes documentation confirms either;
-// these follow the same per-OS app-data convention store.DefaultPath
-// already uses): ~/Library/Application Support/Hermes/state.db on darwin,
-// $XDG_DATA_HOME/Hermes/state.db (or ~/.local/share/Hermes/state.db) on
-// linux. Empty (not an error) when the path cannot be resolved or the file
-// does not exist, so a caller can treat "no Hermes installed" the same as
-// "no roots" elsewhere in burnmon.
+// DefaultDBPath is $HERMES_HOME/state.db when HERMES_HOME is set (Hermes's
+// own override), else the platform default: %LOCALAPPDATA%\Hermes\state.db
+// on Windows (confirmed live on Wilco's laptop, 2026-09-22, SESSION_LOG.md
+// v0.2 41B), ~/.hermes/state.db on macOS and Linux. The macOS/Linux default
+// was V3-5's VERIFY (guessed as ~/Library/Application Support/Hermes and
+// $XDG_DATA_HOME/Hermes, following the per-OS app-data convention
+// store.DefaultPath uses); live-checked 2026-09-24 against Hermes's own
+// docs (github.com/NousResearch/hermes-agent, session-storage.md: "the
+// HERMES_HOME environment variable, and finally the platform default
+// (~/.hermes on macOS and Linux; %LOCALAPPDATA%/hermes on Windows)") and
+// that guess was wrong: Hermes does not follow either platform's app-data
+// convention, it always uses one dot-folder in $HOME regardless of OS.
+// Empty (not an error) when the path cannot be resolved or the file does
+// not exist, so a caller can treat "no Hermes installed" the same as "no
+// roots" elsewhere in burnmon.
 func DefaultDBPath() string {
-	dir := defaultDataDir()
+	var dir string
+	switch {
+	case os.Getenv("HERMES_HOME") != "":
+		dir = os.Getenv("HERMES_HOME")
+	case runtime.GOOS == "windows":
+		if la := os.Getenv("LOCALAPPDATA"); la != "" {
+			dir = filepath.Join(la, "Hermes")
+		}
+	default: // darwin, linux, and anything else pure-Go builds target
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			dir = filepath.Join(home, ".hermes")
+		}
+	}
 	if dir == "" {
 		return ""
 	}
-	p := filepath.Join(dir, "Hermes", "state.db")
+	p := filepath.Join(dir, "state.db")
 	if _, err := os.Stat(p); err != nil {
 		return ""
 	}
 	return p
-}
-
-func defaultDataDir() string {
-	switch runtime.GOOS {
-	case "windows":
-		return os.Getenv("LOCALAPPDATA")
-	case "darwin":
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return ""
-		}
-		return filepath.Join(home, "Library", "Application Support")
-	default: // linux and anything else pure-Go builds target
-		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
-			return xdg
-		}
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return ""
-		}
-		return filepath.Join(home, ".local", "share")
-	}
 }
 
 // surfaceOf maps a Hermes sessions.source value to burnmon's surface

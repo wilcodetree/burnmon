@@ -36,7 +36,7 @@ import (
 	"burnmon/internal/store"
 )
 
-const version = "0.2.3"
+const version = "0.3.0"
 
 type multiFlag []string
 

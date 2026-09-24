@@ -75,3 +75,17 @@ New goal recorded: BurnMon plus modelwatch to understand Valona and ZND token us
 learn from it, possibly a LinkedIn post; content work once both have weeks of data.
 Files: `..\02_roadmap\2026-09-22_v0.1.2_patch_spec.md`, `..\02_roadmap\2026-09-22_v0.2_spec.md`,
 roadmap and DEADLINES updated, hub roadmap allocation, decisions.md, DEADLINES rows.
+
+## v0.3 grill, 2026-09-23 (release scoping, one question at a time, Opus)
+
+Input: v0.2 shipped 2026-09-23, 52 days early; v0.3 scope from the v0.2 spec section 3;
+A3 answered yes. Nine questions, all answered the same day:
+1 one release, earlier date (split rejected); 2 Fri 2026-10-09, about six sessions;
+3 macOS and Linux as pure-Go builds in browser mode, no cgo, labelled untested; 4 owner
+then client, git remote then path then unassigned; 5 active time with a 10-minute idle
+cutoff, configurable; 6 export as daily rows per owner, client, vendor, model, no paths,
+`--owner` required when rules exist; 7 merge free, no cap, JSON plus offline HTML;
+8 Copilot VS Code in, as an OTel file reader; 9 slip order platforms, then Copilot VS Code.
+Pricing basis not re-opened (architecture 4.3 D). Freed v0.2 allocation goes to v0.3.
+Files: `..\02_roadmap\2026-09-23_v0.3_spec.md`, `..\02_roadmap\2026-09-23_v0.3_session_prompts.md`,
+roadmap and DEADLINES updated, hub DEADLINES row, hub roadmap, decisions.md, one-pager.

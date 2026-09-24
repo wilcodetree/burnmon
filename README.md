@@ -9,8 +9,8 @@ files and everything stays on this device.
 BurnMon is the successor of [claudecost](https://github.com/wilcodetree/claudecost),
 renamed and extended from v0.2 onward. Repo:
 [wilcodetree/burnmon](https://github.com/wilcodetree/burnmon). Plan:
-`02_roadmap\2026-09-22_burnmon_plan.md`; the v0.2 spec building this release:
-`02_roadmap\2026-09-22_v0.2_spec.md`.
+`02_roadmap\2026-09-22_burnmon_plan.md`; the spec building the current release:
+`02_roadmap\2026-09-23_v0.3_spec.md`.
 
 ## What it reads
 
@@ -82,17 +82,67 @@ the Now snapshot already loads (nothing about them is stored):
 The forecast chart shows the plan line (the last four weeks, weekday-aware) and the live
 line (the current rate carried to end of day and end of month), with an error band once
 at least one week has been scored. Until then it shows history only, with the gate text
-"forecast unlocks after the first scored week". Tokens only; euros wait for the v0.3
-price book.
+"forecast unlocks after the first scored week". Tokens in dev mode; business mode shows
+the same forecast in euros, end of day and end of month, on the headline cost basis below.
 
-## Owner rules
+## Dev and business mode, cost
 
-`burnmon.json` can carry an ordered `owners` table of path-prefix rules, e.g.
-`{"match": "C:\\dev\\Work\\*", "owner": "Valona"}`, applied to a session's project path
-at ingest: the first matching rule wins, an unmatched path gets `"personal"`. Empty (the
-default) means one owner and no owner column anywhere. After changing the rules, re-apply
-them to sessions already in the store with `burnmon-cli reown`; nothing else re-runs
-ingest for you.
+A header toggle (`Dev`/`Business`, dev by default; `"mode": "business"` in `burnmon.json`
+sets the start state) flips every number on the Now page, and switches on History's
+per-client table:
+
+- **Dev** shows tokens, context fill, cache hit rate: what a developer watches while
+  working.
+- **Business** shows euros, on the vendor's headline cost basis, named next to the
+  figure: plan credits for GitHub Copilot, your configured subscription share when
+  `burnmon.json` carries one, else the API list price labelled "upper bound". GitHub
+  Copilot credits left this month show on the vendor strip once `copilot_plan` is set.
+
+Cost comes from dated price books built into the binary (`internal/pricing/books`, each
+with its own source URL and check date), overridable per model from `burnmon.json`.
+`burnmon-cli price-check` prints every book, its date and its source, so you always know
+how current a number is. A vendor with no book (Hermes today) shows "tokens only"
+everywhere rather than a guessed figure.
+
+## Owner and client rules, active time
+
+`burnmon.json` can carry an ordered `owners` table of rules, e.g.
+`{"match": "C:\\dev\\Work\\*", "owner": "Valona", "client": "Talon", "remote": "github.com/org/repo"}`,
+applied to a session's project path at ingest. Owner: the first rule whose `match` path
+prefixes the project wins, an unmatched path gets `"personal"`. Client (optional, v0.3):
+a rule whose `remote` matches the project's git origin (read straight from `.git\config`,
+no git binary) wins first, then a rule whose `match` path prefixes the project, else
+`"unassigned"`. Empty `owners` (the default) means no owner or client column anywhere. A
+v0.2 `burnmon.json` with `owners` only, no `client`/`remote`, keeps working unchanged.
+After changing the rules, re-apply them to sessions already in the store with
+`burnmon-cli reown`; nothing else re-runs ingest for you.
+
+Each session also gets an **active time**: the sum of gaps between consecutive turns, any
+gap over `active_idle_minutes` (config, default 10 minutes) counting zero. Labelled
+everywhere it appears as "active time, from transcript timestamps, not billable": a
+signal, not a time-tracking replacement. Once client rules exist, History's per-client
+table (business mode) shows tokens, headline cost, active time and session count side by
+side for every client, comparable even with one selected in the filter above it.
+
+## Monitor mode
+
+A second Now view that fills the window with just the live burn chart, running sessions
+and vendor strip: no header, no tab bar, one small "Full view" switch back. The last
+choice (`"view": "monitor"` or `"full"` in `burnmon.json`) is remembered and the Settings
+dialog sets the default. In dev mode, monitor mode renders as real monospace text (a
+block-character chart, ASCII-bordered session boxes) instead of the chart canvas; in
+business mode it shows the normal visuals with euros.
+
+## Export and merge
+
+`burnmon-cli export --since <date> --until <date> --owner <name>... --label <name> --out
+<file>` writes daily rows (owner, client, vendor, model, token classes, cost on every
+basis available, active minutes); no paths, session ids, prompts or project names ever
+leave in the file. When `owners` rules exist, `--owner` is required, so a row you did not
+ask for never leaves by accident. `burnmon-cli merge <file>... --out <dir>` combines any
+number of exports (free, no cap) into `merged.json` and a `report.html` that opens
+offline with no network script, one column per export's `--label`, totals by client,
+vendor and week.
 
 ## The CLI
 
@@ -100,8 +150,10 @@ ingest for you.
     burnmon-cli live -json             one JSON snapshot of the Now page, for scripting
     burnmon-cli tools -since 30d       tool_calls totals: tool, calls, sessions, bytes
     burnmon-cli insight <session-id>   findings for one session, table or -json
-    burnmon-cli reown                  re-apply owner rules to every event in the store
+    burnmon-cli reown                  re-apply owner and client rules to every event in the store
     burnmon-cli price-check            print every price book and when it was last checked
+    burnmon-cli export -owner NAME     write a client-safe daily-rows export, see "Export and merge"
+    burnmon-cli merge FILE... -out DIR combine exports into merged.json and an offline report.html
 
 `burnmon-cli` also keeps every claudecost-era flag: `-months`, `-seat`, `-no-open`,
 `-json data.json`, `-source DIR`, `-no-cache`, `-out DIR`, `-config`, `-version`. See
@@ -196,25 +248,32 @@ single files. Copy them anywhere; no install. If a `build.local.ps1` exists next
 |---|---|---|---|
 | Claude Code / Cowork | `%USERPROFILE%\.claude\projects` | `~/.claude/projects` | `~/.claude/projects` |
 | Codex | `%USERPROFILE%\.codex\sessions` (or `$CODEX_HOME`) | `~/.codex/sessions` | `~/.codex/sessions` |
-| Hermes | `%LOCALAPPDATA%\Hermes\state.db` | `~/Library/Application Support/Hermes/state.db` (VERIFY, no Hermes doc confirms this) | `$XDG_DATA_HOME/Hermes/state.db`, else `~/.local/share/Hermes/state.db` (VERIFY) |
-| GitHub Copilot CLI | `%COPILOT_HOME%\session-store.db`, else `~/.copilot/session-store.db` | `~/.copilot/session-store.db` (VERIFY) | `~/.copilot/session-store.db` (VERIFY) |
-| GitHub Copilot in VS Code | wherever `github.copilot.chat.otel.outfile` points, matched by `copilot_vscode_otel_file` | same (per-OS default outfile location not documented by GitHub; VERIFY) | same (VERIFY) |
+| Hermes | `%HERMES_HOME%\state.db`, else `%LOCALAPPDATA%\Hermes\state.db` | `$HERMES_HOME/state.db`, else `~/.hermes/state.db` | `$HERMES_HOME/state.db`, else `~/.hermes/state.db` |
+| GitHub Copilot CLI | `%COPILOT_HOME%\session-store.db`, else `~/.copilot/session-store.db` | `~/.copilot/session-store.db` | `~/.copilot/session-store.db` |
+| GitHub Copilot in VS Code | wherever `github.copilot.chat.otel.outfile` points, matched by `copilot_vscode_otel_file` | same (no default: the setting has none on any OS, you always choose the path) | same |
 
 WSL distro detection (the registry-based scan for Claude Code and Codex transcripts
 inside a WSL distribution) only exists on Windows; it is a no-op everywhere else.
 
-## Not yet there (v0.3)
+## The Groundwork Kit
 
-v0.3 is in progress (`02_roadmap\2026-09-23_v0.3_spec.md`); this section is not yet
-brought up to date session by session (that pass is V3-6's own job, alongside the rest of
-this README). Per-vendor cost/credits, the dev/business switch, the client map (active
-time, export, merge), Copilot VS Code and the macOS/Linux builds above are all already
-built as of this commit; check `SESSION_LOG.md`'s newest entries or `STATUS.md` for what
-is still open. None of what is built shows partial or misleading numbers: where a feature
-is not built yet, the page says so (the price book note on History, the forecast gate on
-Now) rather than guessing.
+BurnMon is the token-cost slot in ZeroNonsense.dev's Groundwork Kit (the standard tool
+set a Siteoffice client gets), replacing claudecost there from v0.3 onward. Setting a
+Kit recipient up:
+
+1. **Install**: copy `burnmon.exe`/`burnmon-cli.exe` and a `burnmon.json` next to them,
+   no admin rights, no account. Portable: copy the folder to move it.
+2. **Set business mode**: `"mode": "business"` in `burnmon.json` so the app opens showing
+   euros, not tokens, by default (the dev/business toggle still lets anyone flip back).
+   Add `"owners"` rules with a `client` per project if the client bills more than one
+   engagement through the same BurnMon install.
+3. **Export**: on a cadence that suits the engagement (weekly is a reasonable default),
+   `burnmon-cli export --owner <name> --label <machine-or-person> --out export.json`,
+   then `burnmon-cli merge export1.json export2.json ... --out report\` once exports from
+   more than one machine need combining into one number. Neither command needs the app
+   open or a network call.
 
 ## Status
 
-Actively developed toward the `v0.3.0` tag, due 2026-10-09 (`02_roadmap\2026-09-23_v0.3_spec.md`).
-See `STATUS.md` for what is true at the current commit.
+Shipped: `v0.3.0`, 2026-10-09 (`02_roadmap\2026-09-23_v0.3_spec.md`). See `STATUS.md` for
+what is true at the current commit and `SESSION_LOG.md` for the session-by-session record.

@@ -2,6 +2,157 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-24, v0.3 V3-6: release candidate, Done-when and VERIFY pass, v0.3.0
+
+Read `02_roadmap\2026-09-23_v0.3_spec.md` sections 5 (Done when) and 6 (VERIFY carried).
+`go vet ./...`, `go test ./... -count=1` and `.\build.ps1` all green before touching
+anything. Every Done-when item run against the built exe and the real local store
+(`%LOCALAPPDATA%\burnmon\burnmon.db`), not fixtures:
+
+1. **Business mode shows euros per vendor with the basis named: PASS.** Real click on
+   `#btn_mode` (`scripts\uicheck.ps1 v3`) flips to Business; a direct DOM read of a real
+   session card showed `€2.84` / `API list (upper bound)` / `Client: unassigned`, the
+   basis named right under the figure exactly as `sessionCardBusinessBody` writes it.
+2. **History answers "what did one client cost in tokens, euros and active time last
+   week" in two clicks: PASS.** Dropped a scratch `owners` config
+   (`C:\ZND\* -> ZND`, `C:\dev\Work\* -> Valona`, each with a matching `client`) next to
+   the exe, ran `burnmon-cli reown` against the real store (52,213 events), launched the
+   real app, and drove two real clicks (History tab, then the Business toggle) over the
+   dev eval channel: the per-client table read back `ZND 2.62B tokens, EUR 687, 3702 min,
+   312 sessions` and `unassigned 2.29B tokens, EUR 999, 5316 min, 378 sessions` (Valona
+   0, no Valona events exist on this laptop, correctly so). Reverted immediately after
+   (`reown` again with an empty `owners` config) so the real store's baseline state was
+   not left changed by this check.
+3. **An export from Wilco's laptop with `--owner ZND` holds no Valona row and no path:
+   PASS.** With the same scratch owner rules active, `burnmon-cli export --owner ZND
+   --label wilco-laptop-v36 --out export1.json` wrote 35 rows; grepped the raw bytes for
+   "Valona" (0 matches), a Windows path separator pattern (0 matches), and a UUID-shaped
+   session-id pattern (0 matches); every row's `"owner"` value is `"ZND"`.
+4. **Two exports merge into one offline HTML report: PASS.** A second export
+   (`--owner ZND --owner Valona --label dev-2-v36`) merged with the first via
+   `burnmon-cli merge export1.json export2.json --out merged\`: `report.html` has zero
+   `<script>` tags and both labels appear in its tables; `merged.json`'s `by_client`/
+   `by_vendor`/`by_week` breakdowns carry both labels as columns (e.g. `by_vendor.github`:
+   1,373,902 tokens under each label, the real Copilot VS Code data flowing through the
+   whole export/merge path, not just the vendor strip). Owner rules removed and the store
+   reowned back to empty afterward, same as item 2.
+5. **A v0.2 store and a v0.2 `burnmon.json` open with nothing lost: PASS, with a caveat.**
+   `TestMigrateRealV01Store` (copies the real store, opens it, asserts every event
+   survives) and the new-this-session confirmation that it lands at schema version 7 both
+   pass; `TestMigration7AddsClientColumn` proves that migration is additive;
+   `TestLoadV02ConfigWithOwnersOnlyIsUnchanged` proves a literal v0.2-shaped config still
+   loads unchanged. Caveat stated plainly: the real store on this laptop has already been
+   fully migrated forward by earlier v0.3 sessions, so there is no genuine pre-migration
+   v0.2-era store file left on this machine to open fresh; this Done-when item stands on
+   the proven migration path plus the regression tests guarding it, not on opening a
+   distinct v0.2 artefact that no longer exists.
+6. **A Copilot VS Code session appears once OTel is on: PASS.** Confirmed twice this
+   session against the real store: the vendor strip's `Copilot (VS Code)` row read `0 /
+   412K / 412K` (today/week/month) before any config changes, and item 4's real
+   export/merge run carried real `github`-vendor tokens through end to end.
+7. **macOS and Linux artefacts exist on the tag, labelled untested: mechanism confirmed,
+   artefact-on-tag itself still pending.** Cross-compiled all four combinations
+   (darwin/linux x amd64/arm64, `CGO_ENABLED=0`) clean against the current tree;
+   `.github\workflows\release.yml` still builds and attaches on any `v*` tag push;
+   README and About's "untested" notes are both still present. The literal "artefacts on
+   the tag" cannot be true until `v0.3.0` is pushed and that workflow actually runs,
+   which is outside this session (house rule: commits/tags happen here, pushing is
+   Wilco's own step, printed below, not run).
+8. **Startup shows loading states, never the saved-report text: PASS**, reconfirmed via
+   `scripts\uicheck.ps1 v3`'s startup assertions against the current build.
+9. **Monitor mode opens from the remembered setting, and in dev mode it is text only:
+   PASS, now proven end to end.** V3-3b's own click-driven checks could not complete on
+   2026-09-23 (locked console session); this laptop's console was unlocked this session
+   (`query session`, confirmed Active), and `scripts\uicheck.ps1 v3b` ran to completion
+   for the first time: opens straight into the dev-mode text page from a saved
+   `"view":"monitor"` setting, Full view and back with real clicks, business-mode monitor
+   showing the normal visuals instead of text, and the choice surviving a real restart.
+
+Root cause found and fixed along the way, not a regression: item 9's own `v3` check
+(dev/business toggle) failed on the first run today with the real click landing but the
+label never changing. Traced to a stale `%LOCALAPPDATA%\burnmon\burnmon.json` holding
+`{"view": "monitor"}`, left over from an incomplete real-window attempt on 2026-09-23:
+with monitor mode forced on, `#topbar` (which holds `#btn_mode`) is `display:none`, so
+`getBoundingClientRect()` returns a zero-size rect and the click lands nowhere real. Not
+Wilco's own setting (no evidence he opened the app between sessions); reset to
+`"view": "full"` and `v3` then passed cleanly. Left as a plain finding here rather than
+silently worked around, per house culture.
+
+Real, reproducible failure found and left open, out of scope for this pass: `scripts\
+uicheck.ps1 w8` (the Now chart's cost-axis-follows-legend-toggle check) fails against the
+current build exactly as V3-3c already isolated it: the cost axis stays hidden after its
+series is shown. Confirmed today it is not new (re-ran `w1`, which also flaked identically
+on 2026-09-23 under a locked session, and it now passes clean, so today's session had no
+locked-session confound for `w8` either; the failure is real and specific to
+`display:'auto'`'s own Chart.js scale-width behaviour, not an environment artefact).
+Judged not "small" (would need a real Chart.js layout debugging session, not a one-line
+fix) and out of this session's scope (a release-candidate verification/docs pass, not a
+UI bugfix session); carried into `STATUS.md`'s Known gaps rather than fixed blind.
+
+VERIFY items (spec section 6), each resolved to a source and date or an explicit
+still-unverified label:
+
+- **GitHub Copilot AI credit table and per-model multipliers**: Free/Pro/Pro+/Max already
+  dated 2026-09-23 (V3-1), unchanged. Business and Enterprise resolved further today:
+  live-checked against `docs.github.com/en/copilot/concepts/billing-and-usage/
+  organizations-and-enterprises/billing` (2026-09-24), their AI-credit allotments are
+  1,900/user/month (Business) and 3,900/user/month (Enterprise), pooled at the billing
+  entity. Deliberately not added to `copilot_credits.json`'s `plans` block: the page's
+  own "for businesses" tab still does not render in a plain fetch, so no per-seat monthly
+  price is confirmed for either, and their pooled, org-level billing does not fit
+  `CopilotCreditsLeft`'s single-machine model without further design work anyway.
+- **ChatGPT or Codex plan-credit table**: confirmed live 2026-09-24
+  (`help.openai.com/en/articles/12642688`) that no table comparable to GitHub's AI
+  Credits exists to build a book from: ChatGPT's own "credits" are a pay-as-you-go
+  overage top-up on top of the plan's own usage limits, not a fixed monthly allotment.
+  This is a confirmed absence, not a guess, replacing V3-1's "nothing found today".
+- **Anthropic and OpenAI list prices re-dated**: unchanged since V3-1 (2026-09-23),
+  reconfirmed still current by running `burnmon-cli price-check` against the rebuilt exe.
+- **Copilot VS Code span attribute names**: resolved in V3-5, unchanged.
+- **Default data roots on macOS and Linux for each adapter**: Claude, Codex and Copilot
+  CLI were already correct (`os.UserHomeDir()`-based, no per-OS special-casing needed);
+  Copilot CLI's `~/.copilot` default confirmed live today against
+  `docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference`
+  ("By default, this directory is `~/.copilot`"). Hermes was wrong and is fixed this
+  session: `internal\adapter\hermes\hermes.go`'s `DefaultDBPath` used to guess
+  `~/Library/Application Support/Hermes/state.db` (darwin) and
+  `$XDG_DATA_HOME/Hermes/state.db` (linux), following the per-OS app-data convention
+  `store.DefaultPath` uses; live-checked today against Hermes's own docs
+  (`github.com/NousResearch/hermes-agent`'s `session-storage.md`:
+  "the HERMES_HOME environment variable, and finally the platform default (`~/.hermes`
+  on macOS and Linux; `%LOCALAPPDATA%/hermes` on Windows)"), Hermes does not follow
+  either platform's app-data convention at all, it is one dot-folder in `$HOME`
+  regardless of OS. Rewrote `DefaultDBPath` to check `$HERMES_HOME` first (Hermes's own
+  documented override, not previously supported), then `~/.hermes` (darwin/linux) or
+  `%LOCALAPPDATA%\Hermes` (Windows, confirmed live on Wilco's own laptop since v0.2 41B,
+  unchanged); two new tests
+  (`TestDefaultDBPathHermesHomeOverride`, `TestDefaultDBPathNoInstallIsEmpty`). Copilot in
+  VS Code's own row: not actually a "default root" VERIFY at all, since
+  `github.copilot.chat.otel.outfile` has no default on any OS, you always set it
+  yourself; reworded the README table instead of leaving a VERIFY that no research could
+  ever resolve. README's default-roots table updated for all three rows.
+- **Plan assumption A8 (active time usable)**: still unverified.
+  `C:\ZND\10_holding\03_logs\time\` still does not exist on this laptop (checked again
+  today), so V3-2's spot-check still cannot be compared against an external time log.
+  Unchanged, carried forward as-is rather than guessed at.
+
+Docs and release mechanics: version constants bumped to `0.3.0`
+(`cmd\burnmon\app.go`, `cmd\burnmon-cli\main.go`; confirmed via `burnmon-cli -version`
+against the rebuilt exe). `README.md` rewritten for v0.3: dev/business mode and cost, the
+extended owner/client map and active time, monitor mode, export and merge, the two
+new `burnmon-cli` command lines, a new "The Groundwork Kit" section (install, set
+`"mode": "business"`, run `export`/`merge` on a cadence, written generically rather than
+naming a specific Kit client, since this is a public README), and the default-roots table
+fixes above; "Not yet there (v0.3)" removed since it now is. `STATUS.md` rewritten in full
+for v0.3: every shipped item, the store's real schema version (7), and a Known gaps
+section carrying the `w8` cost-axis bug, the Copilot Business/Enterprise per-seat price,
+the ChatGPT/Codex non-table finding, A8, and the pending macOS/Linux tag artefacts, all
+stated above. `DEADLINES.md`'s v0.3 row and `02_roadmap\roadmap.md` item 7 both marked
+DONE 2026-09-24, tagged `v0.3.0`, 15 days early. Full suite green throughout
+(`go vet ./...`, `go test ./... -count=1`, `.\build.ps1`, `node --check` on template.html's
+extracted scripts, `scripts\uicheck.ps1` default suite plus `v3`/`v3b`/`u5` all green
+except the pre-existing, out-of-scope `w8` above). `C:\dev\Work` untouched throughout.
+
 ## 2026-09-23, v0.3 V3-3c: monitor view like perfadvisor (U5)
 
 Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_monitor_view_patch.md` and both

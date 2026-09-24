@@ -1,9 +1,39 @@
 package hermes
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
+
+// TestDefaultDBPathHermesHomeOverride: HERMES_HOME wins over the platform
+// default on every OS, per Hermes's own documented precedence.
+func TestDefaultDBPathHermesHomeOverride(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "state.db")
+	if err := os.WriteFile(dbPath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HERMES_HOME", dir)
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", t.TempDir()) // must not win
+	}
+	got := DefaultDBPath()
+	if got != dbPath {
+		t.Fatalf("DefaultDBPath() = %q, want %q (HERMES_HOME override)", got, dbPath)
+	}
+}
+
+// TestDefaultDBPathNoInstallIsEmpty: with no override and nothing at the
+// platform default, DefaultDBPath is empty, not an error.
+func TestDefaultDBPathNoInstallIsEmpty(t *testing.T) {
+	t.Setenv("HERMES_HOME", filepath.Join(t.TempDir(), "does-not-exist"))
+	if got := DefaultDBPath(); got != "" {
+		t.Fatalf("DefaultDBPath() = %q, want empty (no state.db there)", got)
+	}
+}
 
 // TestPollOnceFixture is A1's spec'd test: the fixture at testdata\hermes\
 // parses to the expected session count and tokens. The fixture holds two
