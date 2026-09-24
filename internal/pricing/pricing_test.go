@@ -247,9 +247,11 @@ func TestLoadV02ConfigWithOwnersOnlyIsUnchanged(t *testing.T) {
 	}
 }
 
-// TestLoadModeAndCopilotPlan guards C3/K3's two new burnmon.json fields:
-// "mode" (the header toggle's start state) and "copilot_plan" (which of the
-// credit book's tiers the account is actually on).
+// TestLoadModeAndCopilotPlan guards K3's burnmon.json field "copilot_plan"
+// (which of the credit book's tiers the account is actually on), and that a
+// stale "mode" key from a pre-cleanup config still loads without error (the
+// dev/business toggle it used to drive is gone, but Load must not choke on
+// the unknown key).
 func TestLoadModeAndCopilotPlan(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "burnmon.json")
@@ -261,45 +263,7 @@ func TestLoadModeAndCopilotPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !cfg.BusinessMode() {
-		t.Error("BusinessMode() = false, want true with mode:\"business\"")
-	}
 	if cfg.CopilotPlan != "Pro" {
 		t.Errorf("CopilotPlan = %q, want %q", cfg.CopilotPlan, "Pro")
-	}
-}
-
-// TestDefaultsAreDevMode guards the default: no "mode" key at all means dev,
-// same as an explicit "dev".
-func TestDefaultsAreDevMode(t *testing.T) {
-	cfg := Defaults()
-	if cfg.BusinessMode() {
-		t.Error("BusinessMode() = true for compiled-in defaults, want false (dev is the default)")
-	}
-}
-
-// TestLoadView guards U3's "view" burnmon.json field, the monitor/full
-// header switch's start state, same convention as "mode" above.
-func TestLoadView(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "burnmon.json")
-	if err := os.WriteFile(path, []byte(`{"view": "monitor"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if !cfg.MonitorView() {
-		t.Error("MonitorView() = false, want true with view:\"monitor\"")
-	}
-}
-
-// TestDefaultsAreFullView guards the default: no "view" key at all means
-// full, same as an explicit "full".
-func TestDefaultsAreFullView(t *testing.T) {
-	cfg := Defaults()
-	if cfg.MonitorView() {
-		t.Error("MonitorView() = true for compiled-in defaults, want false (full is the default)")
 	}
 }

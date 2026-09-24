@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	version        = "0.3.0"
+	version        = "0.3.1"
 	minInterval    = 5 * time.Minute
 	minWSLInterval = 15 * time.Minute
 )
@@ -434,9 +434,6 @@ type settingsPayload struct {
 	OutputCostFactor          float64 `json:"outputCostFactor"`
 	CalibratedOn              string  `json:"calibratedOn"`
 	Window                    string  `json:"window"`
-	// DefaultView (U3) sets pricing.Config.View, the monitor/full start
-	// state, alongside the subscription block above.
-	DefaultView string `json:"defaultView"`
 }
 
 // applySettings writes p to burnmon.json (preserving any other keys
@@ -467,16 +464,8 @@ func (a *app) applySettings(p settingsPayload) error {
 	if err := writeConfigKey(a.cfgPath, "subscription", sub); err != nil {
 		return err
 	}
-	view := p.DefaultView
-	if view != "monitor" {
-		view = "full"
-	}
-	if err := writeConfigKey(a.cfgPath, "view", view); err != nil {
-		return err
-	}
 
 	a.cfg.Subscription = sub
-	a.cfg.View = view
 	if p.YourSeat == "Standard" || p.YourSeat == "Premium" {
 		a.seat = p.YourSeat
 	}
@@ -488,9 +477,8 @@ func (a *app) applySettings(p settingsPayload) error {
 // extra_sources) exactly as they were. A missing or unreadable existing file
 // is treated as empty, not an error: this is very likely the first time
 // anyone has saved from the window. Written via a .tmp file plus
-// os.Rename, so a crash mid-write never corrupts the real file. Shared by
-// the settings dialog (ccSaveSettings, "subscription" and "view") and the
-// monitor/full header switch (ccSaveView, "view" alone).
+// os.Rename, so a crash mid-write never corrupts the real file. Used by the
+// settings dialog (ccSaveSettings, "subscription").
 func writeConfigKey(path, key string, value interface{}) error {
 	raw := map[string]json.RawMessage{}
 	if b, err := os.ReadFile(path); err == nil {
@@ -718,12 +706,6 @@ func (a *app) settingsModalHTML() string {
 		}
 		return ""
 	}
-	selectedView := func(view string) string {
-		if a.cfg.View == view || (a.cfg.View == "" && view == "full") {
-			return " selected"
-		}
-		return ""
-	}
 	f := func(v float64) string { return fmt.Sprintf("%v", v) }
 	n := func(v int) string { return fmt.Sprintf("%d", v) }
 
@@ -743,11 +725,6 @@ func (a *app) settingsModalHTML() string {
     <select id="cc_s_yourSeat">
      <option value="Standard"` + selected("Standard") + `>Standard</option>
      <option value="Premium"` + selected("Premium") + `>Premium</option>
-    </select></label>
-   <label>Default view
-    <select id="cc_s_defaultView">
-     <option value="full"` + selectedView("full") + `>Full</option>
-     <option value="monitor"` + selectedView("monitor") + `>Monitor</option>
     </select></label>
    <label>Monthly subscription (EUR)<input id="cc_s_subEUR" type="number" step="0.01" min="0" value="` + f(sub.MonthlySubscriptionEUR) + `"></label>
    <label>Monthly subscription (USD)<input id="cc_s_subUSD" type="number" step="0.01" min="0" value="` + f(sub.MonthlySubscriptionUSD) + `"></label>
@@ -800,7 +777,6 @@ func (a *app) settingsModalHTML() string {
     var int = function(id){ var v = parseInt(document.getElementById(id).value, 10); return isNaN(v) ? 0 : v; };
     var payload = {
       yourSeat: document.getElementById('cc_s_yourSeat').value,
-      defaultView: document.getElementById('cc_s_defaultView').value,
       monthlySubscriptionEUR: num('cc_s_subEUR'),
       monthlySubscriptionUSD: num('cc_s_subUSD'),
       seatsPurchased: int('cc_s_seatsTotal'),

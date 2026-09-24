@@ -142,47 +142,61 @@ func cacheTokens(cacheWrite, cacheRead *int64) (write, read int64) {
 	return write, read
 }
 
-// anthropicAPICostUSD prices every anthropic-vendor event at its exact
+// anthropicEventCostUSD prices one anthropic-vendor event at its exact
 // model's AnthropicBook rate, cache writes at the 5-minute rate (the same
 // convention the family-generic CacheWriteMult used: most Claude Code
-// traffic re-primes well inside 5 minutes). A model with no entry in the
-// book (an id the live check never confirmed) prices at 0 and is not
-// separately flagged here: the book itself, printed by price-check, is
-// where a missing model is visible.
+// traffic re-primes well inside 5 minutes). ok is false when the model has
+// no entry in the book (an id the live check never confirmed), in which
+// case usd is 0: the book itself, printed by price-check, is where a
+// missing model is visible.
+func (c *Config) anthropicEventCostUSD(e schema.Event) (usd float64, label string, ok bool) {
+	rate, ok := c.AnthropicBook.Models[e.Model]
+	if !ok {
+		return 0, e.Model, false
+	}
+	cw, cr := cacheTokens(e.CacheWrite, e.CacheRead)
+	usd = (float64(e.Input)*rate.In +
+		float64(cw)*rate.CacheWrite5m +
+		float64(cr)*rate.CacheRead +
+		float64(e.Output)*rate.Out) / 1e6
+	return usd, rate.Label, true
+}
+
+// anthropicEventSubCostUSD is the share of the subscription one event
+// accounts for, output-driven (cache traffic is not charged), keyed by exact
+// model rather than family so it tracks AnthropicBook's per-model split. 0
+// when the model has no book entry.
+func (c *Config) anthropicEventSubCostUSD(e schema.Event) float64 {
+	rate, ok := c.AnthropicBook.Models[e.Model]
+	if !ok {
+		return 0
+	}
+	return (float64(e.Output)*rate.Out + float64(e.Input)*rate.In) / 1e6 * c.Subscription.OutputCostFactor
+}
+
+// anthropicAPICostUSD sums anthropicEventCostUSD across every
+// anthropic-vendor event in events.
 func (c *Config) anthropicAPICostUSD(events []schema.Event) float64 {
 	var total float64
 	for _, e := range events {
 		if e.Vendor != "anthropic" {
 			continue
 		}
-		rate, ok := c.AnthropicBook.Models[e.Model]
-		if !ok {
-			continue
-		}
-		cw, cr := cacheTokens(e.CacheWrite, e.CacheRead)
-		total += (float64(e.Input)*rate.In +
-			float64(cw)*rate.CacheWrite5m +
-			float64(cr)*rate.CacheRead +
-			float64(e.Output)*rate.Out) / 1e6
+		usd, _, _ := c.anthropicEventCostUSD(e)
+		total += usd
 	}
 	return total
 }
 
-// anthropicSubscriptionCostUSD is the share of the subscription each event
-// accounts for, output-driven like the old family-generic CallCostSubUSD
-// (cache traffic is not charged), but keyed by exact model rather than
-// family so it tracks AnthropicBook's per-model split.
+// anthropicSubscriptionCostUSD sums anthropicEventSubCostUSD across every
+// anthropic-vendor event in events.
 func (c *Config) anthropicSubscriptionCostUSD(events []schema.Event) float64 {
 	var total float64
 	for _, e := range events {
 		if e.Vendor != "anthropic" {
 			continue
 		}
-		rate, ok := c.AnthropicBook.Models[e.Model]
-		if !ok {
-			continue
-		}
-		total += (float64(e.Output)*rate.Out + float64(e.Input)*rate.In) / 1e6 * c.Subscription.OutputCostFactor
+		total += c.anthropicEventSubCostUSD(e)
 	}
 	return total
 }
@@ -206,26 +220,68 @@ func (c *Config) openAIAPICostUSD(events []schema.Event) float64 {
 	return total
 }
 
-// copilotCreditCostUSD prices every github-vendor event at its exact
-// model's CopilotCredits rate; the USD total converts to credits in the
-// caller (vendorCost) via CopilotCredits.creditUSD().
+// copilotEventCostUSD prices one github-vendor event at its exact model's
+// CopilotCredits rate; the USD total converts to credits in the caller
+// (vendorCost) via CopilotCredits.creditUSD(). ok is false when the model
+// has no book entry, in which case usd is 0.
+func (c *Config) copilotEventCostUSD(e schema.Event) (usd float64, label string, ok bool) {
+	rate, ok := c.CopilotCredits.Models[e.Model]
+	if !ok {
+		return 0, e.Model, false
+	}
+	cw, cr := cacheTokens(e.CacheWrite, e.CacheRead)
+	usd = (float64(e.Input)*rate.In +
+		float64(cw)*rate.CacheWrite +
+		float64(cr)*rate.CachedIn +
+		float64(e.Output)*rate.Out) / 1e6
+	return usd, rate.Label, true
+}
+
+// copilotCreditCostUSD sums copilotEventCostUSD across every github-vendor
+// event in events.
 func (c *Config) copilotCreditCostUSD(events []schema.Event) float64 {
 	var total float64
 	for _, e := range events {
 		if e.Vendor != "github" {
 			continue
 		}
-		rate, ok := c.CopilotCredits.Models[e.Model]
-		if !ok {
-			continue
-		}
-		cw, cr := cacheTokens(e.CacheWrite, e.CacheRead)
-		total += (float64(e.Input)*rate.In +
-			float64(cw)*rate.CacheWrite +
-			float64(cr)*rate.CachedIn +
-			float64(e.Output)*rate.Out) / 1e6
+		usd, _, _ := c.copilotEventCostUSD(e)
+		total += usd
 	}
 	return total
+}
+
+// EventCost prices one event through the same per-vendor book rules
+// CostForEvents applies in bulk (C2: "one Go function ... so the numbers
+// agree everywhere"), now also usable per event by Sessions' own
+// per-call/per-model breakdown (internal/dataset.buildSession), which used
+// to fall back to Claude's family-generic price table for every non-OpenAI
+// vendor: a Copilot or Hermes call priced as if it were Claude Sonnet. sub
+// is the subscription-share figure (0 for a vendor with no subscription
+// calibration). unpriced is true, and usd/sub are 0, when the vendor has no
+// book at all (Hermes/"nous", or any future vendor) or the exact model has
+// no entry in its vendor's book; label is the book's own display label for
+// the model, or the raw model id when unpriced, still useful as a grouping
+// key.
+func (c *Config) EventCost(e schema.Event) (usd, sub float64, label string, unpriced bool) {
+	switch e.Vendor {
+	case "anthropic":
+		var ok bool
+		usd, label, ok = c.anthropicEventCostUSD(e)
+		sub = c.anthropicEventSubCostUSD(e)
+		return usd, sub, label, !ok
+	case "openai":
+		_, cr := cacheTokens(e.CacheWrite, e.CacheRead)
+		var unpricedCall bool
+		usd, unpricedCall = c.OpenAICallCostUSD(e.Model, e.Input, cr, e.Output)
+		return usd, usd, c.OpenAILabel(e.Model), unpricedCall
+	case "github":
+		var ok bool
+		usd, label, ok = c.copilotEventCostUSD(e)
+		return usd, usd, label, !ok
+	default:
+		return 0, 0, e.Model, true
+	}
 }
 
 // CopilotCreditsLeft is C3/K3's "credits left where the book knows them":

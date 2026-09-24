@@ -515,24 +515,6 @@ func main() {
 		log.Println("could not bind ccSaveSettings:", err)
 	}
 
-	// ccSaveView (U3): the monitor/full header switch persists its choice
-	// immediately, through the same merge-into-JSON save path as Settings
-	// (writeConfigKey), but without a rebuild: the view choice changes
-	// nothing about the underlying data, only which chrome the page shows,
-	// so a client-side re-render is enough.
-	if err := w.Bind("ccSaveView", func(view string) error {
-		if view != "monitor" {
-			view = "full"
-		}
-		a.mu.Lock()
-		a.cfg.View = view
-		err := writeConfigKey(a.cfgPath, "view", view)
-		a.mu.Unlock()
-		return err
-	}); err != nil {
-		log.Println("could not bind ccSaveView:", err)
-	}
-
 	go func() {
 		ticker := time.NewTicker(*interval)
 		defer ticker.Stop()

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"burnmon/internal/pricing"
+	"burnmon/internal/scan"
 	"burnmon/internal/store"
 )
 
@@ -26,6 +27,27 @@ func TestDedupeCaseInsensitive(t *testing.T) {
 	got := dedupeCaseInsensitive(in)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("dedupeCaseInsensitive(%v) = %v, want %v", in, got, want)
+	}
+}
+
+// TestDedupSessionsKeepsSameSessionIDAcrossVendors guards Task 2's dedup fix:
+// two different vendors' sessions that happen to share a session id (and,
+// coincidentally, the same start/end/calls/out/cache-read totals) must not
+// collide into one, now that Vendor is part of the dedup key.
+func TestDedupSessionsKeepsSameSessionIDAcrossVendors(t *testing.T) {
+	claude := &scan.Session{
+		SessionID: "shared-id", Vendor: "anthropic", Agent: "claude-code",
+		Start: "2026-09-20T10:00:00.000Z", End: "2026-09-20T10:05:00.000Z",
+		Calls: 1, Out: 10, CacheR: 0,
+	}
+	codex := &scan.Session{
+		SessionID: "shared-id", Vendor: "openai", Agent: "codex",
+		Start: "2026-09-20T10:00:00.000Z", End: "2026-09-20T10:05:00.000Z",
+		Calls: 1, Out: 10, CacheR: 0,
+	}
+	kept, dropped := dedupSessions([]*scan.Session{claude, codex})
+	if len(kept) != 2 || dropped != 0 {
+		t.Fatalf("got %d kept, %d dropped, want 2 kept, 0 dropped (same session id, different vendor)", len(kept), dropped)
 	}
 }
 

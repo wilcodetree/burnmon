@@ -21,11 +21,10 @@ if ($targetChecks.Count -eq 0) {
     $targetChecks = @("w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8")
 }
 # Self-managed checks (tools\uicheck\main.go's own selfManaged map: w1 tests
-# startup itself, v3b restarts burnmon.exe mid-check to prove a setting
-# survives it) start and stop their own burnmon.exe instance, so each must
+# startup itself) start and stop their own burnmon.exe instance, so each must
 # run before anything else here starts one, outside this script's own
 # Start-Process/wait-for-port flow.
-$selfManagedChecks = @("w1", "v3b", "u5")
+$selfManagedChecks = @("w1")
 foreach ($sm in $selfManagedChecks) {
     if ($targetChecks -contains $sm) {
         Push-Location tools\uicheck

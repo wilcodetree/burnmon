@@ -1,15 +1,23 @@
 # BurnMon, status
 
-What is true at this commit (2026-09-24): **v0.3.0**, the release from
-`02_roadmap\2026-09-23_v0.3_spec.md`, shipped: price books (C1), per-vendor cost on every
-basis a book covers (C2), the dev/business switch (C3), the owner-then-client map with
-active time (K1, K2), the business-mode client view (K3), export and merge (K4, K5),
-GitHub Copilot in VS Code as a real adapter (A4), macOS and Linux browser-mode builds
-(B1), and the Now page fixes, loading states and monitor mode (U1 to U5). Release
-candidate Done-when and VERIFY pass: `SESSION_LOG.md`'s newest entry, all seven Done-when
-items pass against the built exe and the real local store, no fail carried into the tag.
-v0.2.3 (real-window check harness), v0.2.2, v0.2.1 and v0.2.0 shipped before it. Specs:
-`02_roadmap\2026-09-22_v0.2_spec.md` through `02_roadmap\2026-09-23_v0.3_spec.md`.
+What is true at this commit (2026-09-24): **v0.3.1**, a cleanup pass over v0.3.0
+(`02_roadmap\2026-09-24_ws1_burnmon_cleanup.md`). Dev is now the only mode: the
+Dev/Business header toggle and Monitor mode are both deleted, code and all (not just the
+buttons). The Sessions tab now labels every harness by its real name (Claude Code, Codex,
+Copilot CLI, Copilot in VS Code, Cowork, Hermes), not "Claude Code" for every vendor that
+happens to share Surface "cli"; a session priced by a vendor with no book entry for its
+exact model shows "no price" instead of a guessed Claude figure. History's "Burn per
+period" chart stacks one segment per harness, fixed colours shared with the Now page,
+x-axis labelled by the period's own start date (`yyyy-mm-dd`) on every period. v0.3.0, the
+release from `02_roadmap\2026-09-23_v0.3_spec.md`, shipped before it: price books (C1),
+per-vendor cost on every basis a book covers (C2), the owner-then-client map with active
+time (K1, K2), the per-client view (K3), export and merge (K4, K5), GitHub Copilot in VS
+Code as a real adapter (A4), macOS and Linux browser-mode builds (B1), and the Now page
+fixes and loading states (U1, U2). Release candidate Done-when and VERIFY pass:
+`SESSION_LOG.md`'s v0.3.0 entry, all seven Done-when items pass against the built exe and
+the real local store, no fail carried into the tag. v0.2.3 (real-window check harness),
+v0.2.2, v0.2.1 and v0.2.0 shipped before that. Specs: `02_roadmap\2026-09-22_v0.2_spec.md`
+through `02_roadmap\2026-09-23_v0.3_spec.md`.
 
 ## What it is
 
@@ -28,8 +36,11 @@ It is the token-cost slot in ZeroNonsense.dev's Groundwork Kit, per README's own
   Default macOS/Linux path fixed this session: `~/.hermes/state.db` (or `$HERMES_HOME`),
   confirmed live against Hermes's own docs, replacing V3-5's guessed
   Application Support/XDG paths, which were wrong.
-- **Copilot CLI** (`internal\adapter\copilotcli`, A2): session totals read at shutdown,
-  not live.
+- **Copilot CLI** (`internal\adapter\copilotcli`, A2): reads `session-store.db`'s own
+  `assistant_usage_events`, one row per API call while the turn is in progress, so a session
+  is live the same way every other adapter's is (corrected here, v0.3.1 cleanup: this line
+  used to say "totals read at shutdown, not live", the plan's assumption A2 itself disproved
+  and replaced, per the adapter's own doc comment; stale, not code, was wrong).
 - **Copilot in VS Code** (`internal\adapter\copilotvsc`, A4, v0.3): tails the OTel file
   the two VS Code settings produce, 5-second poll, last write wins per request. No
   workspace/project attribute exists in the real span data seen so far, so its events
@@ -41,22 +52,20 @@ Five tabs, deep-linkable: **Now** (default start page), **History**, **Sessions*
 **Tools**, **About**. English only.
 
 - **Now**: every running session, live, polled every 2 seconds; a smoothed burn chart
-  (per-session lines, cost line toggle, euros in business mode); the vendor strip; the
-  turn ticker with finding markers; the forecast chart (tokens in dev, euros in
-  business). Loading states throughout (U2): every visual shows "Loading..." until its
-  first real data, never the saved-report fallback text while the app's bindings are
-  still being injected.
-- **History**: filters (period, range, vendor, owner, client once client rules exist);
-  business mode adds a per-client table (tokens, headline cost, active time, sessions).
-- **Sessions**: sortable/searchable table, Findings column, owner and client columns
-  once configured.
+  (per-session lines, cost line an opt-in legend toggle); the vendor strip; the turn
+  ticker with finding markers; the forecast chart (tokens). Loading states throughout
+  (U2): every visual shows "Loading..." until its first real data, never the
+  saved-report fallback text while the app's bindings are still being injected.
+- **History**: filters (period, range, harness, owner, client once client rules exist);
+  a per-client table once client rules exist (tokens, headline cost, active time,
+  sessions); "Burn per period" stacks one segment per harness (v0.3.1).
+- **Sessions**: sortable/searchable table, a Harness column and filter (v0.3.1: the real
+  harness a session ran under, Claude Code/Codex/Copilot CLI/etc., no longer relabelled
+  by Surface's Claude-only vocabulary), Findings column, owner and client columns once
+  configured.
 - **Tools**: `tool_calls` totals as a chart and table.
 - **About**: the Claude pricing explainer, plus "what this shows and what it cannot",
   plus the macOS/Linux untested note.
-- **Monitor mode** (U3, U4, U5): a second Now view, chart/sessions/vendor strip only, no
-  chrome. Dev mode renders it as real monospace text with a braille burn chart (U5,
-  perfadvisor-style); business mode shows the normal visuals with euros. Remembered in
-  `burnmon.json`'s `"view"` key.
 
 ## Store
 
@@ -75,9 +84,23 @@ Dated JSON price books built into the binary (`internal\pricing\books`), each wi
 function, shared by every page and export) returns every basis a book covers plus the
 headline basis per vendor: credits for GitHub Copilot, subscription share once
 configured, else API list labelled "upper bound"; a vendor with no book (Hermes) is
-"tokens only" everywhere, never a guessed figure. The header's Dev/Business toggle flips
-every number on the Now page and switches on History's per-client table; `"mode"` in
-`burnmon.json` sets the start state.
+"tokens only" everywhere, never a guessed figure. `pricing.Config.EventCost` (v0.3.1) is
+the same per-vendor book routing at single-event granularity, used by Sessions' own
+per-call/per-model breakdown (`internal\dataset\fromstore.go`'s `buildSession`) and the
+Now page's per-session/per-minute cost (`internal\live\live.go`'s `turnCost` and
+`ApplySessionTotals`), both of which used to fall through to Claude's family-generic
+price table for every non-OpenAI vendor: a Copilot or Hermes call priced as if it were
+Claude Sonnet, fixed this session
+(`TestSessionsFromEventsPricesGitHubEventsThroughCopilotBook`,
+`TestSessionsFromEventsNoPriceForUnbookedVendor`). Side effect, not just the
+Copilot/Hermes fix: an anthropic event on these two pages is now also priced from
+`AnthropicBook`'s exact model id, the same book History/export already used, rather than
+the family-generic table these two call sites used on their own; a real, intended figure
+shift (e.g. the family table's Sonnet was $3/$15, the book's `claude-sonnet-5` is
+$2/$10), and a Claude model id absent from the book now shows "no price" instead of a
+guessed Sonnet figure. Every model id seen live on Wilco's laptop is in the book
+(`internal\pricing\books\anthropic_api.json`); an older or unconfirmed id is the risk
+case.
 
 ## Owner and client map, active time (K1, K2)
 
@@ -127,24 +150,28 @@ tab.
 ## Forecast (F1)
 
 Plan line (last four weeks, weekday-aware) and live line (current rate to end of day/
-month), error band once a week is scored, gate text until then. Tokens in dev mode;
-business mode shows the same forecast in USD/euros on the headline cost basis (v0.3 C3).
+month), error band once a week is scored, gate text until then. Tokens only.
 
 ## Config
 
 `burnmon.json` is the current name; `claudecost.json` in the same two locations is still
 read as a fallback. `burnmon.example.json` documents every key including `owners` (with
-one commented client/remote example), `mode`, `view`, `copilot_plan` and
-`copilot_vscode_otel_file`.
+one commented client/remote example), `copilot_plan` and `copilot_vscode_otel_file`. The
+`mode` and `view` keys (v0.3's dev/business and monitor/full start state) are gone as of
+v0.3.1: an old config carrying either still loads without error (unknown JSON keys are
+ignored), it just no longer does anything.
 
 ## Known gaps at this commit
 
-- `internal\report\template.html`'s Now chart cost-axis toggle (dev mode, full view):
-  the right-hand cost axis stays hidden after the cost series is shown through the chart
-  legend (`scripts\uicheck.ps1 w8`, reproduced live this session against the current
-  build). Confirmed pre-existing, not caused by any v0.3 session (V3-3c already isolated
-  this against a pre-U5 build with the identical failure); not fixed this session, out of
-  scope for a release-candidate pass, needs a real Chart.js debugging session.
+- `internal\report\template.html`'s Now chart cost-axis toggle: the right-hand cost axis
+  used to stay hidden after the cost series is shown through the chart legend
+  (`scripts\uicheck.ps1 w8`). Flagging a discrepancy rather than silently picking one: the
+  v0.3.1 cleanup session ran `w8` live against the current build and it passed
+  (`axis-when-shown=true`), with no code change to the cost-axis logic itself in this
+  session. Left as an open question rather than marked fixed: could be genuinely resolved
+  by an unrelated change, or timing-flaky; a future session should re-run `w8` a few times
+  before either closing this gap or reopening the Chart.js debugging session it used to
+  call for.
 - GitHub Copilot Business and Copilot Enterprise: their AI-credit allotments are now
   confirmed live (1,900/user/month and 3,900/user/month respectively, pooled at the
   billing entity, `docs.github.com/en/copilot/concepts/billing-and-usage/organizations-
@@ -157,6 +184,12 @@ one commented client/remote example), `mode`, `view`, `copilot_plan` and
   confirmed live 2026-09-24 (`help.openai.com`'s own credits article) that ChatGPT
   personal plans use their own usage limits plus an optional pay-as-you-go credit
   top-up for overage, not a fixed monthly allotment; nothing to build a book from.
+- Two backend figures survive the dev/business toggle's removal computed but unused: the
+  vendor strip's `copilot_credits_left` (its own display line, `#vs_credits_left`, is now
+  permanently hidden) and `live.Session.BusinessCost`/`business_cost` (its only reader,
+  `sessionCardBusinessBody`, is deleted). Left in place this session (harmless, not a
+  correctness bug, real but small ongoing compute cost every poll); a future pass should
+  either remove both or find them a dev-mode use.
 - Plan assumption A8 (active time usable): the spot-check from V3-2 stands, but
   `C:\ZND\10_holding\03_logs\time\` still does not exist on this laptop (checked again
   this session), so the comparison against an external time log remains unverified.
@@ -169,6 +202,12 @@ one commented client/remote example), `mode`, `view`, `copilot_plan` and
   no distinct agent value either, so those two shades stay unreachable.
 - `internal\report\template.html`'s About section still describes only Claude's own
   seat/allowance model, not the other vendors.
+- History's per-client table (restored this session with the dev/business toggle
+  removed, gated on client rules existing rather than on the removed mode) was verified
+  by reading the JS logic and the unchanged, still-passing Go tests
+  (`TestBuildClientFilterAndRows`), not by a fresh real-window click-through: doing that
+  needs a scratch `owners`/`client` config dropped next to the exe and reverted after,
+  same as V3-6's own Done-when check 2, and this session did not repeat that live pass.
 
 ## Next
 

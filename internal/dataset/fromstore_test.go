@@ -190,6 +190,26 @@ func TestBuildSessionCarriesClient(t *testing.T) {
 	}
 }
 
+// TestBuildSessionCarriesVendorAndAgent guards Task 2's fix: scan.Session
+// now carries Vendor and Agent straight from its events, so the Sessions tab
+// can label a session by its real harness instead of Surface's Claude-only
+// vocabulary (Surface "cli" is shared by Claude Code, Codex and Copilot CLI
+// alike).
+func TestBuildSessionCarriesVendorAndAgent(t *testing.T) {
+	cfg := pricing.Defaults()
+	events := []schema.Event{
+		{Vendor: "openai", Agent: "codex", SessionID: "s1", RequestID: "r1", Model: "gpt-5.6-terra",
+			Surface: "cli", At: time.Now().UTC(), Input: 1, Output: 1},
+	}
+	sessions := SessionsFromEvents(events, &cfg)
+	if sessions[0].Vendor != "openai" {
+		t.Fatalf("Vendor = %q, want openai", sessions[0].Vendor)
+	}
+	if sessions[0].Agent != "codex" {
+		t.Fatalf("Agent = %q, want codex", sessions[0].Agent)
+	}
+}
+
 // TestActiveMinutesByClientSumsAcrossSessions guards K2's per-client
 // rollup: the sum of its sessions' ActiveMinutes.
 func TestActiveMinutesByClientSumsAcrossSessions(t *testing.T) {
@@ -205,6 +225,64 @@ func TestActiveMinutesByClientSumsAcrossSessions(t *testing.T) {
 	byClient := ActiveMinutesByClient(sessions)
 	if byClient["Talon"] != 10 {
 		t.Fatalf("ActiveMinutesByClient[Talon] = %v, want 10 (4 + 6)", byClient["Talon"])
+	}
+}
+
+// TestSessionsFromEventsPricesGitHubEventsThroughCopilotBook guards Task 2's
+// pricing fix: a github-vendor (Copilot) event used to fall through to
+// Claude's family-generic price table (cfg.ModelFamily's FallbackFamily,
+// "sonnet") whenever its model didn't substring-match "opus"/"sonnet"/
+// "haiku"/"fable"; it must now price through CopilotCredits' own book.
+func TestSessionsFromEventsPricesGitHubEventsThroughCopilotBook(t *testing.T) {
+	cfg := pricing.Defaults()
+	events := []schema.Event{
+		{
+			Vendor: "github", Agent: "copilot-cli", SessionID: "copilot-sess", RequestID: "copilot-sess:1",
+			Model: "claude-sonnet-5", Surface: "cli",
+			At:     time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC),
+			Input:  1000,
+			Output: 100,
+		},
+	}
+	sessions := SessionsFromEvents(events, &cfg)
+	if len(sessions) != 1 {
+		t.Fatalf("got %d sessions, want 1", len(sessions))
+	}
+	s := sessions[0]
+	want := (1000*2.00 + 100*10.00) / 1e6 // CopilotCredits book's claude-sonnet-5 rate, not Claude's family price
+	if diff := s.Cost - want; diff > 1e-9 || diff < -1e-9 {
+		t.Fatalf("Cost = %v, want %v (CopilotCredits book rate)", s.Cost, want)
+	}
+	if s.Unpriced != 0 {
+		t.Fatalf("Unpriced = %d, want 0 for a model the Copilot book covers", s.Unpriced)
+	}
+}
+
+// TestSessionsFromEventsNoPriceForUnbookedVendor guards Task 2's "no price
+// exists, show 'no price' instead of a Claude price" rule: a vendor with no
+// book at all (Hermes/"nous") must price at 0 and count its tokens as
+// unpriced, never fall back to a guessed Claude figure.
+func TestSessionsFromEventsNoPriceForUnbookedVendor(t *testing.T) {
+	cfg := pricing.Defaults()
+	events := []schema.Event{
+		{
+			Vendor: "nous", Agent: "hermes", SessionID: "hermes-sess", RequestID: "hermes-sess:1",
+			Model: "some-local-model", Surface: "unknown",
+			At:     time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC),
+			Input:  1000,
+			Output: 100,
+		},
+	}
+	sessions := SessionsFromEvents(events, &cfg)
+	if len(sessions) != 1 {
+		t.Fatalf("got %d sessions, want 1", len(sessions))
+	}
+	s := sessions[0]
+	if s.Cost != 0 {
+		t.Fatalf("Cost = %v, want 0 for a vendor with no price book", s.Cost)
+	}
+	if s.Unpriced != 1100 {
+		t.Fatalf("Unpriced = %d, want 1100 (all tokens on the one unpriced call)", s.Unpriced)
 	}
 }
 

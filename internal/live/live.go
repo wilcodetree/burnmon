@@ -143,20 +143,16 @@ const BucketSeconds = 60
 // chartSlots is ChartWindow's slot count at BucketSeconds width (30).
 const chartSlots = int(ChartWindow / (BucketSeconds * time.Second))
 
-// turnCost returns one event's subscription-share cost, the same model
-// buildSession uses: output-driven for Claude, list-price for OpenAI (no
-// calibrated Codex invoice exists in v0.1).
+// turnCost returns one event's subscription-share cost, the same per-vendor
+// book routing buildSession uses (pricing.Config.EventCost): output-driven
+// for Claude, list-price for OpenAI (no calibrated Codex invoice exists in
+// v0.1), credits-as-USD for GitHub Copilot, 0 for a vendor with no book.
+// Before this fix (v0.3.1 cleanup), every non-OpenAI vendor fell through to
+// Claude's family-generic price table here too, the same bug already found
+// and fixed in buildSession.
 func turnCost(e schema.Event, cfg *pricing.Config) float64 {
-	if e.Vendor == "openai" {
-		cr := int64(0)
-		if e.CacheRead != nil {
-			cr = *e.CacheRead
-		}
-		c, _ := cfg.OpenAICallCostUSD(e.Model, e.Input, cr, e.Output)
-		return c
-	}
-	fam := cfg.ModelFamily(e.Model)
-	return cfg.CallCostSubUSD(fam, e.Input, e.Output)
+	_, sub, _, _ := cfg.EventCost(e)
+	return sub
 }
 
 // isTurn reports whether e is a real API-call turn rather than the claude
@@ -611,17 +607,18 @@ func ApplySessionTotals(sessions []*Session, st *store.Store, cfg *pricing.Confi
 				if start.IsZero() || r.MinAt.Before(start) {
 					start = r.MinAt
 				}
-				if r.Vendor == "openai" {
-					c, _ := cfg.OpenAICallCostUSD(r.Model, r.Input, r.CacheRead, r.Output)
-					cost += c
-				} else {
-					cost += cfg.CallCostSubUSD(cfg.ModelFamily(r.Model), r.Input, r.Output)
-				}
 				cw, cr := r.CacheWrite, r.CacheRead
-				synth = append(synth, schema.Event{
+				ev := schema.Event{
 					Vendor: r.Vendor, Model: r.Model,
 					Input: r.Input, CacheWrite: &cw, CacheRead: &cr, Output: r.Output,
-				})
+				}
+				// EventCost (v0.3.1): the same per-vendor book routing
+				// turnCost above uses, fixing the same bug here (a
+				// non-OpenAI vendor used to price through Claude's
+				// family-generic table via cfg.ModelFamily/CallCostSubUSD).
+				_, sub, _, _ := cfg.EventCost(ev)
+				cost += sub
+				synth = append(synth, ev)
 			}
 			s.Tokens = tokens
 			s.Cost = cost

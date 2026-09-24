@@ -71,6 +71,7 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
 
 	title, owner, client, sessionID, surface := "", "", "", events[0].SessionID, events[0].Surface
+	vendor, agent := events[0].Vendor, ""
 	for _, e := range events {
 		if title == "" && e.Title != "" {
 			title = e.Title
@@ -80,6 +81,9 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		}
 		if client == "" && e.Client != "" {
 			client = e.Client
+		}
+		if agent == "" && e.Agent != "" {
+			agent = e.Agent
 		}
 	}
 	if title == "" {
@@ -112,25 +116,25 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		}
 		tokens := e.Input + cw + cr + e.Output
 
-		var c, cs float64
-		var label string
-		if e.Vendor == "openai" {
-			// No subscription-share calibration exists for Codex/ChatGPT
-			// plans in v0.1 (only Anthropic's OutputCostFactor is
-			// calibrated against a real invoice): cost and cost_sub are
-			// the same list-price figure for an OpenAI event.
-			var unpricedCall bool
-			c, unpricedCall = cfg.OpenAICallCostUSD(e.Model, e.Input, cr, e.Output)
-			cs = c
-			label = cfg.OpenAILabel(e.Model)
-			if unpricedCall {
-				unpriced += tokens
-			}
-		} else {
-			fam := cfg.ModelFamily(e.Model)
-			c = cfg.CallCostUSD(fam, e.Input, cw, cr, e.Output)
-			cs = cfg.CallCostSubUSD(fam, e.Input, e.Output)
-			label = cfg.Label(fam)
+		// V3.1 cleanup: price every vendor through its own book
+		// (pricing.Config.EventCost), not just OpenAI. Before this fix, any
+		// non-OpenAI vendor (Copilot, Hermes) fell through to Claude's
+		// family-generic price table and was priced as if it were a Claude
+		// call; a vendor with no book entry for this exact model now prices
+		// at 0 and counts toward Unpriced ("no price"), never a guessed
+		// Claude figure. Side effect, not just the Copilot/Hermes fix: an
+		// anthropic event is now also priced from AnthropicBook's exact model
+		// id (matching Now/History/export, C2's "one function ... so the
+		// numbers agree everywhere") instead of the family-generic table this
+		// package used to use on its own, so Sessions' own per-call figures
+		// for Claude shift too (e.g. Sonnet's family price was $3/$15, the
+		// book's claude-sonnet-5 is $2/$10), and a Claude model id absent
+		// from the book (an older id, or a new one the book has not caught
+		// up with yet) now shows "no price" here rather than a guessed
+		// Sonnet figure.
+		c, cs, label, unpricedCall := cfg.EventCost(e)
+		if unpricedCall {
+			unpriced += tokens
 		}
 		fresh += e.Input
 		cacheW += cw
@@ -200,6 +204,8 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		Title:          title,
 		Owner:          owner,
 		Client:         client,
+		Vendor:         vendor,
+		Agent:          agent,
 		Surface:        surface,
 		CWD:            cwd,
 		Start:          stamps[0],

@@ -101,18 +101,12 @@ type Payload struct {
 	RefreshTaskID    string                 `json:"refresh_task_id"`
 	Subscription     subOut                 `json:"subscription"`
 	SurfaceLabels    map[string]string      `json:"surface_labels"`
+	AgentLabels      map[string]string      `json:"agent_labels"`
 	LongSessionCalls int                    `json:"long_session_calls"`
 	Totals           totalsOut              `json:"totals"`
 	Months           map[string]*agg.Bucket `json:"months"`
 	Days             map[string]*agg.Bucket `json:"days"`
 	Sessions         []*scan.Session        `json:"sessions"`
-	// Mode is C3's dev/business start state ("" or "dev" means dev),
-	// straight from pricing.Config.Mode: the header toggle's default before
-	// any per-machine choice is remembered.
-	Mode string `json:"mode,omitempty"`
-	// View is U3's monitor/full start state ("" or "full" means full),
-	// straight from pricing.Config.View.
-	View string `json:"view,omitempty"`
 }
 
 func round4(x float64) float64 { return math.Round(x*1e4) / 1e4 }
@@ -181,13 +175,12 @@ func BuildPayload(cfg *pricing.Config, seat string, cutoff, today time.Time,
 			YourSeatPriceUSD:       sub.SeatPriceUSD[seat],
 		},
 		SurfaceLabels:    scan.SurfaceLabel,
+		AgentLabels:      scan.AgentLabel,
 		LongSessionCalls: scan.LongSessionCalls,
 		Totals:           t,
 		Months:           months,
 		Days:             days,
 		Sessions:         kept,
-		Mode:             cfg.Mode,
-		View:             cfg.View,
 	}
 }
 
@@ -249,17 +242,20 @@ func (c *Cache) RootsSnapshot() map[string][]string {
 }
 
 // dedupSessions removes the same conversation when it was recorded under
-// two session IDs. The key is five fields already on scan.Session: start,
-// end, call count, output tokens and cache-read tokens. Two genuinely
-// different conversations would need identical start and end timestamps
-// to the millisecond plus identical token counts to collide, so this is
-// safe without any requestId bookkeeping across files. On a collision the
-// session whose SessionID sorts first is kept, so the choice is
-// deterministic across runs and independent of file mtime.
+// two session IDs. The key is six fields already on scan.Session: vendor,
+// start, end, call count, output tokens and cache-read tokens. Vendor guards
+// against two different vendors' sessions colliding on the other five
+// fields by coincidence (V3.1 cleanup: before Vendor existed on Session,
+// nothing ruled this out); two genuinely different same-vendor conversations
+// would still need identical start and end timestamps to the millisecond
+// plus identical token counts to collide, so this is safe without any
+// requestId bookkeeping across files. On a collision the session whose
+// SessionID sorts first is kept, so the choice is deterministic across runs
+// and independent of file mtime.
 func dedupSessions(sessions []*scan.Session) ([]*scan.Session, int) {
 	best := map[string]*scan.Session{}
 	for _, s := range sessions {
-		key := s.Start + "|" + s.End + "|" +
+		key := s.Vendor + "|" + s.Start + "|" + s.End + "|" +
 			strconv.FormatInt(s.Calls, 10) + "|" +
 			strconv.FormatInt(s.Out, 10) + "|" +
 			strconv.FormatInt(s.CacheR, 10)

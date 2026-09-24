@@ -57,6 +57,20 @@ type Totals struct {
 	// that case, for the page to show in place of a cost figure.
 	CostUSD  *float64 `json:"cost_usd,omitempty"`
 	CostNote string   `json:"cost_note,omitempty"`
+
+	// ByVendor is Task 2's per-vendor split of this bucket's own Tokens/
+	// CostUSD, keyed by agent (the same keys AgentLabel and Vendors use), so
+	// the History chart can stack one segment per harness rather than one
+	// bar for the whole period. Absent (nil) when the bucket carries no
+	// agent-tagged event at all (a store predating Vendor/Agent on Event).
+	ByVendor map[string]*VendorAgg `json:"by_vendor,omitempty"`
+}
+
+// VendorAgg is one agent's share of a bucket's tokens and headline cost, the
+// History chart's stacked-bar segment.
+type VendorAgg struct {
+	Tokens  int64    `json:"tokens"`
+	CostUSD *float64 `json:"cost_usd,omitempty"`
 }
 
 // Row is one period bucket's Totals, keyed the same way agg.Bucket's maps
@@ -157,6 +171,10 @@ func Build(events []schema.Event, cfg *pricing.Config, f Filter) Payload {
 	buckets := map[string]*Totals{}
 	bucketSessions := map[string]map[string]bool{}
 	bucketTurnEvents := map[string][]schema.Event{}
+	// bucketVendorTokens/bucketVendorTurnEvents split the same accumulation
+	// above one level further, by agent, for ByVendor's stacked-bar segments.
+	bucketVendorTokens := map[string]map[string]int64{}
+	bucketVendorTurnEvents := map[string]map[string][]schema.Event{}
 	var overallTurnEvents []schema.Event
 	var overallSessions = map[string]bool{}
 	// clientRowEvents groups every event matching period/range/vendor/owner
@@ -220,11 +238,24 @@ func Build(events []schema.Event, cfg *pricing.Config, f Filter) Payload {
 		overall.CacheR += cr
 		overall.Out += e.Output
 
+		if e.Agent != "" {
+			if bucketVendorTokens[key] == nil {
+				bucketVendorTokens[key] = map[string]int64{}
+			}
+			bucketVendorTokens[key][e.Agent] += e.Input + cw + cr + e.Output
+		}
+
 		if isTurn(e) {
 			b.Turns++
 			overall.Turns++
 			bucketTurnEvents[key] = append(bucketTurnEvents[key], e)
 			overallTurnEvents = append(overallTurnEvents, e)
+			if e.Agent != "" {
+				if bucketVendorTurnEvents[key] == nil {
+					bucketVendorTurnEvents[key] = map[string][]schema.Event{}
+				}
+				bucketVendorTurnEvents[key][e.Agent] = append(bucketVendorTurnEvents[key][e.Agent], e)
+			}
 		}
 	}
 
@@ -236,6 +267,17 @@ func Build(events []schema.Event, cfg *pricing.Config, f Filter) Payload {
 			b.CostUSD = &c
 		} else {
 			b.CostNote = "tokens only"
+		}
+		if agentTokens := bucketVendorTokens[key]; len(agentTokens) > 0 {
+			b.ByVendor = make(map[string]*VendorAgg, len(agentTokens))
+			for agent, tokens := range agentTokens {
+				va := &VendorAgg{Tokens: tokens}
+				if usd, covered := headlineCostUSD(bucketVendorTurnEvents[key][agent], cfg); covered {
+					c := usd
+					va.CostUSD = &c
+				}
+				b.ByVendor[agent] = va
+			}
 		}
 	}
 	overall.Tokens = overall.Fresh + overall.CacheW + overall.CacheR + overall.Out

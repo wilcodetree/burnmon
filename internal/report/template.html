@@ -185,60 +185,10 @@ code{background:var(--merc-l);padding:1px 5px;border-radius:4px;font-size:12.5px
 .mastword{font-family:"Space Grotesk",Inter,"Segoe UI",system-ui,sans-serif;font-weight:600;font-size:14px;color:var(--ink);letter-spacing:-.2px}
 .mastword .mastdev{color:#5E7088}
 
-/* U3/U4 (v0.3): monitor mode. body.monitor-mode hides the normal chrome and
-   the ticker/forecast panels, keeping chart, sessions and vendor strip full
-   window; body.monitor-mode.monitor-dev (dev mode only) additionally swaps
-   the whole Now section for the real-text page below. */
-#monitor_exit_btn{display:none;position:fixed;top:10px;right:10px;z-index:1200;
-  background:var(--merc-l);color:var(--ink);border:1px solid var(--merc);border-radius:6px;
-  padding:6px 12px;font:12px/1 "Inter","Segoe UI",sans-serif;font-weight:600;cursor:pointer}
-body.monitor-mode #monitor_exit_btn{display:block}
-body.monitor-mode #topbar{display:none}
-body.monitor-mode .wrap{padding-top:14px}
-body.monitor-mode #now_extra{display:none}
-body.monitor-mode.monitor-dev #now{display:none}
-#monitor_text_view{display:none;position:fixed;inset:0;z-index:900;overflow:auto;
-  background:#0B0F14;color:#C8F7D8;font-family:"Cascadia Mono","JetBrains Mono",Consolas,monospace;
-  font-size:clamp(16px,1.1vw,20px);line-height:1.4;padding:16px}
-body.monitor-mode.monitor-dev #monitor_text_view{display:block}
-/* U5 (v0.3): the braille history chart, modelled on perfadvisor's
-   history-panel look, replaces U4's one-block-per-minute strip. */
-.mt-chart-panel{background:#0F1620;border:1px solid #232D3A;border-radius:8px;
-  padding:14px 18px;margin-bottom:18px}
-.mt-chart-title{font-size:clamp(18px,1.4vw,24px);font-weight:700;color:#C8F7D8;
-  margin-bottom:8px}
-.mt-chart-legend{margin-bottom:6px}
-.mt-chart-legend-row{display:flex;justify-content:space-between;align-items:baseline;
-  gap:16px;flex-wrap:wrap;margin-bottom:2px}
-.mt-chart-dash{font-weight:700}
-.mt-chart-rate{color:#8FA3BC;margin-left:6px}
-.mt-chart-peak{color:#5E7088;white-space:nowrap;font-size:0.85em}
-.mt-chart-dots{white-space:pre;line-height:1.05;margin:6px 0}
-.mt-chart-minutes{white-space:pre;color:#5E7088;font-size:0.85em}
-#mt_chart{margin-bottom:16px}
-#mt_sessions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
-.mt-session-box{white-space:pre;margin:0;cursor:pointer;color:#C8F7D8}
-.mt-session-box:hover{color:#EAF1F8}
-#mt_vendorstrip{font-size:clamp(20px,1.6vw,26px)}
-#mt_vendorstrip pre{white-space:pre;margin:0}
 </style>
 </head>
 <body>
 <div id="tip" class="tip hidden"></div>
-<!-- U3 (v0.3): the monitor-mode exit switch. Always in the DOM, shown only
-     by the body.monitor-mode CSS rule below, so it never needs its own
-     'hidden' class juggling. -->
-<button id="monitor_exit_btn" type="button" title="Back to the normal page">Full view</button>
-<!-- U4 (v0.3): the dev-mode monitor text page, real text over Chart.js:
-     block-character chart, ASCII-bordered session and vendor-strip boxes.
-     Reads the same bmLive/bmVendorStrip polls the Now page already runs
-     (renderMonitorText, called from renderNow/renderVendorStrip), no new
-     backend calls. Shown only via body.monitor-mode.monitor-dev. -->
-<div id="monitor_text_view">
-  <div id="mt_chart"></div>
-  <div id="mt_sessions"></div>
-  <div id="mt_vendorstrip"></div>
-</div>
 <div id="topbar">
 <header><div class="inner">
   <div>
@@ -248,12 +198,7 @@ body.monitor-mode.monitor-dev #monitor_text_view{display:block}
   </div>
   <div class="topright">
     <div class="topctrls">
-      <button id="btn_mode" class="tglbtn" type="button" title="Dev or business view">Dev</button>
       <button id="btn_theme" class="tglbtn" type="button" title="Theme">Dark</button>
-      <!-- U3 (v0.3): monitor mode, entered from here, left via the small
-           "Full view" switch (#monitor_exit_btn) that only shows once
-           monitor mode is active. -->
-      <button id="btn_monitor" class="tglbtn" type="button" title="Monitor mode">Monitor</button>
     </div>
     <div class="stamp" id="stamp"></div>
   </div>
@@ -288,10 +233,6 @@ body.monitor-mode.monitor-dev #monitor_text_view{display:block}
   </tr></thead><tbody></tbody></table></div>
   <div id="vs_credits_left" class="small hidden" style="margin-top:6px"></div>
 
-  <!-- U3 (v0.3): monitor mode is three panels only (chart, sessions, vendor
-       strip above); this wrapper is what body.monitor-mode hides to get
-       there, on top of the header and tab bar it already hides. -->
-  <div id="now_extra">
   <h2>Turn ticker</h2>
   <p class="lede" style="margin-top:-8px">Newest first, capped at 50 lines. Click a line, or a marker on the chart above, for the full turn detail.</p>
   <div id="now_ticker"></div>
@@ -300,7 +241,6 @@ body.monitor-mode.monitor-dev #monitor_text_view{display:block}
   <div id="now_forecast_note" class="note">Loading&hellip;</div>
   <div class="chartbox" id="now_forecast_chartbox"><div class="chart-loading" id="ch_forecast_loading">Loading&hellip;</div><canvas id="ch_forecast"></canvas></div>
   <div class="card plain" id="now_forecast"></div>
-  </div>
 </section>
 
 <div id="turn_drawer_overlay" class="hidden">
@@ -339,8 +279,9 @@ body.monitor-mode.monitor-dev #monitor_text_view{display:block}
     <th class="nosort">Period</th><th>Sessions</th><th>Turns</th><th>Tokens</th><th>Cost</th>
   </tr></thead><tbody></tbody></table></div>
 
-  <!-- K3 (v0.3): per-client table, business mode only, hidden while no
-       client rule exists. -->
+  <!-- K3 (v0.3): per-client table, hidden while no client rule exists, same
+       convention as h_client_wrap above (V3.1 cleanup: no longer gated by
+       the removed dev/business toggle). -->
   <div id="h_clients_wrap" class="hidden">
     <h2>Per client</h2>
     <div class="scroll"><table id="t_history_clients"><thead><tr>
@@ -399,6 +340,7 @@ body.monitor-mode.monitor-dev #monitor_text_view{display:block}
   <h2>Every session</h2>
   <p class="lede">Newest first. Click a column header to sort by it. Long titles are cut off: hover over one to read the whole thing. Sessions marked with a yellow edge ran past the point where cost per call climbs steeply, because the model is re-reading a very large context on every turn. Start times are shown in your device's local time zone; hover a time to see the UTC value used for grouping.</p>
   <div class="controls">
+    <div><label>Harness</label><select id="f_harness"><option value="">All</option></select></div>
     <div><label>Surface</label><select id="f_surface"><option value="">All</option></select></div>
     <div><label>Month</label><select id="f_month"><option value="">All</option></select></div>
     <div><label>Search title</label><input type="text" id="f_q" placeholder="e.g. hub, sprint, invoice" style="width:200px"></div>
@@ -409,7 +351,7 @@ body.monitor-mode.monitor-dev #monitor_text_view{display:block}
     <div class="small" id="s_count"></div>
   </div>
   <div class="scroll tall with-filters"><table id="t_sessions"><thead><tr>
-    <th data-s="start">Started</th><th data-s="title">What it was</th><th data-s="surface">Surface</th>
+    <th data-s="start">Started</th><th data-s="title">What it was</th><th data-s="agent">Harness</th>
     <th class="nosort">Models</th><th data-s="calls">Calls</th><th data-s="tokens">Tokens</th>
     <th data-s="cost_per_call">Per call</th><th data-s="cost">Cost</th>
     <th data-s="owner" class="col-owner hidden">Owner</th>
@@ -580,36 +522,18 @@ catch(e){ document.querySelector('.wrap').innerHTML =
   '<div class="note warn" style="margin-top:20px"><b>No usage data embedded.</b> Run the extract script and republish.</div>'; return; }
 
 var LS = 'claude-cost-user-v1';
-// UI.mode (C3): starts from D.mode (burnmon.json's "mode", Talon's config),
-// "business" or anything else meaning "dev"; a persisted per-machine choice
-// below overrides that start state on every later load, the same pattern
-// UI.theme already uses.
 var UI = {cur:'eur', fx:0.92, basis:'sub', sort:'start', dir:-1, theme:'dark',
-  mode:(D.mode === 'business' ? 'business' : 'dev'),
-  // view (U3): monitor/full start state, straight from D.view (burnmon.json's
-  // "view", the same start-state convention as mode above). Deliberately not
-  // read back from localStorage: the header switch persists its own choice
-  // into burnmon.json (ccSaveView), not the browser's per-viewer storage.
-  view:(D.view === 'monitor' ? 'monitor' : 'full'),
-  f:{surface:'',month:'',q:'',long:'',owner:'',client:''}};
+  f:{harness:'',surface:'',month:'',q:'',long:'',owner:'',client:''}};
 try { var st = JSON.parse(localStorage.getItem(LS)||'null');
   if(st){ UI.cur = st.cur||UI.cur; UI.fx = st.fx>0?st.fx:UI.fx; UI.basis = st.basis||UI.basis;
-    UI.theme = st.theme||UI.theme; UI.mode = st.mode||UI.mode; } } catch(e){}
+    UI.theme = st.theme||UI.theme; } } catch(e){}
 function persist(){ try{ localStorage.setItem(LS, JSON.stringify(
-  {cur:UI.cur, fx:UI.fx, basis:UI.basis, theme:UI.theme, mode:UI.mode})); }catch(e){} }
-// isBusiness (C3): the one place every business-mode branch below reads
-// from, so "Every number on the Now page flips" is one boolean, not a
-// scattered string compare.
-function isBusiness(){ return UI.mode === 'business'; }
+  {cur:UI.cur, fx:UI.fx, basis:UI.basis, theme:UI.theme})); }catch(e){} }
 var SUB = D.subscription || {};
 
 var SL = D.surface_labels || {};
+var AL = D.agent_labels || {};
 var charts = {};
-// LAST_NOW_SNAP, LAST_VENDOR_STRIP and LAST_FORECAST cache each poll's own
-// payload (C3): toggling the mode button re-renders instantly from whatever
-// last arrived instead of waiting up to a full poll cycle (2s/60s/60s) for
-// the numbers to flip.
-var LAST_NOW_SNAP = null, LAST_VENDOR_STRIP = null, LAST_FORECAST = null, LAST_HISTORY = null;
 // nowChart holds drawNowChart's state across polls (F8, SESSION_LOG.md,
 // v0.1.2): the Now chart is one Chart.js instance for the life of the page,
 // so per-session dataset objects, colors and the smoothed axis maxima have
@@ -757,10 +681,9 @@ function tok(v){
 }
 // tokPrecise: W6 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md).
 // tok()'s whole-number rounding repeats consecutive axis ticks on the Now
-// chart ("3M, 3M, 2M, 2M"); this two-decimal variant was scoped to that
-// chart's own axis ticks and tooltip, and now also to monitor-dev's braille
-// chart legend (U5, v0.3: "tokens per minute... two decimals", same
-// "scaled to peak" figure), everywhere else on the page keeps using tok().
+// chart ("3M, 3M, 2M, 2M"); this two-decimal variant is scoped to that
+// chart's own axis ticks and tooltip, everywhere else on the page keeps
+// using tok().
 function tokPrecise(v){
   v = v||0;
   // U2 (v0.3): an empty axis tick used to read "0.00K" (fell through to the
@@ -794,8 +717,6 @@ function monthLabel(k){
   var p = k.split('-'), names = MONTH_NAMES.en;
   return names[parseInt(p[1],10)-1] + ' ' + p[0];
 }
-var SHORT = {cli:'Code', code_agent:'Code agent', desktop:'Desktop'};
-function shortSurface(k){ return SHORT[k] || (SL[k]||k).replace('Claude ',''); }
 function topOf(obj, field){
   var best = null, keys = Object.keys(obj||{});
   keys.forEach(function(k){ if(best===null || obj[k][field] > obj[best][field]) best = k; });
@@ -1087,6 +1008,7 @@ function renderSessions(){
   var ss = (D.sessions||[]).slice();
   var f = UI.f;
   ss = ss.filter(function(s){
+    if(f.harness && s.agent !== f.harness) return false;
     if(f.surface && s.surface !== f.surface) return false;
     if(f.month && !(s.start.slice(0,7) <= f.month && f.month <= s.end.slice(0,7))) return false;
     if(f.long && !s.long) return false;
@@ -1113,18 +1035,19 @@ function renderSessions(){
     tc += pick(s); tt += s.tokens; tcalls += s.calls;
     var mkeys = Object.keys(s.models||{});
     var models = mkeys.slice(0,2).map(function(m){
-      return '<span class="pill'+(m==='Fable'?' sun':(m==='Opus'?' lav':''))+'">'+esc(m)+'</span>'; }).join('');
+      return '<span class="pill'+(m.indexOf('Fable')!==-1?' sun':(m.indexOf('Opus')!==-1?' lav':''))+'">'+esc(m)+'</span>'; }).join('');
     if(mkeys.length > 2) models += '<span class="pill">+'+(mkeys.length-2)+'</span>';
     var tr = document.createElement('tr');
     if(s.long) tr.className = 'flag';
+    var noPrice = !(s.cost||0) && (s.unpriced_tokens||0) > 0;
     tr.innerHTML = '<td title="UTC '+esc(s.start.slice(0,16).replace('T',' '))+'">'+esc(localStamp(s.start))+'</td>'
       + '<td data-full="'+esc(s.title)+'">'+esc(s.title)+'</td>'
-      + '<td title="'+esc(SL[s.surface]||s.surface)+'">'+esc(shortSurface(s.surface))+'</td>'
+      + '<td title="Surface: '+esc(SL[s.surface]||s.surface)+'">'+esc(AL[s.agent]||s.agent||'Unknown')+'</td>'
       + '<td title="'+esc(mkeys.join(', '))+'">'+models+'</td>'
       + '<td>'+n(s.calls)+(s.long?' <span class="pill sun">'+t('long_pill')+'</span>':'')+'</td>'
       + '<td>'+tok(s.tokens)+'</td>'
-      + '<td>'+money(pickCall(s),3)+'</td>'
-      + '<td><b>'+money(pick(s),2)+'</b></td>'
+      + '<td>'+(noPrice ? '<span class="small">no price</span>' : money(pickCall(s),3))+'</td>'
+      + '<td>'+(noPrice ? '<span class="small">no price</span>' : '<b>'+money(pick(s),2)+'</b>')+'</td>'
       + '<td class="col-owner hidden">'+esc(s.owner||'')+'</td>'
       + '<td class="col-client hidden">'+esc(s.client||'')+'</td>'
       + '<td class="col-findings" data-session="'+esc(s.session_id)+'"><span class="small">&hellip;</span></td>';
@@ -1315,10 +1238,11 @@ function applyOwnerColumnVisibility(){
 }
 
 function buildFilters(){
-  var surfaces = {}, months = {}, owners = {}, clients = {};
+  var harnesses = {}, surfaces = {}, months = {}, owners = {}, clients = {};
   // A long-running session should offer every month it touched, not just the
   // one it started in, so the Month filter matches renderSessions' span test.
   (D.sessions||[]).forEach(function(s){
+    if(s.agent) harnesses[s.agent] = 1;
     surfaces[s.surface] = 1;
     if(s.owner) owners[s.owner] = 1;
     if(s.client) clients[s.client] = 1;
@@ -1331,6 +1255,9 @@ function buildFilters(){
       mo++; if(mo > 12){ mo = 1; y++; }
     }
   });
+  var fh = document.getElementById('f_harness');
+  Object.keys(harnesses).sort().forEach(function(k){
+    fh.insertAdjacentHTML('beforeend', '<option value="'+esc(k)+'">'+esc(AL[k]||k)+'</option>'); });
   var fs = document.getElementById('f_surface');
   Object.keys(surfaces).sort().forEach(function(k){
     fs.insertAdjacentHTML('beforeend', '<option value="'+esc(k)+'">'+esc(SL[k]||k)+'</option>'); });
@@ -1345,7 +1272,7 @@ function buildFilters(){
     fc.insertAdjacentHTML('beforeend', '<option value="'+esc(k)+'">'+esc(k)+'</option>'); });
   applyOwnerColumnVisibility();
 
-  ['f_surface','f_month','f_long','f_owner','f_client'].forEach(function(id){
+  ['f_harness','f_surface','f_month','f_long','f_owner','f_client'].forEach(function(id){
     document.getElementById(id).addEventListener('change', function(){
       UI.f[id.slice(2)] = this.value; renderSessions(); });
   });
@@ -1472,36 +1399,12 @@ function sessionCardDevBody(s){
     + '<div class="small">'+esc(s.runway||'runway unknown')+'</div>';
 }
 
-// sessionCardBusinessBody is C3's business-mode card body (the table's other
-// column: "cost so far, plan credits left, client"): the headline basis in
-// euros with its basis named next to it, GitHub Copilot's account-wide
-// credits left when a plan is configured (module-scope LAST_VENDOR_STRIP,
-// refreshed on vendorstrip's own 1-minute poll), and the client.
-function sessionCardBusinessBody(s){
-  var costHtml;
-  if(s.business_cost){
-    costHtml = '<div class="v" style="font-size:15px">'+money(s.business_cost.usd||0)+'</div>'
-      + '<div class="small">'+esc(s.business_cost.label||'')+'</div>';
-  } else {
-    costHtml = '<div class="small">tokens only</div>';
-  }
-  var creditsHtml = '';
-  var cl = LAST_VENDOR_STRIP && LAST_VENDOR_STRIP.copilot_credits_left;
-  if(cl && s.vendor === 'github'){
-    creditsHtml = '<div class="small">'+n(Math.round(cl.left))+' of '+n(Math.round(cl.monthly_credits))
-      + ' credits left ('+esc(cl.plan)+')</div>';
-  }
-  var clientHtml = s.client ? '<div class="small">Client: '+esc(s.client)+'</div>' : '';
-  return costHtml + creditsHtml + clientHtml
-    + '<div class="small">turn '+n(s.turn_count||0)+' &middot; last turn '+relTimeFrom(s.last_turn)+'</div>';
-}
-
 function sessionCardHTML(s, isSub){
   var subHtml = '';
   if(s.subagents && s.subagents.length){
     subHtml = '<div class="sub-cards">' + s.subagents.map(function(sub){ return sessionCardHTML(sub, true); }).join('') + '</div>';
   }
-  var body = isBusiness() ? sessionCardBusinessBody(s) : sessionCardDevBody(s);
+  var body = sessionCardDevBody(s);
   return '<div class="card plain now-card"'+(isSub?' style="padding:10px 12px"':'')+'>'
     + '<div class="k">'+esc(s.agent||'')+' &middot; '+esc(s.surface||'')+'</div>'
     + '<div class="v" style="font-size:15px">'+esc(s.model||'')+'</div>'
@@ -1574,7 +1477,6 @@ function drawForecastChart(p){
 // scored week exists, otherwise the plan/live chart plus the end-of-day,
 // end-of-month and error-band figures in words.
 function renderNowForecast(p){
-  LAST_FORECAST = p;
   var note = document.getElementById('now_forecast_note');
   var el = document.getElementById('now_forecast');
   if(!note || !el) return;
@@ -1586,20 +1488,8 @@ function renderNowForecast(p){
     return;
   }
   note.classList.add('hidden');
-  // C3: business mode shows the same forecast in euros (cost_covered), with
-  // a "tokens only" fallback when no vendor in the window has a price book,
-  // same rule as History and Sessions.
-  var eodHtml, eomHtml;
-  if(isBusiness() && p.cost_covered){
-    eodHtml = 'End of day: ' + money(p.end_of_day_cost_usd||0);
-    eomHtml = 'end of month: ' + money(p.end_of_month_cost_usd||0);
-  } else if(isBusiness()){
-    eodHtml = 'End of day: tokens only';
-    eomHtml = 'end of month: tokens only';
-  } else {
-    eodHtml = 'End of day: ' + tok(p.end_of_day_tokens||0) + ' tokens';
-    eomHtml = 'end of month: ' + tok(p.end_of_month_tokens||0) + ' tokens';
-  }
+  var eodHtml = 'End of day: ' + tok(p.end_of_day_tokens||0) + ' tokens';
+  var eomHtml = 'end of month: ' + tok(p.end_of_month_tokens||0) + ' tokens';
   el.innerHTML = '<p class="small" style="margin:0">'
     + eodHtml + ' &middot; ' + eomHtml + ' &middot; '
     + 'error band &plusmn;' + Math.round((p.error_band_pct||0)*100) + '% from '
@@ -1729,331 +1619,6 @@ function sessionSeriesColor(agent, occurrenceIndex){
   var base = VENDOR_COLOR_FAMILIES[mode][agent] || DEFAULT_SESSION_COLOR[mode];
   if(!occurrenceIndex) return base;
   return shadeHex(base, mode === 'light' ? -occurrenceIndex*10 : occurrenceIndex*12);
-}
-
-// ---------- Monitor mode, dev-mode text rendering (U4, braille chart U5) ----------
-// Real text over a monospace dark page. U5 (v0.3,
-// 02_roadmap\2026-09-23_v0.3_monitor_view_patch.md) replaces U4's
-// one-block-per-minute strip with a braille line chart modelled on
-// perfadvisor's "history, newest right" panel (internal\tui\widgets.go's
-// graph(), internal\tui\view.go's graphLines(), read before writing this):
-// one braille-dot series per running session, overlaid, vendor colours from
-// VENDOR_COLOR_FAMILIES.dark (fixed regardless of the theme toggle, since
-// the monitor text page is always dark). ASCII-bordered boxes for sessions
-// and the vendor strip stay U4's own. No hover, no bar click; a session box
-// opens the I3 turn drawer for its last turn, same openTurnDrawer every
-// other click path already uses. Reads whatever bmLive/bmVendorStrip last
-// resolved (LAST_NOW_SNAP/LAST_VENDOR_STRIP, refreshed by
-// pollNow/pollVendorStrip's own timers): no new backend call, only a wider
-// bucket count in the same Chart shape (bmLive(10) vs. bmLive()).
-function mtPad(s, w){ s = String(s); return s.length >= w ? s.slice(0,w) : s + new Array(w-s.length+1).join(' '); }
-function mtRepeat(ch, count){ return count > 0 ? new Array(count+1).join(ch) : ''; }
-
-// mtBrailleBits: braille dot bit for (row 0..3, col 0..1) inside one cell,
-// same layout as widgets.go's brailleBits.
-var MT_BRAILLE_BITS = [[0x01,0x08],[0x02,0x10],[0x04,0x20],[0x40,0x80]];
-
-// mtBrailleGraph is graph()'s JS twin: w x hCells cells (2w x 4hCells dots),
-// one entry per series, each vals on a 0..100 scale, newest value last.
-// Later series draw on top of earlier ones in a shared cell, same rule as
-// graph()'s own comment ("put the most important series last"); unlike
-// graph(), returns an array of {bits, color} cells rather than pre-rendered
-// strings, since the browser needs per-run <span> colouring rather than a
-// terminal's own ANSI colour per glyph.
-function mtBrailleGraph(w, hCells, seriesList){
-  if(w < 2) w = 2;
-  if(hCells < 1) hCells = 1;
-  var dw = w*2, dh = hCells*4;
-  var cells = new Array(w*hCells);
-  for(var i=0;i<cells.length;i++) cells[i] = {bits:0, color:null};
-  function setDot(x, y, color){
-    if(x<0||x>=dw||y<0||y>=dh) return;
-    var c = cells[(y>>2)*w + (x>>1)];
-    c.bits |= MT_BRAILLE_BITS[y%4][x%2];
-    c.color = color;
-  }
-  seriesList.forEach(function(s){
-    var vals = s.vals || [];
-    if(!vals.length) return;
-    var start = vals.length - dw;
-    var prevY = -1;
-    for(var x=0; x<dw; x++){
-      var i = start + x;
-      if(i < 0) continue;
-      var v = vals[i];
-      if(v < 0) v = 0;
-      if(v > 100) v = 100;
-      var y = dh - 1 - Math.round(v/100*(dh-1));
-      setDot(x, y, s.color);
-      if(prevY >= 0){
-        var step = y < prevY ? -1 : 1;
-        for(var yy=prevY+step; yy!==y && yy!==y+step; yy+=step) setDot(x, yy, s.color);
-      }
-      prevY = y;
-    }
-  });
-  var lines = [];
-  for(var cy=0; cy<hCells; cy++){
-    var rowHtml = '', runColor = undefined, runChars = '';
-    function flush(){
-      if(!runChars) return;
-      rowHtml += runColor ? '<span style="color:'+runColor+'">'+esc(runChars)+'</span>' : esc(runChars);
-      runChars = '';
-    }
-    for(var cx=0; cx<w; cx++){
-      var c = cells[cy*w+cx];
-      var ch = c.bits === 0 ? ' ' : String.fromCharCode(0x2800 + c.bits);
-      var col = c.bits === 0 ? null : c.color;
-      if(col !== runColor){ flush(); runColor = col; }
-      runChars += ch;
-    }
-    flush();
-    lines.push(rowHtml);
-  }
-  return lines;
-}
-
-// mtSessionTotal is one bucket's whole-class token total for one session,
-// the same sum every other Now-page reader of ClassCounts uses.
-function mtSessionTotal(bucket, id){
-  var v = (bucket.by_session||{})[id];
-  return v ? v.fresh + v.cache_write + v.cache_read + v.output : 0;
-}
-
-// mtTokensPerMinute sums the last 60 seconds of buckets for one session
-// (however many buckets that is at the chart's own bucket_seconds width),
-// the legend's "current tokens per minute" figure.
-function mtTokensPerMinute(chart, bucketSeconds, id){
-  var perMinute = Math.max(1, Math.round(60/(bucketSeconds||60)));
-  var slice = chart.slice(Math.max(0, chart.length-perMinute));
-  var sum = 0;
-  slice.forEach(function(b){ sum += mtSessionTotal(b, id); });
-  return sum;
-}
-
-// renderMonitorChartText builds the whole chart panel: title, one legend
-// row per running session (coloured dash, full "agent · model · project"
-// label, that session's tokens/min, "scaled to peak" on the last row only,
-// per Wilco's call on the U5 patch's open layout choice), the braille dot
-// chart itself (one column per Chart bucket, so the dot resolution follows
-// bmLive's own bucket_seconds argument), and a minute-label row every 5
-// minutes under it.
-function renderMonitorChartText(chart, sessions, bucketSeconds){
-  chart = chart || [];
-  bucketSeconds = bucketSeconds || 60;
-  var byId = {};
-  flattenSessions(sessions || []).forEach(function(s){ byId[s.session_id] = s; });
-  var sessionIds = [];
-  chart.forEach(function(b){
-    Object.keys(b.by_session||{}).forEach(function(id){ if(sessionIds.indexOf(id) === -1) sessionIds.push(id); });
-  });
-  if(!sessionIds.length){
-    return '<div class="mt-chart-panel"><div class="mt-chart-title">live burn, newest right</div>'
-      + '<div class="small" style="color:#5E7088">(no running sessions)</div></div>';
-  }
-
-  var peak = 0;
-  chart.forEach(function(b){
-    sessionIds.forEach(function(id){
-      var total = mtSessionTotal(b, id);
-      if(total > peak) peak = total;
-    });
-  });
-
-  var seriesList = sessionIds.map(function(id){
-    var s = byId[id];
-    var agent = s ? s.agent : '';
-    var color = VENDOR_COLOR_FAMILIES.dark[agent] || DEFAULT_SESSION_COLOR.dark;
-    var vals = chart.map(function(b){ return peak > 0 ? mtSessionTotal(b, id)/peak*100 : 0; });
-    return {id: id, session: s, color: color, vals: vals};
-  });
-
-  // w (character cells) is exactly half the bucket count, so bmLive's own
-  // bucket_seconds argument (10 in monitor view) is what sets the dot
-  // resolution, per the patch's "time resolution follows the dot columns";
-  // hCells is picked by sizeMonitorChart, based on the panel's real pixel
-  // height, and cached on <body> between polls.
-  var w = Math.max(2, Math.floor(chart.length/2));
-  var hCells = window.MT_CHART_HCELLS || 10;
-  var dotLines = mtBrailleGraph(w, hCells, seriesList);
-
-  var legendRows = seriesList.map(function(entry, i){
-    var label = entry.session ? sessionChartLabel(entry.session) : esc(entry.id.slice(0,8));
-    var rate = tokPrecise(mtTokensPerMinute(chart, bucketSeconds, entry.id)) + ' tok/min';
-    var peakHtml = (i === seriesList.length-1)
-      ? '<span class="mt-chart-peak">scaled to peak '+esc(tokPrecise(peak))+'</span>'
-      : '<span class="mt-chart-peak"></span>';
-    return '<div class="mt-chart-legend-row">'
-      + '<span><span class="mt-chart-dash" style="color:'+entry.color+'">──</span> '
-      + '<span style="color:'+entry.color+'">'+label+'</span>'
-      + '<span class="mt-chart-rate">'+esc(rate)+'</span></span>'
-      + peakHtml + '</div>';
-  });
-
-  // Minute labels every 5 minutes across w columns, local time (chart runs
-  // windowStart..now, ChartWindow fixed at 30 minutes regardless of bucket
-  // width).
-  var minuteCols = new Array(w+1).join(' ').split('');
-  var totalMinutes = (chart.length * bucketSeconds) / 60;
-  for(var m=0; m<=totalMinutes; m += 5){
-    var idx = Math.round(m/totalMinutes * (w-1));
-    var bucketIdx = Math.min(chart.length-1, Math.round(m*60/bucketSeconds));
-    var label = chart[bucketIdx] ? localHMS(chart[bucketIdx].at).slice(0,5) : '';
-    // Keep the label whole rather than clipping it at the panel's right
-    // edge (the last label, at the "now" column, would otherwise lose all
-    // but its first character).
-    if(idx + label.length > w) idx = Math.max(0, w - label.length);
-    for(var k=0; k<label.length && idx+k<w; k++) minuteCols[idx+k] = label[k];
-  }
-
-  return '<div class="mt-chart-panel">'
-    + '<div class="mt-chart-title">live burn, newest right</div>'
-    + '<div class="mt-chart-legend">' + legendRows.join('') + '</div>'
-    + '<pre class="mt-chart-dots">' + dotLines.join('\n') + '</pre>'
-    + '<div class="mt-chart-minutes">' + esc(minuteCols.join('')) + '</div>'
-    + '</div>';
-}
-
-// sizeMonitorChart picks the braille chart's row count (hCells) from the
-// panel's own available pixel height (spec: "about 35% of the window
-// height"), so the dot grid scales with the window the way the rest of
-// monitor-dev's bigger, clamp()-scaled type already does: measures one
-// rendered .mt-chart-dots line's pixel height via a probe element built in
-// the current font stack/size, at the panel's target height, then floors to
-// a whole number of rows. Cached on window.MT_CHART_HCELLS; recomputed on
-// resize (debounced) and on entering monitor-dev, never mid-poll, so the
-// dot grid does not jitter between two adjacent polls at the same window
-// size.
-function sizeMonitorChart(){
-  var panel = document.querySelector('#monitor_text_view');
-  if(!panel) return;
-  var targetH = Math.max(120, Math.round(window.innerHeight * 0.35));
-  var probe = document.createElement('pre');
-  probe.className = 'mt-chart-dots';
-  probe.style.position = 'absolute';
-  probe.style.visibility = 'hidden';
-  probe.textContent = String.fromCharCode(0x28FF);
-  panel.appendChild(probe);
-  var lineH = probe.getBoundingClientRect().height || 18;
-  panel.removeChild(probe);
-  window.MT_CHART_HCELLS = Math.max(4, Math.floor(targetH / lineH));
-}
-var mtResizeTimer = null;
-window.addEventListener('resize', function(){
-  if(!document.body.classList.contains('monitor-dev')) return;
-  clearTimeout(mtResizeTimer);
-  mtResizeTimer = setTimeout(function(){
-    sizeMonitorChart();
-    renderMonitorText(LAST_NOW_SNAP, LAST_VENDOR_STRIP);
-  }, 200);
-});
-
-// mtBox draws a fixed-width ASCII-bordered box around lines, the "text
-// boxes with ASCII borders" the spec asks for sessions and the vendor strip.
-function mtBox(lines, width){
-  var top = '+'+mtRepeat('-', width)+'+';
-  var body = lines.map(function(l){ return '|'+mtPad(' '+l, width)+'|'; }).join('\n');
-  return top+'\n'+body+'\n'+top;
-}
-
-// monitorSessionBoxHTML renders one session as an ASCII box, the same
-// fields sessionCardDevBody shows (tokens, turn, last turn); clicking it
-// opens the I3 drawer for the session's last turn, same call every other
-// click path in this file already uses.
-// monitorSessionLines is one session's 4 content lines, unpadded: the same
-// fields sessionCardDevBody shows (tokens, turn, last turn).
-function monitorSessionLines(s){
-  return [
-    (s.agent||'')+' · '+(s.surface||''),
-    baseName(s.project) || '(no project)',
-    tok(s.tokens)+' tok  '+money(s.cost||0),
-    'turn '+n(s.turn_count||0)+'  '+relTimeFrom(s.last_turn)
-  ];
-}
-
-// monitorSessionBoxHTML renders one session as an ASCII box at a shared
-// width (U5: "compute the box width in characters and pad every line to
-// it, so the right border is one straight column" across every box in the
-// grid, not a fixed magic number that truncates a long project name or
-// token/cost figure). Clicking it opens the I3 drawer for the session's
-// last turn, same call every other click path in this file already uses.
-function monitorSessionBoxHTML(s, width){
-  var lines = monitorSessionLines(s).map(function(l){ return mtPad(l, width-1); });
-  var box = mtBox(lines, width);
-  return '<pre class="mt-session-box" data-session="'+esc(s.session_id)+'" data-turn="'+(s.turn_count||0)+'">'+esc(box)+'</pre>';
-}
-
-// mtVendorStripText renders the vendor strip as an ASCII table, the same
-// rows/total renderVendorStrip shows, tokens only (dev mode has no euros).
-function mtVendorStripText(payload){
-  var rows = (payload && payload.rows) || [];
-  var cols = [18, 12, 12, 12];
-  var head = mtPad('Vendor', cols[0]) + mtPad('Today', cols[1]) + mtPad('Week', cols[2]) + mtPad('Month', cols[3]);
-  var sep = mtRepeat('-', cols[0]+cols[1]+cols[2]+cols[3]);
-  var lines = [head, sep];
-  rows.forEach(function(r){
-    lines.push(mtPad(r.agent_label||r.agent||'', cols[0]) + mtPad(tok(r.today), cols[1])
-      + mtPad(tok(r.week), cols[2]) + mtPad(tok(r.month), cols[3]));
-  });
-  var total = payload && payload.total;
-  if(total){
-    lines.push(sep);
-    lines.push(mtPad(total.agent_label||'Total', cols[0]) + mtPad(tok(total.today), cols[1])
-      + mtPad(tok(total.week), cols[2]) + mtPad(tok(total.month), cols[3]));
-  }
-  return '<pre>'+esc(lines.join('\n'))+'</pre>';
-}
-
-// renderMonitorText is monitor-dev mode's one render entry point, called
-// from renderNow and renderVendorStrip (each already polled independently,
-// same 2s/60s cadence as the normal Now page) whenever body carries both
-// monitor-mode and monitor-dev.
-function renderMonitorText(snap, vendorPayload){
-  var chartEl = document.getElementById('mt_chart');
-  var sessEl = document.getElementById('mt_sessions');
-  var vsEl = document.getElementById('mt_vendorstrip');
-  if(!chartEl || !sessEl || !vsEl) return;
-  chartEl.innerHTML = renderMonitorChartText(snap && snap.chart, snap && snap.sessions, snap && snap.bucket_seconds);
-  var sessions = (snap && snap.sessions) || [];
-  if(sessions.length){
-    var width = 24;
-    sessions.forEach(function(s){
-      monitorSessionLines(s).forEach(function(l){ width = Math.max(width, l.length+2); });
-    });
-    sessEl.innerHTML = sessions.map(function(s){ return monitorSessionBoxHTML(s, width); }).join('');
-  } else {
-    sessEl.innerHTML = '(no running sessions)';
-  }
-  vsEl.innerHTML = mtVendorStripText(vendorPayload);
-}
-
-document.addEventListener('click', function(e){
-  var box = e.target && e.target.closest && e.target.closest('.mt-session-box');
-  if(box) openTurnDrawer(box.getAttribute('data-session'), parseInt(box.getAttribute('data-turn'), 10));
-});
-
-// setView / applyViewMode (U3): the header's Monitor/Full switch. Persists
-// through ccSaveView (a no-op when the binding is absent, a saved report
-// opened outside the app window) and applies instantly client-side; no
-// reload, no re-poll, the view choice changes chrome only.
-function setView(view){
-  UI.view = view === 'monitor' ? 'monitor' : 'full';
-  applyViewMode();
-  if(window.ccSaveView){
-    Promise.resolve(window.ccSaveView(UI.view)).catch(function(){});
-  }
-}
-function applyViewMode(){
-  var monitor = UI.view === 'monitor';
-  document.body.classList.toggle('monitor-mode', monitor);
-  document.body.classList.toggle('monitor-dev', monitor && !isBusiness());
-  if(monitor){
-    if(currentTab() !== 'now') showTab('now');
-    if(!isBusiness()){
-      sizeMonitorChart();
-      renderMonitorText(LAST_NOW_SNAP, LAST_VENDOR_STRIP);
-    }
-  }
 }
 
 // nowChartOnClick opens the I3 drawer for the largest turn (by total
@@ -2188,13 +1753,6 @@ function drawNowChart(chart, sessions, turns){
           backgroundColor: color, borderColor: color, borderWidth:0};
         nowChart.datasetById[id] = ds;
       }
-      // C3: business mode hides the per-session token bars (a dev-mode
-      // detail) and shows the cost line below instead, "Live chart unit:
-      // ... euros per minute" per the dev/business table. Set on every draw,
-      // deliberately overriding a manual per-poll legend toggle: the mode
-      // switch is meant to flip this immediately, not wait for the viewer
-      // to re-click it.
-      ds.hidden = isBusiness();
       return ds;
     });
     // A session that fell out of the 30-minute window stops holding a
@@ -2210,13 +1768,8 @@ function drawNowChart(chart, sessions, turns){
     } else {
       nowChart.costDataset = {type:'line', label:'Cost/min', yAxisID:'cost', sessionId: null,
         data: costData, borderColor: P.blue3, backgroundColor:'transparent',
-        tension:0.4, cubicInterpolationMode:'monotone', pointRadius:0};
+        tension:0.4, cubicInterpolationMode:'monotone', pointRadius:0, hidden:true};
     }
-    // C3: dev mode keeps the cost line as an opt-in legend toggle (v0.2
-    // behaviour, tokens are the headline); business mode shows it by
-    // default and hides the token bars above, same override reasoning as
-    // ds.hidden.
-    nowChart.costDataset.hidden = !isBusiness();
     var datasets = barDatasets.concat([nowChart.costDataset]);
 
     // W7 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md): every
@@ -2267,7 +1820,7 @@ function drawNowChart(chart, sessions, turns){
           interaction:{mode:'index', intersect:false},
           scales:{
             x:{grid:{display:true, color:P.grid}, ticks:{font:{size:11}, minRotation:tickRotation, maxRotation:tickRotation, autoSkip:false, callback: tickCallback}},
-            y:{display: !isBusiness(), beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}, ticks:{callback: function(v){ return tokPrecise(v); }}},
+            y:{display: true, beginAtZero:true, max: nowChart.tokenMax, grid:{color:P.grid}, ticks:{callback: function(v){ return tokPrecise(v); }}},
             // W8 (02_roadmap\2026-09-23_v0.2.3_window_check_patch.md):
             // display:'auto' is Chart.js's own built-in "show this axis
             // only while a visible dataset actually uses it" mode, so the
@@ -2288,7 +1841,6 @@ function drawNowChart(chart, sessions, turns){
       charts.now.options.scales.x.ticks.minRotation = tickRotation;
       charts.now.options.scales.x.ticks.maxRotation = tickRotation;
       charts.now.options.scales.y.max = nowChart.tokenMax;
-      charts.now.options.scales.y.display = !isBusiness();
       charts.now.options.scales.cost.max = nowChart.costMax || undefined;
       // F8: update('none') so a poll never plays a transition, only the
       // window sliding and bar heights change.
@@ -2300,7 +1852,6 @@ function drawNowChart(chart, sessions, turns){
 }
 
 function renderNow(snap){
-  LAST_NOW_SNAP = snap;
   var empty = document.getElementById('now_empty');
   var noSessions = document.getElementById('now_no_sessions');
   var cards = document.getElementById('now_cards');
@@ -2323,9 +1874,6 @@ function renderNow(snap){
   }
   if(currentTab() === 'now') drawNowChart(snap && snap.chart, snap && snap.sessions, snap && snap.turns);
   renderNowTicker(snap && snap.turns);
-  // U4: monitor mode's dev-mode text page reads this same snapshot, no
-  // separate poll of its own.
-  if(document.body.classList.contains('monitor-dev')) renderMonitorText(snap, LAST_VENDOR_STRIP);
 }
 
 // ---------- Turn ticker and drawer (I3) ----------
@@ -2466,12 +2014,7 @@ function pollNow(){
   // saved report; go-webview2 injects it asynchronously, after this script
   // has already started running.
   waitForBinding('bmLive', function(){
-    // U5 (v0.3): monitor view's braille chart wants 10-second buckets for
-    // finer dot columns; the Now page's own Chart.js chart keeps the
-    // 60-second default. Same bmLive call, no new binding.
-    var monitorDev = document.body.classList.contains('monitor-dev');
-    var call = monitorDev ? window.bmLive(10) : window.bmLive();
-    Promise.resolve(call).then(renderNow).catch(function(e){
+    Promise.resolve(window.bmLive()).then(renderNow).catch(function(e){
       if(empty){
         empty.classList.remove('hidden');
         empty.textContent = 'Could not read live sessions: ' + (e && e.message ? e.message : String(e));
@@ -2528,7 +2071,6 @@ function vsCell(tok_, agent, period){
 }
 
 function renderVendorStrip(payload){
-  LAST_VENDOR_STRIP = payload;
   var empty = document.getElementById('vs_empty');
   var tb = document.querySelector('#t_vendorstrip tbody');
   var creditsEl = document.getElementById('vs_credits_left');
@@ -2551,24 +2093,7 @@ function renderVendorStrip(payload){
       + '</tr>';
     tb.innerHTML = body;
   }
-  // C3/K3: the account-wide Copilot credits balance, business mode only,
-  // shown once here rather than repeated per-vendor since it is the same
-  // figure on every github-vendor session card.
-  var cl = payload && payload.copilot_credits_left;
-  if(creditsEl){
-    if(isBusiness() && cl){
-      creditsEl.classList.remove('hidden');
-      creditsEl.textContent = 'GitHub Copilot: ' + n(Math.round(cl.left)) + ' of ' + n(Math.round(cl.monthly_credits))
-        + ' credits left this month (' + cl.plan + ' plan).';
-    } else {
-      creditsEl.classList.add('hidden');
-    }
-  }
-  // The Now cards read LAST_VENDOR_STRIP for the same figure; refresh them
-  // in place rather than waiting for bmLive's own 2-second poll.
-  if(isBusiness() && LAST_NOW_SNAP) renderNow(LAST_NOW_SNAP);
-  // U4: monitor mode's dev-mode text page shows the vendor strip too.
-  if(document.body.classList.contains('monitor-dev')) renderMonitorText(LAST_NOW_SNAP, payload);
+  if(creditsEl) creditsEl.classList.add('hidden');
 }
 
 function pollVendorStrip(){
@@ -2706,6 +2231,27 @@ function histPeriodLabel(period, key){
   return dayWithName(key);
 }
 
+// histPeriodStartDate returns period's own bucket start date, always
+// yyyy-mm-dd, for the History chart's x-axis (Task 2: a week or month axis
+// used to read "Week 38, 2026" or a bare "2026-09", an inconsistent shape
+// across periods and not sortable as a date). The chart's own tooltip title
+// still shows histPeriodLabel's richer text (weekday name, week number).
+function histPeriodStartDate(period, key){
+  if(period === 'month') return key + '-01';
+  if(period === 'week'){
+    var p = key.split('-W');
+    var y = parseInt(p[0],10), w = parseInt(p[1],10);
+    // ISO week 1 is the week holding 4 January; that week's Monday, plus
+    // 7 days per further week, is bucketKey's own convention (agg.weekKey).
+    var jan4 = new Date(Date.UTC(y,0,4));
+    var jan4Dow = jan4.getUTCDay() || 7; // Mon=1 .. Sun=7
+    var week1Monday = jan4.getTime() - (jan4Dow-1)*86400000;
+    var monday = new Date(week1Monday + (w-1)*7*86400000);
+    return monday.toISOString().slice(0,10);
+  }
+  return key; // day: key is already yyyy-mm-dd
+}
+
 function renderHistTotals(totals){
   var costHtml = totals.cost_usd != null
     ? money(totals.cost_usd)
@@ -2719,22 +2265,57 @@ function renderHistTotals(totals){
     + '<div class="card sun"><div class="k">'+t('th_cost')+'</div><div class="v">'+costHtml+'</div></div>';
 }
 
+// historyVendorColor picks agent's fixed colour for the current theme, the
+// same VENDOR_COLOR_FAMILIES map the Now page's per-session chart uses, so a
+// vendor reads as the same colour everywhere in the app.
+function historyVendorColor(agent){
+  var mode = UI.theme === 'light' ? 'light' : 'dark';
+  return VENDOR_COLOR_FAMILIES[mode][agent] || DEFAULT_SESSION_COLOR[mode];
+}
+
+// drawHistoryChart stacks one bar segment per vendor (Task 2: "Burn per
+// period" used to draw a single bar with no vendor breakdown at all). Both
+// the token and cost toggles stack the same way, each row's ByVendor tokens/
+// cost_usd already summing back to that row's own totals (history.Build,
+// guarded by TestBuildByVendorSumsToRowTotals).
 function drawHistoryChart(rows, period, showCost){
   var canvas = document.getElementById('ch_history');
   if(typeof Chart === 'undefined'){ chartFallback('ch_history', 'Burn per period'); return; }
   try {
     var P = chartPalette();
-    var labels = rows.map(function(r){ return histPeriodLabel(period, r.key); });
-    var data = rows.map(function(r){ return showCost ? +((r.cost_usd||0)*rate()).toFixed(2) : r.tokens; });
+    var labels = rows.map(function(r){ return histPeriodStartDate(period, r.key); });
+    var agents = [];
+    rows.forEach(function(r){
+      Object.keys(r.by_vendor||{}).forEach(function(a){ if(agents.indexOf(a) === -1) agents.push(a); });
+    });
+    agents.sort();
+    var datasets = agents.map(function(agent){
+      var color = historyVendorColor(agent);
+      return {
+        label: AL[agent] || agent,
+        data: rows.map(function(r){
+          var va = (r.by_vendor||{})[agent];
+          if(!va) return 0;
+          return showCost ? +(((va.cost_usd||0))*rate()).toFixed(2) : va.tokens;
+        }),
+        backgroundColor: color, borderRadius:2, stack:'burn'
+      };
+    });
     if(charts.history) charts.history.destroy();
     charts.history = new Chart(canvas, {type:'bar',
-      data:{labels:labels, datasets:[{
-        label: showCost ? t('chart_cost_label') : t('th_tokens'),
-        data: data, backgroundColor:P.accent, borderRadius:4}]},
+      data:{labels:labels, datasets:datasets},
       options:{responsive:true, maintainAspectRatio:false,
-        plugins:{legend:{display:false}, title:{display:true,
-          text: (showCost ? 'Cost' : 'Tokens') + ' per ' + period, font:{size:12.5,weight:'600'}, color:P.text}},
-        scales:{y:{beginAtZero:true, grid:{color:P.grid}}, x:{grid:{display:false}}}}});
+        plugins:{legend:{display:true, position:'bottom', labels:{font:{size:10}, boxWidth:10}},
+          title:{display:true,
+            text: (showCost ? 'Cost' : 'Tokens') + ' per ' + period, font:{size:12.5,weight:'600'}, color:P.text},
+          tooltip:{callbacks:{title: function(items){
+            var r = items.length ? rows[items[0].dataIndex] : null;
+            return r ? histPeriodLabel(period, r.key) : '';
+          }}}},
+        scales:{
+          y:{stacked:true, beginAtZero:true, grid:{color:P.grid}},
+          x:{stacked:true, grid:{display:false}}
+        }}});
   } catch(e){
     chartFallback('ch_history', 'Burn per period');
   }
@@ -2750,14 +2331,15 @@ function renderHistTable(rows, period, showCost){
   }).join('');
 }
 
-// renderHistClients is K3's per-client table, business mode only, hidden
-// while no client rule exists (payload.clients empty) exactly like the
-// filter dropdown above it.
+// renderHistClients is K3's per-client table, hidden while no client rule
+// exists (payload.clients empty), same convention as the client filter
+// dropdown above it (V3.1 cleanup: no longer also gated by the removed
+// dev/business toggle).
 function renderHistClients(payload){
   var wrap = document.getElementById('h_clients_wrap');
   if(!wrap) return;
   var clients = payload.clients || [];
-  if(!isBusiness() || !clients.length){
+  if(!clients.length){
     wrap.classList.add('hidden');
     return;
   }
@@ -2811,7 +2393,6 @@ function renderHistory(){
     HIST_PENDING[reqID] = {resolve: resolve};
     window.bmHistory(reqID, filter);
   }).then(function(payload){
-    LAST_HISTORY = payload;
     buildHistFilterOptions(payload);
     var showCost = payload.totals.cost_usd != null;
     renderHistTotals(payload.totals);
@@ -2961,39 +2542,6 @@ document.getElementById('btn_theme').addEventListener('click', function(){
   UI.theme = UI.theme === 'light' ? 'dark' : 'light'; persist();
   applyTheme(); renderAll();
 });
-
-// C3: the dev/business toggle. Re-renders every already-loaded payload in
-// place (Now's cards/chart/forecast, the vendor strip's credits line,
-// History, Sessions) from its own cached copy, so the numbers flip
-// immediately rather than waiting for each one's own poll interval.
-function applyModeLabel(){
-  document.getElementById('btn_mode').textContent = isBusiness() ? 'Business' : 'Dev';
-}
-function applyMode(){
-  applyModeLabel();
-  // U3/U4: a mode flip while in monitor mode switches which of the two
-  // monitor renderings (normal visuals vs. dev-mode text) applies.
-  applyViewMode();
-  if(LAST_NOW_SNAP) renderNow(LAST_NOW_SNAP);
-  if(LAST_VENDOR_STRIP) renderVendorStrip(LAST_VENDOR_STRIP);
-  if(LAST_FORECAST) renderNowForecast(LAST_FORECAST);
-  // History's totals/rows cost figures are not mode-dependent (already
-  // computed server-side either way); only ClientRows' visibility is, so a
-  // mode flip re-renders that table from the cached payload rather than
-  // re-querying bmHistory.
-  if(LAST_HISTORY) renderHistClients(LAST_HISTORY);
-  renderSessions();
-}
-applyModeLabel();
-document.getElementById('btn_mode').addEventListener('click', function(){
-  UI.mode = isBusiness() ? 'dev' : 'business'; persist();
-  applyMode();
-});
-
-// U3: monitor mode entry/exit switches.
-document.getElementById('btn_monitor').addEventListener('click', function(){ setView('monitor'); });
-document.getElementById('monitor_exit_btn').addEventListener('click', function(){ setView('full'); });
-applyViewMode();
 
 buildFilters(); bindTitleTip(); bindRefresh(); renderPrices(); startNowPolling();
 try { renderAll(); } catch(e){

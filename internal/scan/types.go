@@ -19,6 +19,23 @@ var SurfaceLabel = map[string]string{
 	"unknown":    "Unknown",
 }
 
+// AgentLabel maps an event/session's Agent value to the Sessions tab's
+// harness display name (V3.1 cleanup: every vendor already reached the
+// Sessions table, but SurfaceLabel above is Claude-specific vocabulary, so a
+// Codex or Copilot CLI session sharing Surface "cli" with Claude Code was
+// relabelled as "Claude Code"; Agent, not Surface, is now the primary
+// label). Same vocabulary as internal/history.AgentLabel and
+// internal/vendorstrip.AgentLabel, so the Sessions tab, History's vendor
+// filter and the Now page's vendor strip all read as one name per harness.
+var AgentLabel = map[string]string{
+	"claude-code":    "Claude Code",
+	"cowork":         "Cowork",
+	"codex":          "Codex",
+	"copilot-cli":    "Copilot CLI",
+	"copilot-vscode": "Copilot (VS Code)",
+	"hermes":         "Hermes",
+}
+
 // PerModel is one aggregation cell: calls, tokens and both cost models.
 // Also used for per-day cells inside a session.
 type PerModel struct {
@@ -39,6 +56,13 @@ type Session struct {
 	// Client is K1's client map result, "unassigned" when Owners is
 	// configured but nothing matched, "" when the store predates K1.
 	Client         string               `json:"client,omitempty"`
+	// Vendor and Agent are the same values every event in this session
+	// carries (schema.Event.Vendor/Agent): the harness this session actually
+	// ran under, e.g. vendor "openai" agent "codex", independent of Surface
+	// (cli/desktop/vscode/...), which is a runtime detail, not the harness
+	// name. See scan.AgentLabel for the display mapping.
+	Vendor         string               `json:"vendor,omitempty"`
+	Agent          string               `json:"agent,omitempty"`
 	Surface        string               `json:"surface"`
 	CWD            string               `json:"-"`
 	Start          string               `json:"start"`

@@ -18,8 +18,8 @@ renamed and extended from v0.2 onward. Repo:
   transcripts, on Windows, macOS, Linux and inside WSL.
 - **Codex** CLI and Desktop: rollout transcripts, native and WSL roots.
 - **Hermes**: its local SQLite `messages` database, polled every 5 seconds.
-- **GitHub Copilot CLI**: session totals, read at shutdown, so a Copilot CLI session's
-  numbers appear once it closes, not while it runs.
+- **GitHub Copilot CLI**: its own SQLite session store, polled every 5 seconds; a session's
+  numbers update live, the same as every other adapter.
 - **GitHub Copilot Chat in VS Code**: the JSON file its own OpenTelemetry export writes,
   polled every 5 seconds. Off by default: VS Code sends no telemetry anywhere until you
   turn these two settings on yourself, in `settings.json`:
@@ -47,12 +47,18 @@ The app and every saved CLI report share one page, five tabs, deep-linkable
   row per vendor seen in the store: today, this week, this month, tokens, refreshed once
   a minute), the turn ticker, and the forecast chart. See "The Now page" below.
 - **History**. One page, filtered: period (day, week, month), range (last 7, 30, 90 days,
-  custom), vendor, and owner once owner rules are configured. Totals, a chart and a table
-  for whatever is selected; the filter state lives in the URL so a view can be reopened.
-- **Sessions**. Every session, sortable, searchable, with a Findings column (count by
-  kind) and an expandable row listing each finding; click one to open the same turn
-  detail drawer the Now page uses. The owner column and filter appear once owner rules
-  are configured.
+  custom), vendor, and owner once owner rules are configured. Totals, a "Burn per period"
+  chart stacked one segment per harness (Claude Code, Codex, Copilot CLI and so on, fixed
+  colours shared with the Now page), and a table for whatever is selected; the filter
+  state lives in the URL so a view can be reopened. A per-client table appears once client
+  rules are configured.
+- **Sessions**. Every session, sortable, searchable, with a Harness column and filter (the
+  real harness a session ran under, e.g. Claude Code, Codex, Copilot CLI, not the Surface
+  it happens to share with another vendor), a Findings column (count by kind) and an
+  expandable row listing each finding; click one to open the same turn detail drawer the
+  Now page uses. The owner column and filter appear once owner rules are configured. A
+  session priced by a vendor with no book entry for its exact model shows "no price"
+  rather than a guessed figure.
 - **Tools**. Which connectors, plugins and skills your sessions actually call, as a chart
   and a table, over the whole window.
 - **About**. How Claude's own seat and allowance model works, in plain language, plus
@@ -82,27 +88,21 @@ the Now snapshot already loads (nothing about them is stored):
 The forecast chart shows the plan line (the last four weeks, weekday-aware) and the live
 line (the current rate carried to end of day and end of month), with an error band once
 at least one week has been scored. Until then it shows history only, with the gate text
-"forecast unlocks after the first scored week". Tokens in dev mode; business mode shows
-the same forecast in euros, end of day and end of month, on the headline cost basis below.
+"forecast unlocks after the first scored week". Tokens only.
 
-## Dev and business mode, cost
+## Cost
 
-A header toggle (`Dev`/`Business`, dev by default; `"mode": "business"` in `burnmon.json`
-sets the start state) flips every number on the Now page, and switches on History's
-per-client table:
-
-- **Dev** shows tokens, context fill, cache hit rate: what a developer watches while
-  working.
-- **Business** shows euros, on the vendor's headline cost basis, named next to the
-  figure: plan credits for GitHub Copilot, your configured subscription share when
-  `burnmon.json` carries one, else the API list price labelled "upper bound". GitHub
-  Copilot credits left this month show on the vendor strip once `copilot_plan` is set.
+The Now page shows tokens, context fill and cache hit rate: what a developer watches
+while working. History, Sessions and export also show cost, on the vendor's headline
+basis, named next to the figure: plan credits for GitHub Copilot, your configured
+subscription share when `burnmon.json` carries one, else the API list price labelled
+"upper bound".
 
 Cost comes from dated price books built into the binary (`internal/pricing/books`, each
 with its own source URL and check date), overridable per model from `burnmon.json`.
 `burnmon-cli price-check` prints every book, its date and its source, so you always know
-how current a number is. A vendor with no book (Hermes today) shows "tokens only"
-everywhere rather than a guessed figure.
+how current a number is. A vendor with no book at all (Hermes today), or no entry for the
+exact model a session used, shows "no price"/"tokens only" rather than a guessed figure.
 
 ## Owner and client rules, active time
 
@@ -121,17 +121,8 @@ Each session also gets an **active time**: the sum of gaps between consecutive t
 gap over `active_idle_minutes` (config, default 10 minutes) counting zero. Labelled
 everywhere it appears as "active time, from transcript timestamps, not billable": a
 signal, not a time-tracking replacement. Once client rules exist, History's per-client
-table (business mode) shows tokens, headline cost, active time and session count side by
-side for every client, comparable even with one selected in the filter above it.
-
-## Monitor mode
-
-A second Now view that fills the window with just the live burn chart, running sessions
-and vendor strip: no header, no tab bar, one small "Full view" switch back. The last
-choice (`"view": "monitor"` or `"full"` in `burnmon.json`) is remembered and the Settings
-dialog sets the default. In dev mode, monitor mode renders as real monospace text (a
-block-character chart, ASCII-bordered session boxes) instead of the chart canvas; in
-business mode it shows the normal visuals with euros.
+table shows tokens, headline cost, active time and session count side by side for every
+client, comparable even with one selected in the filter above it.
 
 ## Export and merge
 
@@ -263,10 +254,9 @@ Kit recipient up:
 
 1. **Install**: copy `burnmon.exe`/`burnmon-cli.exe` and a `burnmon.json` next to them,
    no admin rights, no account. Portable: copy the folder to move it.
-2. **Set business mode**: `"mode": "business"` in `burnmon.json` so the app opens showing
-   euros, not tokens, by default (the dev/business toggle still lets anyone flip back).
-   Add `"owners"` rules with a `client` per project if the client bills more than one
-   engagement through the same BurnMon install.
+2. **Set client rules**: add `"owners"` rules with a `client` per project if the client
+   bills more than one engagement through the same BurnMon install, so History's
+   per-client table and the export below carry the right client name.
 3. **Export**: on a cadence that suits the engagement (weekly is a reasonable default),
    `burnmon-cli export --owner <name> --label <machine-or-person> --out export.json`,
    then `burnmon-cli merge export1.json export2.json ... --out report\` once exports from
@@ -275,5 +265,6 @@ Kit recipient up:
 
 ## Status
 
-Shipped: `v0.3.0`, 2026-10-09 (`02_roadmap\2026-09-23_v0.3_spec.md`). See `STATUS.md` for
+Shipped: `v0.3.0`, 2026-10-09 (`02_roadmap\2026-09-23_v0.3_spec.md`); `v0.3.1`, a cleanup
+pass, 2026-09-24 (`02_roadmap\2026-09-24_ws1_burnmon_cleanup.md`). See `STATUS.md` for
 what is true at the current commit and `SESSION_LOG.md` for the session-by-session record.

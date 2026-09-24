@@ -2,6 +2,126 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-24, WS1 cleanup: dev-only mode, Sessions harness fix, History stacked chart, v0.3.1
+
+Read `02_roadmap\2026-09-24_ws1_burnmon_cleanup.md` (three tasks, decisions already taken:
+pin dev, delete Monitor view's code not just its button, keep Light/Dark). Ran in parallel
+with WS2 (`burnmon-dev`, a worktree, untouched by this session) on `main`.
+
+**Task 1, dev/business and monitor removal.** Deleted `#btn_mode`, `#btn_monitor`, the
+monitor exit button, `#monitor_text_view` and its CSS, the whole monitor
+text/braille-chart rendering block (`mtBrailleGraph`, `renderMonitorText`,
+`monitorSessionBoxHTML`, `sizeMonitorChart`, ~330 lines), `setView`/`applyViewMode`, and
+every `isBusiness()` call site (replaced with its dev branch, then the function itself
+deleted): `sessionCardBusinessBody` (folded into `sessionCardHTML` calling
+`sessionCardDevBody` unconditionally), the forecast's euro branch, the Now chart's forced
+token/cost axis toggling, the vendor strip's Copilot-credits line. `pricing.Config.Mode`,
+`BusinessMode()`, `Config.View`, `MonitorView()`, `Payload.Mode`/`View`,
+`settingsPayload.DefaultView`, the Settings dialog's "Default view" select, and
+`main.go`'s `ccSaveView` binding are gone; an old `burnmon.json` carrying `"mode"` or
+`"view"` still loads (unknown JSON keys are silently ignored), guarded by
+`TestLoadModeAndCopilotPlan`, rewritten to check exactly that instead of the now-removed
+`BusinessMode()`. Deleted `tools\uicheck\check_v3.go`, `check_v3b.go`, `check_u5.go`
+outright (every case in all three tested only mode/monitor); trimmed
+`scripts\uicheck.ps1`'s `selfManagedChecks` to `w1` alone. One judgment call beyond the
+mechanical isBusiness() sweep: History's per-client table (K3) was originally
+business-mode-only per the v0.3 spec's own wording, but nothing else about it was
+"business", so rather than delete a documented, tested product feature ("what did one
+client cost" was V3-6's own Done-when item 2), it now shows whenever client rules exist,
+the same "hidden while no client rule exists" convention the client filter and Sessions'
+client column already use: gate changed from `!isBusiness() || !clients.length` to
+`!clients.length`, nothing else.
+
+**Task 2, Sessions vendor mislabeling and mispricing.** Diagnosed as stated: `scan.Session`
+had no vendor/agent field, so the Sessions tab's Surface column (`SurfaceLabel`, Claude-only
+vocabulary: "cli" → "Claude Code") mislabeled every Codex and Copilot CLI session as Claude
+Code, since both adapters can also classify their own surface as "cli". Fixed: `Vendor` and
+`Agent` added to `scan.Session`, filled in `buildSession` from the (already-present)
+`schema.Event` fields; `dedupSessions`'s key gained `Vendor` so two different vendors can no
+longer collide on it (`TestDedupSessionsKeepsSameSessionIDAcrossVendors`). New
+`scan.AgentLabel` (matches `internal/history.AgentLabel`/`internal/vendorstrip.AgentLabel`'s
+existing vocabulary, "Cowork" not "Claude Desktop": found and aligned with the existing
+precedent rather than inventing a fourth naming). Sessions tab: a new Harness column/filter
+(the real harness, primary) with Surface demoted to the cell's tooltip; a session priced by
+a vendor with no book entry now reads "no price" instead of a number.
+`internal\dataset\fromstore.go:117-134`'s real bug: every non-OpenAI vendor fell through to
+`cfg.ModelFamily`'s Claude-family price table (`FallbackFamily` "sonnet" for anything that
+didn't substring-match opus/sonnet/haiku/fable), so a Copilot or Hermes call priced as
+Claude. New `pricing.Config.EventCost` (per-event twin of `CostForEvents`, C2's own "one
+function ... so the numbers agree everywhere") routes Anthropic through `AnthropicBook`,
+OpenAI through the existing `OpenAIPrices` path (left untouched: `OpenAIBook` is missing
+two of the four model ids `OpenAIPrices` already covers, so switching would have
+regressed real pricing, not just Copilot/Hermes's, wide open for a future book update),
+GitHub through `CopilotCredits`, anything else 0/unpriced.
+`TestSessionsFromEventsPricesGitHubEventsThroughCopilotBook`,
+`TestSessionsFromEventsNoPriceForUnbookedVendor`,
+`TestBuildSessionCarriesVendorAndAgent` added. Verified against the real store
+(`scripts\uicheck.ps1 scratch`, a one-off check written and deleted after use): the Harness
+filter lists all six vendors with real data (Claude Code, Codex, Copilot CLI, Copilot (VS
+Code), Cowork, Hermes); a real Cowork session now reads "Cowork" with "Surface: Claude
+Desktop" in its tooltip, not "Claude Code". Separately, `STATUS.md`'s adapter line for
+Copilot CLI ("session totals read at shutdown, not live") was stale against the adapter's
+own doc comment (A2 disproved that assumption and replaced it with a live 5-second poll);
+fixed the doc, not the code, and did not add the "totals at exit" note the WS1 plan asked
+for, since the premise behind it no longer holds: flagged rather than silently built
+around, per house rule "say it when a document is stale".
+
+**Task 3, History's "Burn per period" as stacked bars.** `history.Totals` gained
+`ByVendor map[string]*VendorAgg` (tokens, headline cost per agent), built alongside the
+existing bucket accumulation in `Build`, no separate pass;
+`TestBuildByVendorSumsToRowTotals` guards day/week/month all summing back to the row's own
+totals. `drawHistoryChart`: one Chart.js dataset per agent, `stacked:true` on both axes,
+legend on, colour from the same `VENDOR_COLOR_FAMILIES` map the Now page's per-session
+chart already uses (no separate "vendor strip" colour source exists; that map is the de
+facto standard). New `histPeriodStartDate` returns the period's own start date as
+`yyyy-mm-dd` for every period (week: that ISO week's Monday, computed from the same
+`agg.weekKey` convention `bucketKey` already uses; month: `key + "-01"`); the chart's
+tooltip title still calls the old `histPeriodLabel` for the weekday/week-number detail.
+Verified live: real-store x labels `2026-08-24,2026-08-31,2026-09-07,...`, six stacked
+vendor series with real, differing per-week totals.
+
+**Verify.** `go vet ./...`, `go test ./... -count=1` (every package green, three new test
+files/additions), `.\build.ps1`, `node --check` on both inline script blocks: all clean.
+`scripts\uicheck.ps1`: `w1` failed twice (WebView2 first-paint budget of 1.5s missed on
+this loaded laptop (multiple concurrent Claude Code sessions, WS2 building in its own
+worktree at the same time; one run's screenshot even caught an unrelated File Explorer
+window's z-order stealing the BitBlt capture, not burnmon's own window), pre-authorized
+in the plan as pre-existing, not fixed, reported as asked. `w0`, `w2`–`w8` all passed,
+including `w8`, previously a documented "known gap" (cost-axis toggle), flagged in
+`STATUS.md` as an open discrepancy rather than marked fixed, since nothing in this session
+touched that code path. Found and closed with the user's explicit go-ahead: a stray
+already-running `burnmon.exe` (the user's own long-lived monitor instance, PID from
+08:49, holding the single-instance mutex) blocked every non-self-managed uicheck launch;
+asked before stopping it, stopped it, reran clean.
+
+A fresh Opus read-only review agent ran over the full diff before commit and found three
+real issues, all fixed: (1) `internal\live\live.go`'s `turnCost` and `ApplySessionTotals`
+had the exact same non-OpenAI-vendor-priced-as-Claude bug `buildSession` had just been
+fixed for, an instance the plan's own diagnosis (scoped to `fromstore.go`) had missed;
+both now route through the same new `cfg.EventCost`. (2) The Sessions table's model-pill
+colour rule (`m==='Fable'`/`m==='Opus'`) stopped matching once Anthropic's own per-call
+label became the book's exact-model name ("Claude Opus 5.5") instead of the family name
+("Opus"), a real regression from this session's own pricing fix; changed to a substring
+check. (3) The pricing fix's real scope reaches further than "Copilot/Hermes no longer
+priced as Claude": Anthropic's own events on Sessions and Now are now also priced from
+`AnthropicBook`'s exact model id instead of the family-generic table, a deliberate,
+correct consequence of routing "every vendor through its own book" that the code comments
+and this log previously under-stated; documented properly in `STATUS.md` and the
+`fromstore.go` comment. Two low-severity, non-blocking findings (a leftover `LAST_*`
+cache/`shortSurface` dead-code trail from the isBusiness() removal, and two backend
+figures, `copilot_credits_left`/`BusinessCost`, computed but no longer read by anything)
+were the same class of leftover the removal work itself produces; the first was already
+being cleaned up in this same pass, the second is flagged in `STATUS.md`'s Known gaps
+rather than fixed (small, non-urgent, touches `live.go` a third time in one session for
+no functional gain). Everything above re-verified after the fixes: `go vet`/`go test`/
+`node --check` all clean again.
+
+Version bumped `0.3.0` to `0.3.1` (`cmd\burnmon\app.go`, `cmd\burnmon-cli\main.go`, both
+const `version`); `README.md` and `STATUS.md` updated throughout (Dev/Business and
+Monitor mode sections removed, adapter/pages/cost/forecast/config sections rewritten for
+v0.3.1). Not pushed, not tagged, not committed by this session: see the hub brief and the
+commands handed to Wilco.
+
 ## 2026-09-24, v0.3 V3-6: release candidate, Done-when and VERIFY pass, v0.3.0
 
 Read `02_roadmap\2026-09-23_v0.3_spec.md` sections 5 (Done when) and 6 (VERIFY carried).

@@ -147,6 +147,83 @@ func TestBuildWeekAndMonth(t *testing.T) {
 	}
 }
 
+// TestBuildByVendorSumsToRowTotals guards Task 2's stacked-bar split: each
+// row's ByVendor segments must sum back to that same row's own Tokens and
+// CostUSD, for day, week and month alike, the same fixture (two vendors,
+// three weeks) TestBuildWeekAndMonth already proves the un-split totals for.
+func TestBuildByVendorSumsToRowTotals(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	weekStarts := []time.Time{
+		time.Date(2026, 9, 7, 10, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC),
+		time.Date(2026, 9, 21, 10, 0, 0, 0, time.UTC),
+	}
+	var events []schema.Event
+	for _, at := range weekStarts {
+		events = append(events,
+			schema.Event{
+				Vendor: "anthropic", Agent: "claude-code", Surface: "cli",
+				SessionID: "claude-" + at.Format("2006-01-02"), RequestID: "r-claude-" + at.Format("2006-01-02"),
+				At: at, Model: "claude-sonnet-5",
+				Input: 1000, Output: 200,
+				CacheWrite: ptr(int64(0)), CacheRead: ptr(int64(0)),
+			},
+			schema.Event{
+				Vendor: "openai", Agent: "codex", Surface: "cli",
+				SessionID: "codex-" + at.Format("2006-01-02"), RequestID: "r-codex-" + at.Format("2006-01-02"),
+				At: at.Add(2 * time.Hour), Model: "gpt-6-astra",
+				Input: 500, Output: 100,
+				CacheWrite: ptr(int64(0)), CacheRead: ptr(int64(0)),
+			},
+		)
+	}
+	if err := st.UpsertEvents(events); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.AllEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := pricing.Defaults()
+	for _, period := range []string{"day", "week", "month"} {
+		filter := Filter{Period: period, From: "2026-09-01", To: "2026-09-30"}
+		payload := Build(got, &cfg, filter)
+		if len(payload.Rows) == 0 {
+			t.Fatalf("period %s: 0 rows, want at least 1", period)
+		}
+		for _, row := range payload.Rows {
+			if len(row.ByVendor) != 2 {
+				t.Fatalf("period %s row %s: ByVendor has %d entries, want 2 (claude-code, codex)", period, row.Key, len(row.ByVendor))
+			}
+			var sumTokens int64
+			var sumCost float64
+			for agent, va := range row.ByVendor {
+				sumTokens += va.Tokens
+				if va.CostUSD == nil {
+					t.Fatalf("period %s row %s agent %s: cost_usd is nil, want a figure (both vendors are covered)", period, row.Key, agent)
+				}
+				sumCost += *va.CostUSD
+			}
+			if sumTokens != row.Tokens {
+				t.Errorf("period %s row %s: ByVendor tokens sum = %d, want row total %d", period, row.Key, sumTokens, row.Tokens)
+			}
+			if row.CostUSD == nil {
+				t.Fatalf("period %s row %s: cost_usd is nil, want a figure", period, row.Key)
+			}
+			if diff := sumCost - *row.CostUSD; diff > 1e-9 || diff < -1e-9 {
+				t.Errorf("period %s row %s: ByVendor cost sum = %v, want row total %v", period, row.Key, sumCost, *row.CostUSD)
+			}
+		}
+	}
+}
+
 // TestBuildOwnerFilter checks P6's owner column is honoured by the same
 // filter, independent of the vendor/period tests above.
 func TestBuildOwnerFilter(t *testing.T) {

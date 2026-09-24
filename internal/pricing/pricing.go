@@ -220,13 +220,6 @@ type Config struct {
 	// (the spec's "cache write in a turn exceeds 20K tokens").
 	ReprefillCacheWriteThreshold int64 `json:"reprefill_cache_write_threshold"`
 
-	// Mode is C3's dev/business start state: "" or "dev" (the default) shows
-	// tokens, context and cache classes; "business" shows euros on the
-	// headline basis, credits left, client and the forecast in euros. This
-	// only sets the page's *start* state (Talon's config): the header toggle
-	// still flips it live in the running window regardless of this value.
-	Mode string `json:"mode"`
-
 	// CopilotPlan names the account's actual GitHub Copilot plan tier (a key
 	// into CopilotCredits.Plans, e.g. "Pro" or "Max"), the same role
 	// Subscription.YourSeat plays for the Anthropic subscription share.
@@ -235,13 +228,6 @@ type Config struct {
 	// left" line rather than guessing which tier applies.
 	CopilotPlan string `json:"copilot_plan,omitempty"`
 
-	// View is U3's monitor/full start state: "" or "full" (the default)
-	// opens the normal page; "monitor" opens straight into the chrome-less
-	// monitor view. Same role as Mode above, a start state only: the
-	// header's own Monitor/Full view switch flips it live and saves the new
-	// choice back here through the settings save path.
-	View string `json:"view,omitempty"`
-
 	// CopilotVSCodeOtelFile is A4's own file path: GitHub Copilot Chat in
 	// VS Code writes no file at all until the two OTel settings in the
 	// README are set, and that outfile setting has no fixed default burnmon
@@ -249,18 +235,6 @@ type Config struct {
 	// default) means the adapter is off: no VS Code settings configured, no
 	// file to poll.
 	CopilotVSCodeOtelFile string `json:"copilot_vscode_otel_file,omitempty"`
-}
-
-// BusinessMode reports whether Mode is set to "business"; any other value
-// (including "" and "dev") means dev.
-func (c *Config) BusinessMode() bool {
-	return c.Mode == "business"
-}
-
-// MonitorView reports whether View is set to "monitor"; any other value
-// (including "" and "full") means the normal, full page.
-func (c *Config) MonitorView() bool {
-	return c.View == "monitor"
 }
 
 // DefaultClaudeCodeCacheTTLMinutes is the compiled-in cache-lifetime
