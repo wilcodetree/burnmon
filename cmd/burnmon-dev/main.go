@@ -111,10 +111,15 @@ func main() {
 		log.Println("using config overrides from", cfgFile)
 	}
 
-	a := &app{sys: sys, sampler: sysmon.NewSampler(), st: st, cfg: cfg, initialCollectDone: make(chan struct{})}
+	devCfg := loadDevConfig(dataDir)
+
+	a := &app{
+		sys: sys, sampler: sysmon.NewSampler(), procSampler: sysmon.NewProcessSampler(),
+		st: st, cfg: cfg, initialCollectDone: make(chan struct{}),
+	}
 	a.cache.Store = st
 	a.startSampling()
-	a.startRetentionPrune(7)
+	a.startRetentionPrune(devCfg.RetentionDays)
 
 	nativeClaudeRoots := scan.DefaultSourcesWithOptions(false)
 	nativeCodexRoots := codex.NativeSources()
@@ -143,12 +148,51 @@ func main() {
 		return
 	}
 
-	if err := w.Bind("bdevSysmonNow", func() (sysmon.Sample, error) {
+	// sysmonNowPayload adds the header pressure chip's score (internal/sysmon
+	// .PressureScore, phase 3) alongside the raw sample: Sample is embedded
+	// anonymously so every one of its fields still flattens into the same
+	// JSON object the page already reads, plus one new "pressure_score" key.
+	type sysmonNowPayload struct {
+		sysmon.Sample
+		PressureScore int `json:"pressure_score"`
+	}
+	if err := w.Bind("bdevSysmonNow", func() (sysmonNowPayload, error) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		return a.latest, nil
+		return sysmonNowPayload{Sample: a.latest, PressureScore: sysmon.PressureScore(a.latest)}, nil
 	}); err != nil {
 		log.Println("could not bind bdevSysmonNow:", err)
+	}
+
+	// bdevProcessGroupsNow: the process-groups table's current row per
+	// harness, the latest 2s tick's sums (design doc section 3).
+	if err := w.Bind("bdevProcessGroupsNow", func() ([]sysmon.ProcessGroupSample, error) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.latestGroups, nil
+	}); err != nil {
+		log.Println("could not bind bdevProcessGroupsNow:", err)
+	}
+
+	// bdevProcessGroupsHistory: the same table's per-harness sparklines and
+	// the harness x minute heatmap both read from this one call (the page
+	// buckets the raw 10s rows into 1-minute columns itself; the dataset is
+	// small enough - a handful of harnesses times 6 rows/minute - that a
+	// second Go-side aggregation buys nothing a client-side one doesn't
+	// already do just as cheaply).
+	if err := w.Bind("bdevProcessGroupsHistory", func(sinceMinutes int) ([]sysmon.ProcessGroupSample, error) {
+		if sinceMinutes <= 0 {
+			sinceMinutes = 60
+		}
+		since := time.Now().Add(-time.Duration(sinceMinutes) * time.Minute)
+		rows, err := sys.RecentProcessGroups(since)
+		if err != nil {
+			log.Println("bdevProcessGroupsHistory:", err)
+			return nil, err
+		}
+		return rows, nil
+	}); err != nil {
+		log.Println("could not bind bdevProcessGroupsHistory:", err)
 	}
 
 	if err := w.Bind("bdevSysmonHistory", func(sinceSeconds int) ([]sysmon.Sample, error) {

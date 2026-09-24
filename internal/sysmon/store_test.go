@@ -1,9 +1,12 @@
 package sysmon
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func openTestStore(t *testing.T) *Store {
@@ -40,6 +43,11 @@ func TestInsertAndRecentSamples(t *testing.T) {
 			NetDownBps:   3,
 			NetUpBps:     4,
 			GPUPct:       5,
+			CPUQueue:     float64(i),
+			CPUPerfPct:   99,
+			DiskQueueLen: 0.5,
+			DiskLatMs:    6,
+			HardFaults:   0,
 		}
 		if err := st.InsertSample(s); err != nil {
 			t.Fatalf("InsertSample %d: %v", i, err)
@@ -61,6 +69,9 @@ func TestInsertAndRecentSamples(t *testing.T) {
 	}
 	if !got[0].Ts.Equal(base) {
 		t.Errorf("Ts round-trip wrong: got %v want %v", got[0].Ts, base)
+	}
+	if got[1].CPUQueue != 1 || got[1].CPUPerfPct != 99 || got[1].DiskQueueLen != 0.5 || got[1].DiskLatMs != 6 {
+		t.Errorf("pressure fields round-trip wrong: %+v", got[1])
 	}
 
 	// since in the future returns nothing.
@@ -103,6 +114,64 @@ func TestInsertAndRecentProcessGroups(t *testing.T) {
 	if codexRow == nil || codexRow.CPUPct != 38 {
 		t.Errorf("codex row missing or wrong: %+v", got)
 	}
+}
+
+// TestOpenMigratesPreP3Schema simulates a real burnmon-dev.db written before
+// phase 3 added the pressure columns: sysmon_samples with only the original
+// nine columns. Open must add the new ones (addPressureColumns) rather than
+// fail, and a normal insert/read afterward must round-trip the pressure
+// fields at their -1 "unavailable" default for any pre-existing row.
+func TestOpenMigratesPreP3Schema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "burnmon-dev.db")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	if _, err := raw.Exec(`CREATE TABLE sysmon_samples (
+		ts INTEGER PRIMARY KEY, cpu_pct REAL NOT NULL, cores TEXT NOT NULL,
+		mem_used_mb REAL NOT NULL, mem_total_mb REAL NOT NULL,
+		disk_read_bps REAL NOT NULL, disk_write_bps REAL NOT NULL,
+		net_down_bps REAL NOT NULL, net_up_bps REAL NOT NULL, gpu_pct REAL NOT NULL)`); err != nil {
+		t.Fatalf("create pre-p3 schema: %v", err)
+	}
+	base := time.Date(2026, 9, 20, 8, 0, 0, 0, time.UTC)
+	if _, err := raw.Exec(`INSERT INTO sysmon_samples VALUES (?, 12, '[]', 1000, 16000, 1, 2, 3, 4, 5)`,
+		base.UnixMilli()); err != nil {
+		t.Fatalf("insert pre-p3 row: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw: %v", err)
+	}
+
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open on a pre-phase-3 database: %v", err)
+	}
+	defer st.Close()
+
+	got, err := st.RecentSamples(base.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("RecentSamples: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("RecentSamples returned %d rows, want 1", len(got))
+	}
+	if got[0].CPUQueue != -1 || got[0].CPUPerfPct != -1 || got[0].DiskQueueLen != -1 ||
+		got[0].DiskLatMs != -1 || got[0].HardFaults != -1 {
+		t.Errorf("pre-existing row's pressure fields should default to -1, got %+v", got[0])
+	}
+
+	// Insert a new-shaped sample and re-open once more: both must still work
+	// (addPressureColumns is idempotent against a database already migrated).
+	if err := st.InsertSample(Sample{Ts: base.Add(time.Hour), CPUQueue: 2}); err != nil {
+		t.Fatalf("InsertSample after migration: %v", err)
+	}
+	st.Close()
+	st2, err := Open(path)
+	if err != nil {
+		t.Fatalf("second Open (already migrated): %v", err)
+	}
+	st2.Close()
 }
 
 func TestPruneRemovesOldRows(t *testing.T) {

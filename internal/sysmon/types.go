@@ -15,7 +15,17 @@ type Sample struct {
 	DiskWriteBps float64
 	NetDownBps   float64
 	NetUpBps     float64
-	GPUPct       float64 // busiest GPU engine, Task Manager style; 0 until phase 3 wires the PDH collector
+	GPUPct       float64 // busiest GPU engine, Task Manager style
+
+	// Pressure signals (phase 3), the same PDH counters perfadvisor's live
+	// TUI reads (internal/tui/sysmetrics_windows.go), English counter names
+	// so the tool works on any Windows display language. -1 means the
+	// counter could not be read this tick, not that it was zero.
+	CPUQueue     float64 // runnable threads waiting, System\Processor Queue Length
+	CPUPerfPct   float64 // percent of base clock; <100 throttled, >100 turbo
+	DiskQueueLen float64 // PhysicalDisk(_Total)\Avg. Disk Queue Length
+	DiskLatMs    float64 // PhysicalDisk(_Total)\Avg. Disk sec/Transfer, in ms
+	HardFaults   float64 // Memory\Pages Input/sec
 }
 
 // ProcessGroupSample is one harness's summed load at one tick, persisted in

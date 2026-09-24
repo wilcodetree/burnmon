@@ -9,6 +9,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"os"
@@ -74,14 +75,16 @@ type app struct {
 	st    *store.Store
 	cache dataset.Cache
 
-	sys     *sysmon.Store
-	sampler *sysmon.Sampler
+	sys         *sysmon.Store
+	sampler     *sysmon.Sampler
+	procSampler *sysmon.ProcessSampler
 
 	liveWatcher *watch.Watcher
 
-	mu     sync.Mutex
-	cfg    pricing.Config
-	latest sysmon.Sample
+	mu           sync.Mutex
+	cfg          pricing.Config
+	latest       sysmon.Sample
+	latestGroups []sysmon.ProcessGroupSample
 
 	// heatmapMu guards the activity heatmap's closed-day cache (Wilco's own
 	// finding, 2026-09-24: bdevActivityHeatmap ran a fresh 182-day
@@ -313,9 +316,38 @@ func loadConfig(dataDir string) (pricing.Config, string) {
 	return cfg, path
 }
 
+// devConfig is burnmon-dev.exe's own small config file, burnmon-dev.json,
+// separate from the shared burnmon.json (design doc section 6): settings
+// only this app cares about. Absent or unparsable is not an error, same
+// convention as an absent burnmon.json: every field keeps its default.
+type devConfig struct {
+	RetentionDays int `json:"retention_days"`
+}
+
+func loadDevConfig(dataDir string) devConfig {
+	cfg := devConfig{RetentionDays: 7}
+	path := filepath.Join(dataDir, "burnmon-dev.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return cfg
+	}
+	var loaded devConfig
+	if err := json.Unmarshal(b, &loaded); err != nil {
+		log.Println("burnmon-dev.json: parse error, using defaults:", err)
+		return cfg
+	}
+	if loaded.RetentionDays > 0 {
+		cfg.RetentionDays = loaded.RetentionDays
+	}
+	return cfg
+}
+
 // startSampling ticks the live sampler every 2s, keeping the latest sample
 // in memory for bdevSysmonNow, and persists every 5th tick (10s) to
-// burnmon-dev.db, per the design doc's sampling cadence.
+// burnmon-dev.db, per the design doc's sampling cadence. The same tick
+// also runs the process-group sampler (harness CPU/RAM/IO), on the same
+// cadence: perfadvisor's own live TUI already proves a full process scan
+// once a second is affordable, so once every 2s is not a new cost class.
 func (a *app) startSampling() {
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
@@ -329,12 +361,27 @@ func (a *app) startSampling() {
 			}
 			a.mu.Lock()
 			a.latest = sm
+			cfg := a.cfg
 			a.mu.Unlock()
+
+			groups, err := a.procSampler.Tick(cfg.CopilotVSCodeOtelFile != "")
+			if err != nil {
+				log.Println("process sample:", err)
+			} else {
+				a.mu.Lock()
+				a.latestGroups = groups
+				a.mu.Unlock()
+			}
 
 			tick++
 			if tick%5 == 0 {
 				if err := a.sys.InsertSample(sm); err != nil {
 					log.Println("sysmon insert:", err)
+				}
+				if len(groups) > 0 {
+					if err := a.sys.InsertProcessGroupSamples(groups); err != nil {
+						log.Println("process group insert:", err)
+					}
 				}
 			}
 		}
