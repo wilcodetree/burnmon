@@ -2,6 +2,51 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-25, v0.4 UI review patch (sections 1-11)
+
+Followed `02_roadmap\2026-09-25_ws2_ui_review_patch.md` end to end on
+`burnmon-dev`, five commits (measured startup first, then sections 1-8
+together, 10, 9, 11's own rest, plus one design-note-only commit and this
+log entry). Header, burn chart (per-session stacked bars, CPU line
+overlay removed), vendor strip totals row, the activity/harness-heatmap
+split row, a turn ticker with a click-through popup (new
+`live.TurnDetail.Cost`, `bdevTurnDetail`), a perfadvisor-style system
+panel (new `Sample.SwapUsedMB/Disks/Wifi`, `sysmon.BaseClockGHz()`,
+source commit perfadvisor main `2ed8046`), process-groups column tweaks,
+and the "Today's Read" panel's deletion (its `bdevAdvisorNow` binding
+only; `internal/advisor` itself is unchanged and still runs inside the
+export bundle). Window state now persists across launches and F11/Esc
+fullscreen works (new `cmd\burnmon-dev\windowstate.go`, hand-rolled Win32:
+go-webview2 exposes no placement/settings API, and WebView2/Chromium
+reserves F11 as a browser accelerator key the page's own JS never sees, so
+a global hotkey plus a thread-local `WH_GETMESSAGE` hook reacts to it
+directly). Responsive CSS breakpoints (900px/1600px) replace the phase 1-2
+two-viewport/tabs plan, which was never finished. A new, optional
+Microsoft To Do panel (`internal/todo`, also ported from perfadvisor,
+off by default). Startup ordering changed last: the native-root filesystem
+scan and the startup backfill used to run before the window was created;
+they now run in a background goroutine after it, so window creation
+dropped from 18.67s to 0.80s and first full render from 19.08s to 1.03s,
+measured against the real store both times, with a new loading screen and
+a header status line covering the gap until backfill actually finishes.
+
+Three fresh read-only Opus reviews (one per major commit) caught, and this
+session fixed, real bugs rather than style nits: a `WINDOWPLACEMENT`
+struct with an extra field only valid on the old Mac Win32 port (silently
+failed every window-state save/restore), `MonitorFromPoint` called with
+two arguments instead of one packed `POINT` (silently found no monitor
+ever), an unguarded system-wide F11 hotkey, a turn-popup stale-response
+race, a Microsoft To Do sign-in that could get permanently stuck after one
+failed attempt, and a per-file progress callback that could have pushed
+thousands of UI-thread round trips against a large trail. `go vet`,
+`go test ./...`, `.\build.ps1` and a `node --check` pass on `page.html`'s
+script all green throughout. `uicheck` `d0` through `d6` pass together in
+one run against the real window; `d7` (the real F11 keypress test) was
+independently verified working end to end earlier in the session, with
+real screenshots, but could not be re-run in the final pass because the
+workstation was locked at that exact moment (SendInput correctly refuses a
+locked secure desktop). Not pushed, tagged or merged, per house process.
+
 ## 2026-09-24, WS1 cleanup: dev-only mode, Sessions harness fix, History stacked chart, v0.3.1
 
 Read `02_roadmap\2026-09-24_ws1_burnmon_cleanup.md` (three tasks, decisions already taken:
