@@ -5,10 +5,12 @@
 // Finding with a time, evidence numbers and one concrete suggestion.
 //
 // Analyze is a pure function: every rule reads only its Input argument plus
-// cfg and Thresholds, no store or sysmon access happens in this package. The
-// binding (cmd/burnmon-dev/main.go's bdevAdvisorNow) and the export bundle
-// (internal/devexport) are the only callers that touch a real store, off
-// the UI thread, and both build one Input and call Analyze.
+// cfg and Thresholds, no store or sysmon access happens in this package.
+// cmd/burnmon-dev/export_run.go's buildExportBundle is the only caller that
+// touches a real store, off the UI thread, and builds one Input and calls
+// Analyze (the UI review patch, 2026-09-25, removed the live "TODAY'S READ"
+// panel and its bdevAdvisorNow binding; the export bundle still uses these
+// rules, per that patch's own section 8).
 package advisor
 
 import (

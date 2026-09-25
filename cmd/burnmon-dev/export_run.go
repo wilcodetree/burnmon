@@ -28,18 +28,6 @@ import (
 	"burnmon/internal/sysmon"
 )
 
-// advisorWindow is how far back the live advisor panel's own binding
-// (bdevAdvisorNow, main.go) looks for turns and system samples: long enough
-// to catch a harness idling with no turns or a session's cache hit rate
-// drifting, short enough that one query stays cheap (the same "windowed,
-// not whole-table" reasoning internal/store's EventsSince doc comment gives
-// for the burn side). buildExportBundle below does NOT use this constant:
-// its own advisor pass deliberately runs over the whole requested
-// [since, until) window (a day by default), since an export is meant to
-// summarize that whole window, not just its last hour (an earlier version
-// of this comment claimed otherwise; caught by review, 2026-09-24).
-const advisorWindow = 60 * time.Minute
-
 // parseExportTime accepts a bare UTC day (YYYY-MM-DD) or a full RFC3339
 // timestamp: burnmon-cli export's own day-string convention, extended,
 // since a 24-hour export benefits from time-of-day granularity that a bare

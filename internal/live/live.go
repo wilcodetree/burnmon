@@ -409,6 +409,11 @@ type TurnDetail struct {
 	CacheWrite int64              `json:"cache_write"`
 	CacheRead  int64              `json:"cache_read"`
 	Output     int64              `json:"output"`
+	// Cost is turnCost's own subscription-share figure for this one event
+	// (BurnMon Dev UI review patch, section 5: the turn detail popup shows
+	// cost alongside the token split, which burnmon.exe's own drawer,
+	// ported from here, does not surface).
+	Cost float64 `json:"cost"`
 	// HasGap is false for a session's own first turn: there is no previous
 	// turn to measure a gap against.
 	HasGap     bool               `json:"has_gap"`
@@ -452,7 +457,7 @@ func BuildTurnDetail(st *store.Store, cfg *pricing.Config, sessionID string, tur
 	d := TurnDetail{
 		SessionID: sessionID, Vendor: e.Vendor, Agent: e.Agent, Model: e.Model,
 		Turn: turn, At: e.At.UTC().Format(time.RFC3339),
-		Fresh: e.Input, Output: e.Output,
+		Fresh: e.Input, Output: e.Output, Cost: turnCost(e, cfg),
 	}
 	if e.CacheWrite != nil {
 		d.CacheWrite = *e.CacheWrite

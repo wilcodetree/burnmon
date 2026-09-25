@@ -26,7 +26,6 @@ import (
 	webview2 "github.com/jchv/go-webview2"
 
 	"burnmon/internal/adapter/codex"
-	"burnmon/internal/advisor"
 	"burnmon/internal/devexport"
 	"burnmon/internal/history"
 	"burnmon/internal/live"
@@ -38,6 +37,18 @@ import (
 
 //go:embed page.html
 var pageHTML string
+
+// progStart marks process entry, so every startupMark call below logs an
+// elapsed time from the same zero point (section 11 step 1: "measure
+// first" before changing any startup ordering). Read only from main's own
+// goroutine before the window is up; the sampling goroutine's one
+// first-sample mark (startSampling) reads it too, but only ever after
+// main() has already set it, so no lock is needed.
+var progStart = time.Now()
+
+func startupMark(step string) {
+	log.Printf("startup: %s at %v", step, time.Since(progStart).Round(time.Millisecond))
+}
 
 // heatmapPayload is bdevActivityHeatmap's return shape: renderHeatmap
 // (page.html) only ever reads payload.rows, so this carries just that
@@ -112,6 +123,7 @@ func main() {
 		return
 	}
 	defer st.Close()
+	startupMark("store open and migrations done")
 
 	cfg, cfgFile := loadConfig(dataDir)
 	if cfgFile != "" {
@@ -135,7 +147,12 @@ func main() {
 	startHermesPoll(a, st)
 	startCopilotCLIPoll(a, st)
 	startCopilotVSCPoll(a, st)
+	startupMark("watcher and pollers started")
 	a.startInitialCollect()
+	go func() {
+		<-a.initialCollectDone
+		startupMark("initial collect and backfill done")
+	}()
 
 	wv2Dir := filepath.Join(dataDir, "wv2-dev")
 	_ = os.MkdirAll(wv2Dir, 0o755)
@@ -154,19 +171,35 @@ func main() {
 		log.Println("could not create the WebView2 window; BurnMon Dev needs the WebView2 runtime")
 		return
 	}
+	startupMark("window created")
+
+	// bdevMarkFirstRender: page.html calls this once, after its very first
+	// poll cycle (sysmon, burn, vendor strip) has all resolved and painted,
+	// so "first full render" is measured from the page's own perspective
+	// rather than guessed at from the Go side.
+	if err := w.Bind("bdevMarkFirstRender", func() {
+		startupMark("first full render")
+	}); err != nil {
+		log.Println("could not bind bdevMarkFirstRender:", err)
+	}
 
 	// sysmonNowPayload adds the header pressure chip's score (internal/sysmon
-	// .PressureScore, phase 3) alongside the raw sample: Sample is embedded
+	// .PressureScore, phase 3) and the CPU box's static base clock (UI review
+	// patch section 6) alongside the raw sample: Sample is embedded
 	// anonymously so every one of its fields still flattens into the same
-	// JSON object the page already reads, plus one new "pressure_score" key.
+	// JSON object the page already reads, plus these two extra keys.
 	type sysmonNowPayload struct {
 		sysmon.Sample
-		PressureScore int `json:"pressure_score"`
+		PressureScore int     `json:"pressure_score"`
+		BaseClockGHz  float64 `json:"base_clock_ghz"`
 	}
 	if err := w.Bind("bdevSysmonNow", func() (sysmonNowPayload, error) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		return sysmonNowPayload{Sample: a.latest, PressureScore: sysmon.PressureScore(a.latest)}, nil
+		return sysmonNowPayload{
+			Sample: a.latest, PressureScore: sysmon.PressureScore(a.latest),
+			BaseClockGHz: sysmon.BaseClockGHz(),
+		}, nil
 	}); err != nil {
 		log.Println("could not bind bdevSysmonNow:", err)
 	}
@@ -238,6 +271,43 @@ func main() {
 		return snap, nil
 	}); err != nil {
 		log.Println("could not bind bdevBurnNow:", err)
+	}
+
+	// bdevTurnDetail: the turn ticker's click-through popup (UI review patch
+	// section 5, "the equivalent of burnmon.exe's turn drawer"), same
+	// live.BuildTurnDetail cmd\burnmon\main.go's own bmTurn binding calls,
+	// off the UI thread for the same reason bmTurn's own N1 fix gives (a
+	// full-session EventsForSession re-read must not block the window from
+	// responding to the drawer's own Close/Esc while it runs). turnDetailPayload
+	// wraps the result with an Error string (found by review, 2026-09-25: the
+	// original version silently sent back a zero-value TurnDetail on error,
+	// which the popup then rendered as "Turn 0" / an invalid date instead of
+	// surfacing the failure) rather than TurnDetail bare.
+	type turnDetailPayload struct {
+		live.TurnDetail
+		Error string `json:"error,omitempty"`
+	}
+	if err := w.Bind("bdevTurnDetail", func(sessionID string, turn int) {
+		go func() {
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			detail, err := live.BuildTurnDetail(st, &cfg, sessionID, turn)
+			payload := turnDetailPayload{TurnDetail: detail}
+			if err != nil {
+				log.Println("bdevTurnDetail:", sessionID, turn, ":", err)
+				payload.Error = err.Error()
+			}
+			key := fmt.Sprintf("%s:%d", sessionID, turn)
+			js, err := bdevAsyncResolveJSWithKey("__bdevTurnDetailResolve", key, payload)
+			if err != nil {
+				log.Println("bdevTurnDetail: encode result:", err)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
+	}); err != nil {
+		log.Println("could not bind bdevTurnDetail:", err)
 	}
 
 	// bdevVendorStrip: today/week/month per vendor, reused directly, same
@@ -341,50 +411,11 @@ func main() {
 		log.Println("could not bind bdevCacheBreakdown:", err)
 	}
 
-	// bdevAdvisorNow: phase 4's "TODAY'S READ" panel. Runs the advisor rule
-	// engine (internal/advisor) over the last advisorWindow of turns and
-	// system samples, off the UI thread: bdevActivityHeatmap's own review
-	// finding (2026-09-24) proved even a "cheap" per-poll store read can
-	// freeze the UI thread if it runs there directly, so this follows the
-	// same async-resolve pattern rather than returning synchronously.
-	if err := w.Bind("bdevAdvisorNow", func() {
-		go func() {
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			now := time.Now()
-			since := now.Add(-advisorWindow)
-
-			events, err := st.EventsSince(since)
-			if err != nil {
-				log.Println("bdevAdvisorNow: EventsSince:", err)
-				return
-			}
-			sysHistory, err := sys.RecentSamples(since)
-			if err != nil {
-				log.Println("bdevAdvisorNow: RecentSamples:", err)
-				return
-			}
-			groups, err := sys.RecentProcessGroups(since)
-			if err != nil {
-				log.Println("bdevAdvisorNow: RecentProcessGroups:", err)
-				return
-			}
-			turns := live.BuildTurns(events, &cfg, since, now)
-			findings := advisor.Analyze(advisor.Input{
-				Now: now, Turns: turns, SysmonHistory: sysHistory, ProcessGroups: groups,
-			}, &cfg, advisor.DefaultThresholds)
-
-			js, err := bdevAsyncResolveJS("__bdevAdvisorResolve", findings)
-			if err != nil {
-				log.Println("bdevAdvisorNow: encode result:", err)
-				return
-			}
-			w.Dispatch(func() { w.Eval(js) })
-		}()
-	}); err != nil {
-		log.Println("could not bind bdevAdvisorNow:", err)
-	}
+	// bdevAdvisorNow (phase 4's "TODAY'S READ" panel) is gone: UI review
+	// patch section 8 deletes the panel outright. The advisor rules
+	// themselves (internal/advisor) stay, since buildExportBundle
+	// (export_run.go) calls advisor.Analyze directly for summary.md,
+	// independent of this binding.
 
 	// bdevExport is the header EXPORT button (design doc "Export (AI-ready
 	// bundle)"): the last 24 hours, not redacted (the CLI's --redact flag
@@ -455,4 +486,21 @@ func bdevAsyncResolveJS(resolverName string, data any) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("window.%s && window.%s(%s)", resolverName, resolverName, dataJSON), nil
+}
+
+// bdevAsyncResolveJSWithKey mirrors cmd\burnmon\main.go's own asyncResolveJS:
+// a keyed variant of bdevAsyncResolveJS for a binding more than one call to
+// which can be in flight at once (bdevTurnDetail: a fast second ticker
+// click before the first resolves), so the resolver can tell which call a
+// result belongs to.
+func bdevAsyncResolveJSWithKey(resolverName, key string, data any) (string, error) {
+	keyJSON, err := json.Marshal(key)
+	if err != nil {
+		return "", err
+	}
+	dataJSON, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("window.%s && window.%s(%s, %s)", resolverName, resolverName, keyJSON, dataJSON), nil
 }
