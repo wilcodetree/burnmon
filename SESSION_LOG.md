@@ -182,6 +182,68 @@ STATUS.md updated. Committed on `main`, not pushed or tagged (Wilco's own manual
 commands in the hub brief). Hub brief:
 `04_assets\hub_agent_update_2026-09-26_ws3_shared_ingest_performance.md`.
 
+## 2026-09-26, v0.4 ticker/headline patch (sections 1-4)
+
+Followed `02_roadmap\2026-09-25_ws2_ticker_headline_patch.md` on `burnmon-dev`.
+Turn ticker: rows get a fixed 22px height instead of flexbox's default
+shrink (the exact bug in `11_ticker_broken.png` - cropToFit's own
+scrollHeight<=clientHeight check never tripped because rows just squeezed
+to a sliver instead of overflowing), and the ticker becomes the one
+deliberate exception to "no scrollbars anywhere": it scrolls with a thin
+house-style scrollbar (check_d9.go's sweep now excludes `#turnTicker`),
+skips its own repaint while the user has scrolled away from the top (so a
+live update no longer drifts their reading position), and a new
+`check_d12.go` fails if any row is shorter than its own line height, if
+the box itself collapses, or if a run finds no rows to check. Process
+groups: the trend column is capped to at most half the panel width via a
+`<colgroup>` plus `table-layout:fixed` (`12_process_groups.png` showed it
+eating most of the panel under the old `width:100%` auto-layout hint);
+also fixed a pre-existing dead CSS selector that matched nothing. Harness
+heatmap: each cell now carries an Activity-heatmap-style hover title
+(harness, `HH:mm`, CPU percent, tokens when there are any, "no activity"
+otherwise), correlating `burn.turns` onto the sysmon harness vocabulary via
+a new `HARNESS_AGENTS` map mirroring `internal/advisor`'s own
+`harnessAgents`; the CPU figure is an average over that minute's sample
+count, not the colour-intensity math's own raw sum (review caught this -
+at ~6 samples/minute a busy harness could otherwise show "600% CPU"), and
+token correlation is limited to `burn.turns`' own 30-minute/50-turn
+window, narrower than the heatmap's 60-minute CPU history, so an older or
+busier cell can show CPU with no token figure even when real activity
+happened. Headline: today's total renders as a full comma-separated whole
+number (`fmtTokensFull`) instead of the K/M abbreviation used everywhere
+else, bigger (36px baseline, 48px at 1152px+) with width reserved for 12
+digits so the header never reshuffles as it grows, tweened with a linear
+ease over the current tick interval (the one exception to the shared
+600ms ease-out) - though the underlying value only actually changes on
+`vendor_strip`'s own 60s cache refresh, so most ticks are a no-op, not
+continuous motion. Header gap widened (16px to 24px) to fix "3 sessions"
+clipping against the headline (`14_topbar.png`).
+
+A fresh read-only Opus review over the diff caught five real issues before
+commit, all fixed here: `animateNumber` only recorded its in-flight value
+at t=1, so a tween cancelled mid-flight (routine once its own duration is
+close to the tick cadence, exactly the headline's new case) restarted from
+the stale pre-tween value and visibly snapped backward; the heatmap's raw
+per-minute CPU sum mislabeled as a percentage; the ticker's full-innerHTML
+replace every tick would have drifted a scrolled-down reading position by
+one row height per new turn; the dead `#processGroupsHead th:...` CSS
+selector (that id belongs to the panel's title div, not the table's own
+thead); and a doc comment overclaiming the headline "keeps counting up"
+continuously when the data source only changes once a minute.
+
+`go vet`, `go test ./... -count=1`, `.\build.ps1`, `node --check` on the
+page JS, and `uicheck d0`-`d12` (rerun in full after the review fixes) all
+pass. Display scale in this sandboxed session: every d-check's requested
+window size lands at roughly half its CSS-pixel target (e.g. 1280x860 real
+to 627x395), consistent with ~200% Windows display scaling; d7's own
+fullscreen path still reaches the full 1600x1000 CSS px this session's
+screen actually offers, and that is where the ticker/process-groups/
+heatmap-hover screenshots for this session's own report were taken (not
+committed - ad hoc verification only, per the four reference screenshots
+already committed with the patch). Version stays `0.4.0-alpha.1` on
+purpose (phase 5, not this patch, does the bump); not pushed, tagged, or
+merged.
+
 ## 2026-09-25, v0.4 burn chart no-scroll patch (sections 1-5)
 
 Followed `02_roadmap\2026-09-25_ws2_burn_chart_no_scroll_patch.md` end to end
