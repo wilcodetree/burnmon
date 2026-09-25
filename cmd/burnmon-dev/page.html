@@ -18,25 +18,24 @@ body{
   font:13px/1.45 var(--mono);
   display:flex; flex-direction:column;
 }
+
+/* header, UI review patch section 1: smaller, quieter, no boxed chips */
 header{
-  flex:0 0 auto; min-height:44px; background:#000; border-bottom:2px solid var(--amber);
-  display:flex; align-items:center; flex-wrap:wrap; gap:6px 14px; padding:6px 16px;
+  flex:0 0 auto; min-height:32px; background:#000; border-bottom:2px solid var(--amber);
+  display:flex; align-items:center; flex-wrap:wrap; gap:4px 16px; padding:5px 14px;
 }
-.logo{font-size:17px; font-weight:700; color:#fff; letter-spacing:1px; white-space:nowrap}
+.brand{display:flex; flex-direction:column; gap:0; flex:0 0 auto; line-height:1.15}
+.logo{font-size:13px; font-weight:700; color:#fff; letter-spacing:1px; white-space:nowrap}
 .logo span{color:var(--amber)}
-#cmd{background:#1a1206;border:1px solid #6b4a12;color:var(--amber2);font:inherit;
-  padding:4px 10px; flex:1 1 220px; min-width:0; outline:none}
-#cmd:focus{border-color:var(--amber)}
-.chip{padding:3px 10px; font-weight:700; font-size:12px; letter-spacing:.06em; white-space:nowrap;
-  background:rgba(255,215,95,.14); color:var(--yel); border:1px solid rgba(255,215,95,.4)}
-button.chip{font:inherit; cursor:pointer}
-button.chip:disabled{opacity:.5; cursor:default}
-.hstat{font-size:12px; color:var(--dim); white-space:nowrap}
+.pressuretext{font-size:10px; font-weight:700; letter-spacing:.06em; white-space:nowrap}
+.hltotal{font-size:22px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; white-space:nowrap}
+.hstat{font-size:11.5px; color:var(--dim); white-space:nowrap}
 .hstat b{color:var(--txt); font-weight:600; font-variant-numeric:tabular-nums}
-.headline{display:flex; align-items:baseline; gap:5px; white-space:nowrap; flex:0 0 auto}
-.hltotal{font-size:30px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums}
-.hlunit{font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em}
-.hlsub{font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums}
+.hdrspacer{flex:1 1 auto; min-width:4px}
+.textbtn{background:none; border:none; color:var(--blu); font:700 11.5px/1 var(--mono);
+  letter-spacing:.06em; text-transform:uppercase; cursor:pointer; padding:2px 0}
+.textbtn:hover{text-decoration:underline}
+.textbtn:disabled{opacity:.5; cursor:default; text-decoration:none}
 
 main{flex:1; min-height:0; display:flex; flex-direction:column; padding:4px; gap:4px}
 .zone{display:flex; flex-direction:column; min-height:0}
@@ -53,31 +52,14 @@ main{flex:1; min-height:0; display:flex; flex-direction:column; padding:4px; gap
 .placeholder{flex:1; display:flex; align-items:center; justify-content:center; color:var(--dim);
   font-size:12px; padding:20px; text-align:center}
 
-.sysrow{display:flex; gap:4px; flex:0 0 auto}
-.gauge{flex:1.3; background:var(--panel); border:1px solid var(--bd); padding:10px 12px;
-  display:flex; flex-direction:column; gap:6px}
-.gauge h4{margin:0; font:12px/1 var(--mono); color:var(--dim); letter-spacing:.06em;
-  text-transform:uppercase; font-weight:400}
-.gaugebig{font:700 26px/1 var(--mono); color:#fff}
-.coregrid{display:grid; grid-template-columns:repeat(8,1fr); gap:3px; flex:1}
-.coregrid i{display:block; padding-top:100%; position:relative; background:var(--bd)}
-.tiles{flex:2.2; display:grid; grid-template-columns:repeat(2,1fr); gap:6px}
-.tile{background:var(--panel); border:1px solid var(--bd); padding:8px 10px; min-width:0}
-.tile b{display:block; font:11px/1 var(--mono); color:var(--dim); letter-spacing:.05em; text-transform:uppercase}
-.tile .v{font:700 18px/1 var(--mono); color:#fff; margin-top:6px}
-
-@media (max-aspect-ratio: 4/5){
-  .tiles{grid-template-columns:repeat(4,1fr)}
-  header{min-height:56px}
-  .hltotal{font-size:40px}
-}
-
-/* burn zone */
-.burnchart{position:relative; flex:0 0 26%; padding:6px; overflow:hidden}
-.bars{position:absolute; inset:6px; display:flex; gap:2px}
+/* burn zone, section 2: bars only (no CPU overlay), per-session stacking, HH:mm axis */
+.burnchart{position:relative; flex:0 0 24%; padding:6px 6px 0; overflow:hidden; display:flex; flex-direction:column}
+.bars{position:relative; flex:1; display:flex; gap:2px; min-height:0}
 .bars .bar{flex:1; display:flex; flex-direction:column-reverse; min-width:0}
 .bars .bar i{display:block; min-height:2px}
-.cpuline{position:absolute; inset:6px; width:calc(100% - 12px); height:calc(100% - 12px); pointer-events:none}
+.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+.burnaxis{display:flex; gap:2px; padding:2px 0 4px; flex:0 0 auto}
+.axistick{flex:1; font-size:9px; color:var(--dim); white-space:nowrap; overflow:visible}
 .cards{display:flex; gap:6px; flex-wrap:wrap; flex:0 0 auto}
 .card{flex:1 1 140px; background:var(--panel); border:1px solid var(--bd); padding:8px 10px; min-width:0}
 .card h4{margin:0 0 4px; font:12px/1 var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -85,27 +67,57 @@ main{flex:1; min-height:0; display:flex; flex-direction:column; padding:4px; gap
 .ctxbar i{display:block; height:100%}
 .card small{display:block; font:11px/1.4 var(--mono); color:var(--dim)}
 .card small b{color:var(--txt); font-weight:600}
+
 table{width:100%; border-collapse:collapse; font:11.5px/1.3 var(--mono)}
-th{color:var(--dim); font-weight:400; text-align:left; letter-spacing:.05em; font-size:10px; padding:4px 8px; text-transform:uppercase}
+th{color:var(--dim); font-weight:400; text-align:right; letter-spacing:.05em; font-size:10px; padding:4px 8px; text-transform:uppercase}
+th:first-child{text-align:left}
 td{padding:4px 8px; color:var(--txt); white-space:nowrap}
 td.num{text-align:right; font-variant-numeric:tabular-nums}
 .dot{display:inline-block; width:8px; height:8px; border-radius:1px; margin-right:5px; vertical-align:middle}
-.ticker{display:flex; flex-direction:column; gap:3px; flex:1; min-height:0; overflow-y:auto; padding:6px 10px}
-.trow{display:flex; gap:8px; align-items:baseline; font:11.5px/1.4 var(--mono); white-space:nowrap; overflow:hidden}
+
+/* vendor strip totals row, section 3 */
+tr.totalrow td{font-weight:700; color:#fff; border-bottom:1px solid var(--bd)}
+
+/* turn ticker, section 5: dense lines, amber outline tag, white tokens, hover, click */
+.ticker{display:flex; flex-direction:column; gap:2px; flex:1; min-height:0; overflow-y:auto; padding:4px 10px}
+.trow{display:flex; gap:8px; align-items:baseline; font:11.5px/1.35 var(--mono); white-space:nowrap; overflow:hidden;
+  padding:1px 4px; cursor:default}
+.trow.clickable{cursor:pointer}
+.trow.clickable:hover{background:var(--panel2)}
 .trow .t{color:var(--dim)}
-.trow .h{font-weight:600}
-.trow .m{color:var(--txt); overflow:hidden; text-overflow:ellipsis}
-.tag{font:10px/1 var(--mono); padding:2px 5px; border:1px solid; text-transform:uppercase; letter-spacing:.03em}
-.tag.expensive-turn{color:var(--red); border-color:var(--red)}
-.tag.context-runway{color:var(--yel); border-color:var(--yel)}
-.tag.re-prefill{color:var(--cyn); border-color:var(--cyn)}
-.tag.compaction{color:var(--mag); border-color:var(--mag)}
+.trow .h{font-weight:700}
+.trow .m{color:#fff; overflow:hidden; text-overflow:ellipsis}
+.tag{font:10px/1 var(--mono); padding:1px 5px; border:1px solid var(--amber); color:var(--amber);
+  text-transform:uppercase; letter-spacing:.03em}
+
+/* turn detail popup, section 5 */
+#turnPopupOverlay{position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center}
+#turnPopupOverlay.hidden{display:none}
+#turnPopupOverlay:not(.hidden){display:flex}
+#turnPopup{position:relative; background:var(--panel); border:1px solid var(--amber); color:var(--txt);
+  padding:18px 20px; width:480px; max-width:92vw; max-height:84vh; overflow-y:auto; font-size:12px}
+#turnPopup h3{margin:0 0 2px; color:#fff; font-size:14px}
+#turnPopup h4{margin:14px 0 5px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--amber)}
+#turnPopupClose{position:absolute; top:10px; right:12px; background:none; border:none; color:var(--dim);
+  font-size:18px; line-height:1; cursor:pointer}
+#turnPopupClose:hover{color:var(--txt)}
+#turnPopup table{font-size:11px}
+#turnPopup ul.tight{margin:0; padding-left:18px}
 
 /* vendor strip row expand */
 tbody tr.vrow{cursor:pointer}
 tbody tr.vrow:hover{background:var(--panel2)}
 tr.vexpand td{padding:6px 8px 8px 24px; color:var(--txt); font-size:11px; background:#0d1219; border-top:1px dashed var(--bd)}
 tr.vexpand b{font-variant-numeric:tabular-nums}
+
+/* activity + harness heatmap, section 4: side by side */
+.splitrow{display:flex; gap:4px; flex:0 0 auto}
+.splitrow > .panel:first-child{flex:0 0 40%; min-width:0}
+.splitrow > .panel:last-child{flex:1; min-width:0}
+@media (max-width: 900px){
+  .splitrow{flex-direction:column}
+  .splitrow > .panel:first-child{flex:0 0 auto}
+}
 
 /* activity heatmap, phase 2b */
 .phead-sub{float:right; color:var(--dim); font-weight:400; text-transform:none; letter-spacing:0}
@@ -120,26 +132,63 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
 /* harness x minute heatmap, phase 3 */
 .heatrow{display:flex; align-items:center; gap:6px; margin-bottom:2px}
-.heatrow-label{width:120px; flex:0 0 auto; font-size:11px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.heatrow-label{width:110px; flex:0 0 auto; font-size:11px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .heatrow-cells{display:flex; gap:1px; flex-wrap:nowrap}
+
+/* system panel, section 6: perfadvisor layout, smoother and a little smaller */
+.cpubox{padding:8px 10px; flex:0 0 auto}
+.cpubox h4{margin:0 0 6px; font:11px/1 var(--mono); color:var(--dim); letter-spacing:.05em; text-transform:uppercase; font-weight:400}
+.cpubar{position:relative; height:16px; background:#10151d; border:1px solid var(--bd); margin-bottom:2px}
+.cpubar i{display:block; height:100%; background:var(--grn)}
+.cpubar span{position:absolute; right:6px; top:0; line-height:16px; font-size:11px; color:#fff; font-variant-numeric:tabular-nums}
+.cpumeta{font-size:10px; color:var(--dim); margin-bottom:6px}
+.coregrid{display:grid; grid-template-columns:repeat(5,1fr); gap:3px 6px}
+.coreitem{display:flex; align-items:center; gap:4px; font-size:10px; color:var(--dim); min-width:0}
+.corebar{position:relative; flex:1; height:8px; background:#10151d; border:1px solid var(--bd); min-width:0}
+.corebar i{display:block; height:100%}
+.corelabel{flex:0 0 auto; white-space:nowrap; font-variant-numeric:tabular-nums}
+
+.histwrap{flex:1; min-height:60px; padding:6px 10px; display:flex; flex-direction:column}
+.histlegend{display:flex; gap:12px; flex-wrap:wrap; font-size:10px; color:var(--dim); margin-bottom:4px}
+.histlegend b{font-weight:700}
+.histlegend .note{margin-left:auto; color:var(--dim); font-style:italic}
+.histcanvaswrap{flex:1; min-height:0}
+#histCanvas{width:100%; height:100%; display:block}
+
+.sysbottom{display:flex; gap:4px; flex:0 0 auto}
+.sysbox{flex:1; background:var(--panel); border:1px solid var(--bd); padding:8px 10px; min-width:0}
+.sysbox h4{margin:0 0 6px; font:10px/1 var(--mono); color:var(--dim); letter-spacing:.05em; text-transform:uppercase; font-weight:400}
+.sysbar{position:relative; height:10px; background:#10151d; border:1px solid var(--bd); margin-bottom:4px}
+.sysbar i{display:block; height:100%}
+.sysbox .line{font-size:11px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.sysbox .line b{color:#fff; font-variant-numeric:tabular-nums}
+.sysbox .dim{color:var(--dim)}
+
+/* process groups, section 7: trend column fills remaining width */
+#processGroups td:last-child, #processGroupsHead th:last-child{width:100%}
+.trendsvg{display:block; width:100%; height:14px}
+
+@media (max-aspect-ratio: 4/5){
+  header{min-height:40px}
+  .hltotal{font-size:28px}
+}
 </style>
 </head>
 <body>
 <header>
-  <div class="logo">BURN<span>MON</span> DEV</div>
-  <div class="headline">
-    <span class="hltotal" id="hlToday">-</span><span class="hlunit">tok today</span>
-    <span class="hlsub">&middot; <span id="hlWeek">-</span> wk &middot; <span id="hlMonth">-</span> mo</span>
+  <div class="brand">
+    <div class="logo">BURN<span>MON</span> DEV</div>
+    <div class="pressuretext" id="pressureChip">PRESSURE -</div>
   </div>
-  <input id="cmd" placeholder="/ search sessions, vendors, findings&hellip;" autocomplete="off" spellcheck="false">
-  <div class="chip" id="pressureChip">PRESSURE -</div>
+  <div class="hltotal" id="hlToday">-</div>
   <div class="hstat" id="hdrSessions">- sessions</div>
-  <div class="hstat"><b id="hdrBurnRate">-</b>/min</div>
+  <div class="hstat">$<b id="hdrBurnRate">-</b>/min</div>
   <div class="hstat"><b id="hdrTokMin">-</b> tok/min</div>
   <div class="hstat">CPU <b id="hdrCPU">-</b></div>
   <div class="hstat">RAM <b id="hdrRAM">-</b></div>
   <div class="hstat" id="hdrClock">-</div>
-  <button class="chip" id="exportBtn" style="background:rgba(77,166,255,.14);color:var(--blu);border-color:rgba(77,166,255,.4)" title="Export the last 24 hours to an AI-ready bundle">EXPORT</button>
+  <div class="hdrspacer"></div>
+  <button class="textbtn" id="exportBtn" title="Export the last 24 hours to an AI-ready bundle">EXPORT</button>
   <div class="hstat" id="exportStatus"></div>
 </header>
 <main>
@@ -147,9 +196,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     <div class="zonelabel">Burn, last 30 min</div>
     <div class="zonebody">
       <div class="burnchart panel">
-        <div class="bars" id="burnBars"></div>
-        <svg class="cpuline" id="cpuLine" preserveAspectRatio="none"></svg>
-        <svg class="cpuline" id="turnMarkers" preserveAspectRatio="none"></svg>
+        <div class="bars" id="burnBars"><svg class="overlay" id="turnMarkers" preserveAspectRatio="none"></svg></div>
+        <div class="burnaxis" id="burnAxis"></div>
       </div>
       <div class="cards" id="sessionCards"></div>
       <div class="panel" style="flex:0 0 auto">
@@ -159,9 +207,15 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
           <tbody id="vendorStrip"></tbody>
         </table>
       </div>
-      <div class="panel" style="flex:0 0 auto">
-        <div class="panelhead">Activity <span id="heatmapActiveDays" class="phead-sub"></span></div>
-        <div class="heatmapwrap"><div id="heatmapGrid"></div></div>
+      <div class="splitrow">
+        <div class="panel">
+          <div class="panelhead">Activity <span id="heatmapActiveDays" class="phead-sub"></span></div>
+          <div class="heatmapwrap"><div id="heatmapGrid"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panelhead">Heatmap, harness &times; minute (CPU-weighted)</div>
+          <div class="heatmapwrap" style="overflow-y:auto"><div id="harnessHeatmap"></div></div>
+        </div>
       </div>
       <div class="panel" style="flex:1">
         <div class="panelhead">Turn ticker</div>
@@ -172,37 +226,51 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   <section class="zone system">
     <div class="zonelabel">System</div>
     <div class="zonebody">
-      <div class="sysrow" style="flex:0 0 auto">
-        <div class="gauge">
-          <h4>CPU total</h4>
-          <div class="gaugebig" id="cpuTotal">-</div>
-          <div class="coregrid" id="coreGrid"></div>
-        </div>
-        <div class="tiles">
-          <div class="tile"><b>Memory</b><div class="v" id="tileMem">-</div></div>
-          <div class="tile"><b>Disk I/O</b><div class="v" id="tileDisk">-</div></div>
-          <div class="tile"><b>Network</b><div class="v" id="tileNet">-</div></div>
-          <div class="tile"><b>GPU</b><div class="v" id="tileGPU">-</div></div>
-        </div>
+      <div class="panel cpubox">
+        <h4>CPU, <span id="cpuThreads">-</span> threads</h4>
+        <div class="cpubar"><i id="cpuTotalBar" style="width:0%"></i><span id="cpuTotal">-</span></div>
+        <div class="cpumeta" id="cpuBaseClock"></div>
+        <div class="coregrid" id="coreGrid"></div>
+      </div>
+      <div class="panel histwrap">
+        <div class="histlegend" id="histLegend"></div>
+        <div class="histcanvaswrap"><canvas id="histCanvas"></canvas></div>
       </div>
       <div class="panel" style="flex:0 0 auto">
-        <div class="panelhead">Process groups</div>
+        <div class="panelhead" id="processGroupsHead">Process groups</div>
         <table>
           <thead><tr><th></th><th>CPU</th><th>RAM</th><th>IO/s</th><th>Trend</th></tr></thead>
           <tbody id="processGroups"></tbody>
         </table>
       </div>
-      <div class="panel" style="flex:1; display:flex; flex-direction:column">
-        <div class="panelhead">Heatmap, harness &times; minute (CPU-weighted)</div>
-        <div class="heatmapwrap" style="flex:1; overflow-y:auto"><div id="harnessHeatmap"></div></div>
-      </div>
-      <div class="panel" style="flex:0 0 auto; max-height:220px; display:flex; flex-direction:column">
-        <div class="panelhead">Today's read</div>
-        <div class="ticker" id="advisorFindings" style="max-height:180px"></div>
+      <div class="sysbottom">
+        <div class="sysbox" id="boxMemory">
+          <h4>Memory</h4>
+          <div class="sysbar"><i style="background:var(--blu)"></i></div>
+          <div class="line" id="memLine1">-</div>
+          <div class="line dim" id="memLine2">-</div>
+          <div class="line dim" id="memLine3">-</div>
+        </div>
+        <div class="sysbox" id="boxDisks">
+          <h4>Disks</h4>
+          <div id="disksBody"></div>
+        </div>
+        <div class="sysbox" id="boxNetwork">
+          <h4>Network</h4>
+          <div class="line" id="netDown">-</div>
+          <div class="line" id="netUp">-</div>
+          <div class="line dim" id="netWifi">-</div>
+        </div>
       </div>
     </div>
   </section>
 </main>
+<div id="turnPopupOverlay" class="hidden">
+  <div id="turnPopup">
+    <button id="turnPopupClose" type="button" title="Close" aria-label="Close">&times;</button>
+    <div id="turnPopupBody"></div>
+  </div>
+</div>
 <script>
 (function(){
   var AGENT_COLOR = {
@@ -219,6 +287,22 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // segments would visibly swap position between bars.
   var AGENT_ORDER = ['claude-code', 'cowork', 'codex', 'hermes', 'copilot-cli', 'copilot-vscode', 'other'];
   function agentColor(agent){ return AGENT_COLOR[agent] || '#66788c'; }
+
+  // shadeColor lightens (percent>0) or darkens (percent<0) a hex colour by
+  // percent toward white/black: UI review patch section 2, "shade per
+  // session inside a harness" so two sessions of the same harness stack
+  // distinguishably in the burn chart without a whole new colour per session.
+  function shadeColor(hex, percent){
+    hex = hex.replace('#', '');
+    var num = parseInt(hex, 16);
+    var r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+    var target = percent < 0 ? 0 : 255;
+    var p = Math.abs(percent);
+    function adj(c){ return Math.round((target - c) * p + c); }
+    r = adj(r); g = adj(g); b = adj(b);
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  }
+  var SHADE_OFFSETS = [0, -0.22, 0.22, -0.4, 0.4, -0.55, 0.55];
 
   var REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -269,22 +353,30 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     while(v >= 1024 && i < units.length - 1){ v /= 1024; i++; }
     return v.toFixed(v < 10 ? 1 : 0) + ' ' + units[i];
   }
-
-  function renderCores(cores){
-    var grid = document.getElementById('coreGrid');
-    if(!grid) return;
-    var html = '';
-    (cores || []).forEach(function(pct){
-      var color = pct < 45 ? 'var(--grn)' : pct < 75 ? 'var(--yel)' : 'var(--red)';
-      var op = 0.35 + Math.min(pct, 100) / 130;
-      html += '<i style="background:' + color + ';opacity:' + op.toFixed(2) + '"></i>';
-    });
-    grid.innerHTML = html;
+  function fmtBytesPlain(n){
+    if(n == null) return '-';
+    var units = ['B','KB','MB'];
+    var v = n, i = 0;
+    while(v >= 1024 && i < units.length - 1){ v /= 1024; i++; }
+    return v.toFixed(v < 10 && i > 0 ? 1 : 0) + ' ' + units[i];
   }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  // pad2/fmtHMS/fmtHM: 24-hour time everywhere, no AM/PM anywhere (decision
+  // taken with Wilco). toLocaleTimeString on this laptop's own locale would
+  // print 12-hour AM/PM, so every clock/timestamp on this page formats its
+  // own local time instead of relying on it.
+  function pad2(n){ return (n < 10 ? '0' : '') + n; }
+  function fmtHMS(d){ return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
+  function fmtHM(d){ return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
 
   function renderClock(){
     var el = document.getElementById('hdrClock');
-    if(el) el.textContent = new Date().toLocaleTimeString();
+    if(el) el.textContent = fmtHMS(new Date());
   }
 
   // agentBySessionMap must cover every session_id the chart's by_session
@@ -309,69 +401,88 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     return m;
   }
 
+  // renderBars (section 2): bars per session per time bucket, stacked,
+  // coloured by harness with a shade per session inside that harness.
+  // Rebuilt wholesale on every refresh (decision: "rebuilt on every
+  // refresh"). The CPU line overlay is gone (decision: "bars only").
   function renderBars(chart, agentBySession){
     var el = document.getElementById('burnBars');
     if(!el) return;
-    var totals = (chart || []).map(function(bucket){
-      var perAgent = {};
+    chart = chart || [];
+
+    var byHarness = {};
+    chart.forEach(function(bucket){
       var bySession = bucket.by_session || {};
       Object.keys(bySession).forEach(function(sid){
         var agent = agentBySession[sid] || 'other';
+        var list = byHarness[agent] || (byHarness[agent] = []);
+        if(list.indexOf(sid) === -1) list.push(sid);
+      });
+    });
+    // shadeOf and rankOf are both built from the same harness-then-session
+    // ordering, so segments of the same harness stay adjacent within a bar
+    // (rankOf) and get visibly distinct shades in that same order (shadeOf)
+    // rather than an unrelated alphabetical-by-session-id order interleaving
+    // different harnesses' segments (found by review, 2026-09-25).
+    var shadeOf = {}, rankOf = {}, rank = 0;
+    AGENT_ORDER.concat(Object.keys(byHarness).filter(function(a){ return AGENT_ORDER.indexOf(a) === -1; }))
+      .forEach(function(agent){
+        var sids = (byHarness[agent] || []).slice().sort();
+        sids.forEach(function(sid, i){
+          shadeOf[sid] = shadeColor(agentColor(agent), SHADE_OFFSETS[i % SHADE_OFFSETS.length]);
+          rankOf[sid] = rank++;
+        });
+      });
+
+    var perBucket = chart.map(function(bucket){
+      var bySession = bucket.by_session || {};
+      return Object.keys(bySession).map(function(sid){
         var c = bySession[sid];
         var tok = (c.fresh || 0) + (c.cache_write || 0) + (c.cache_read || 0) + (c.output || 0);
-        perAgent[agent] = (perAgent[agent] || 0) + tok;
-      });
-      return perAgent;
+        return { sid: sid, tok: tok, agent: agentBySession[sid] || 'other' };
+      }).filter(function(s){ return s.tok > 0; }).sort(function(a, b){ return rankOf[a.sid] - rankOf[b.sid]; });
     });
     var max = 1;
-    totals.forEach(function(t){
-      var sum = Object.keys(t).reduce(function(a, k){ return a + t[k]; }, 0);
+    perBucket.forEach(function(list){
+      var sum = list.reduce(function(a, s){ return a + s.tok; }, 0);
       if(sum > max) max = sum;
     });
+
     var html = '';
-    totals.forEach(function(t){
+    perBucket.forEach(function(list){
       html += '<div class="bar">';
-      var agents = AGENT_ORDER.filter(function(a){ return t[a] != null; })
-        .concat(Object.keys(t).filter(function(a){ return AGENT_ORDER.indexOf(a) === -1; }));
-      agents.forEach(function(agent){
-        var pct = 100 * t[agent] / max;
-        if(t[agent] > 0) pct = Math.max(pct, 1.5); // a real but tiny bucket still shows a sliver
-        html += '<i style="height:' + pct.toFixed(1) + '%;background:' + agentColor(agent) + '"></i>';
+      list.forEach(function(s){
+        var pct = 100 * s.tok / max;
+        pct = Math.max(pct, 1.5); // a real but tiny bucket still shows a sliver
+        html += '<i style="height:' + pct.toFixed(1) + '%;background:' + (shadeOf[s.sid] || agentColor(s.agent)) + '"></i>';
       });
       html += '</div>';
     });
+    // The overlay SVG (turn markers) is a fixed child of #burnBars; rebuild
+    // everything else around it rather than wiping it out with innerHTML.
+    var overlay = document.getElementById('turnMarkers');
     el.innerHTML = html;
+    if(overlay) el.appendChild(overlay);
   }
 
-  // A sample more than a minute away from a chart bucket (empty history
-  // just after startup, or a gap after the app was suspended) is not a
-  // real reading for that bucket; drawing it anyway either shows a false
-  // flat 0% or copies one distant sample across many buckets. Such buckets
-  // are simply omitted from the polyline rather than pinned to 0.
-  var CPU_LINE_MAX_STALENESS_MS = 60000;
-
-  function renderCPULine(history, chart){
-    var svg = document.getElementById('cpuLine');
-    if(!svg) return;
-    if(!chart || !chart.length || !history || !history.length){ svg.innerHTML = ''; return; }
-    var n = chart.length;
-    var pts = [];
+  // renderBurnAxis draws the x-axis labels every 5 minutes (section 2),
+  // aligned one label slot per chart bucket so it never drifts out of sync
+  // with the bars above it. Chart always has a full window's worth of
+  // buckets even with no sessions running (live.buildChart's own "every
+  // slot present" contract), so the axis still draws with nothing to show
+  // above it (section 2: "with no sessions, still draw the empty axis").
+  function renderBurnAxis(chart, bucketSeconds){
+    var axisEl = document.getElementById('burnAxis');
+    if(!axisEl) return;
+    if(!chart || !chart.length){ axisEl.innerHTML = ''; return; }
+    var everyN = Math.max(1, Math.round(300 / (bucketSeconds || 60)));
+    var html = '';
     chart.forEach(function(bucket, i){
-      var t = new Date(bucket.at).getTime();
-      var nearest = null, bestDiff = Infinity;
-      history.forEach(function(sm){
-        var diff = Math.abs(new Date(sm.Ts).getTime() - t);
-        if(diff < bestDiff){ bestDiff = diff; nearest = sm; }
-      });
-      if(!nearest || bestDiff > CPU_LINE_MAX_STALENESS_MS) return;
-      var x = (i / Math.max(n - 1, 1)) * 100;
-      var y = 100 - Math.min(nearest.CPUPct, 100);
-      pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+      var label = '';
+      if(i % everyN === 0) label = fmtHM(new Date(bucket.at));
+      html += '<div class="axistick">' + label + '</div>';
     });
-    svg.setAttribute('viewBox', '0 0 100 100');
-    svg.innerHTML = pts.length
-      ? '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#4da6ff" stroke-width="1.5" opacity="0.85" vector-effect="non-scaling-stroke"/>'
-      : '';
+    axisEl.innerHTML = html;
   }
 
   // renderTurnMarkers draws one small tick per turn at its real position in
@@ -380,7 +491,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // last bucket timestamps rather than snapped to the nearest bucket, so a
   // burst of turns inside one bucket still spreads out left-to-right. A
   // turn with a finding (insight.Finding) draws taller and in that
-  // finding's own tag colour; a plain turn draws short and dim.
+  // finding's own tag colour; a plain turn draws short and dim. Kept per
+  // the UI review patch's own decision ("keep the turn markers").
   var FINDING_MARKER_COLOR = {
     'expensive-turn': '#ff4b4b', 'context-runway': '#ffd75f',
     're-prefill': '#38d3e3', 'compaction': '#d68cf0'
@@ -482,6 +594,24 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     return rec;
   }
 
+  // renderTotalRow (section 3): bold totals row, pinned to the top of the
+  // vendor strip table, created once and updated in place like the other
+  // rows.
+  var totalRowEls = null;
+  function ensureTotalRow(tbody){
+    if(totalRowEls) return totalRowEls;
+    var tr = document.createElement('tr');
+    tr.className = 'totalrow';
+    var tdName = document.createElement('td'); tdName.textContent = 'Total';
+    var tdToday = document.createElement('td'); tdToday.className = 'num';
+    var tdWeek = document.createElement('td'); tdWeek.className = 'num';
+    var tdMonth = document.createElement('td'); tdMonth.className = 'num';
+    tr.appendChild(tdName); tr.appendChild(tdToday); tr.appendChild(tdWeek); tr.appendChild(tdMonth);
+    tbody.appendChild(tr);
+    totalRowEls = { tr: tr, today: tdToday, week: tdWeek, month: tdMonth };
+    return totalRowEls;
+  }
+
   function renderVendorStrip(payload){
     var tbody = document.getElementById('vendorStrip');
     if(!tbody) return;
@@ -500,13 +630,18 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       vendorRowEls[agent].tr.remove();
       delete vendorRowEls[agent];
     });
+    // Totals row goes to the top of the table (section 3), bold, kept in
+    // sync with the same tween the per-vendor rows use.
+    var total = ensureTotalRow(tbody);
+    tbody.insertBefore(total.tr, tbody.firstChild);
+    animateNumber(total.today, (payload && payload.total && payload.total.today) || 0, 400, fmtTokens);
+    animateNumber(total.week, (payload && payload.total && payload.total.week) || 0, 400, fmtTokens);
+    animateNumber(total.month, (payload && payload.total && payload.total.month) || 0, 400, fmtTokens);
   }
 
   function renderHeadline(total){
     total = total || {};
     animateNumber(document.getElementById('hlToday'), total.today || 0, 1000, fmtTokens);
-    animateNumber(document.getElementById('hlWeek'), total.week || 0, 1000, fmtTokens);
-    animateNumber(document.getElementById('hlMonth'), total.month || 0, 1000, fmtTokens);
   }
 
   var MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -584,24 +719,136 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     if(activeEl) activeEl.textContent = activeDays + ' active days';
   }
 
+  // renderTicker (section 5): one dense line per turn, newest first, capped
+  // at 50, click opens the turn detail popup.
   function renderTicker(turns){
     var el = document.getElementById('turnTicker');
     if(!el) return;
     var html = '';
-    (turns || []).slice(0, 30).forEach(function(t){
-      var time = new Date(t.at).toLocaleTimeString();
+    (turns || []).slice(0, 50).forEach(function(t){
+      var time = fmtHMS(new Date(t.at));
       var tag = '';
       if(t.finding){
-        tag = '<span class="tag ' + t.finding.Kind + '">' + t.finding.Kind + '</span>';
+        tag = '<span class="tag">' + esc(t.finding.Kind) + '</span>';
       }
       var tok = (t.fresh || 0) + (t.cache_write || 0) + (t.cache_read || 0) + (t.output || 0);
-      html += '<div class="trow"><span class="t">' + time + '</span>' +
-        '<span class="h" style="color:' + agentColor(t.agent) + '">' + t.agent + '</span>' +
+      html += '<div class="trow clickable" data-session="' + esc(t.session_id) + '" data-turn="' + t.turn + '">' +
+        '<span class="t">' + time + '</span>' +
+        '<span class="h" style="color:' + agentColor(t.agent) + '">' + esc(t.agent) + '</span>' +
         tag +
         '<span class="m">' + fmtTokens(tok) + ' tok</span></div>';
     });
     el.innerHTML = html || '<div class="placeholder" style="padding:10px">No turns in the last 30 minutes</div>';
   }
+
+  // ---------- Turn detail popup (section 5) ----------
+  // Keyed by "sessionID:turn" since a fast second click before the first
+  // resolves can have more than one bdevTurnDetail call in flight.
+  // currentTurnKey additionally guards against a stale response actually
+  // being drawn once it lands: click turn A then turn B before A resolves,
+  // and without this check A's later resolve would overwrite B's already
+  // -rendered content (found by review, 2026-09-25; the keyed-pending map
+  // alone only routes each response to its own call, it does not stop an
+  // old one from still painting after a newer click has moved on).
+  var TURN_DETAIL_PENDING = {};
+  var currentTurnKey = null;
+  window.__bdevTurnDetailResolve = function(key, detail){
+    var p = TURN_DETAIL_PENDING[key];
+    if(p){ delete TURN_DETAIL_PENDING[key]; p.resolve(detail); }
+  };
+
+  function openTurnPopup(sessionID, turn){
+    var overlay = document.getElementById('turnPopupOverlay');
+    var body = document.getElementById('turnPopupBody');
+    if(!overlay || !body || !sessionID || !turn) return;
+    overlay.classList.remove('hidden');
+    var key = sessionID + ':' + turn;
+    currentTurnKey = key;
+    if(typeof window.bdevTurnDetail !== 'function'){
+      body.innerHTML = '<p>Turn detail is not available.</p>';
+      return;
+    }
+    body.innerHTML = '<p>Loading turn detail&hellip;</p>';
+    new Promise(function(resolve){
+      TURN_DETAIL_PENDING[key] = { resolve: resolve };
+      window.bdevTurnDetail(sessionID, turn);
+    }).then(function(d){
+      if(currentTurnKey !== key) return; // superseded by a later click
+      if(d && d.error){
+        body.innerHTML = '<p>Could not load turn detail: ' + esc(d.error) + '</p>';
+        return;
+      }
+      renderTurnPopup(d);
+    }).catch(function(e){
+      if(currentTurnKey !== key) return;
+      body.innerHTML = '<p>Could not load turn detail: ' + esc(e && e.message ? e.message : String(e)) + '</p>';
+    });
+  }
+
+  function closeTurnPopup(){
+    var overlay = document.getElementById('turnPopupOverlay');
+    if(overlay) overlay.classList.add('hidden');
+    currentTurnKey = null;
+  }
+
+  // renderTurnPopup: model, token split, cache hit, cost, tools, findings
+  // (section 5), the burnmon-dev equivalent of burnmon.exe's own turn
+  // drawer (internal/report/template.html's renderTurnDrawer), restyled to
+  // this page's dark amber theme rather than ported verbatim.
+  function renderTurnPopup(d){
+    var body = document.getElementById('turnPopupBody');
+    if(!body || !d) return;
+
+    var gapText = d.has_gap ? (Math.round(d.gap_seconds) + 's since the previous turn') : 'first turn seen for this session';
+    var miss = (d.fresh || 0) + (d.cache_write || 0);
+    var hit = d.cache_read || 0;
+    var hitRate = (miss + hit) > 0 ? (100 * hit / (miss + hit)) : 0;
+
+    var findingsHtml = (d.findings && d.findings.length)
+      ? d.findings.map(function(f){
+          return '<div>' + esc(f.Kind) + ', confidence ' + Math.round((f.Confidence || 0) * 100) +
+            '%: ' + esc(f.Cause) + '</div>';
+        }).join('')
+      : '<div class="dim">No findings on this turn.</div>';
+
+    var toolRows = (d.tool_calls || []).map(function(c){
+      return '<tr><td>' + esc(c.tool) + '</td><td>' + esc(c.path || '') + '</td>' +
+        '<td class="num">' + fmtTokens(c.input_bytes) + '</td><td class="num">' +
+        (c.result_bytes != null ? fmtTokens(c.result_bytes) : '') + '</td></tr>';
+    }).join('');
+    var toolCallsHtml = toolRows
+      ? '<table><thead><tr><th>Tool</th><th>Path</th><th>In</th><th>Out</th></tr></thead><tbody>' + toolRows + '</tbody></table>'
+      : '<div class="dim">No tool calls recorded for this turn.</div>';
+
+    var filesHtml = (d.files && d.files.length)
+      ? '<ul class="tight">' + d.files.map(function(p){ return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>'
+      : '<div class="dim">No files recorded for this turn.</div>';
+
+    body.innerHTML =
+      '<h3>Turn ' + d.turn + '</h3>' +
+      '<div class="dim">Session ' + esc(d.session_id) + ' &middot; ' + esc(d.model || 'model unknown') + '</div>' +
+      '<div class="dim">' + fmtHMS(new Date(d.at)) + ' &middot; ' + esc(gapText) + ' &middot; ' + fmtCost(d.cost) + '</div>' +
+      '<h4>Token classes</h4>' +
+      '<div>fresh ' + fmtTokens(d.fresh) + ', cache write ' + fmtTokens(d.cache_write) +
+        ', cache read ' + fmtTokens(d.cache_read) + ' (' + hitRate.toFixed(0) + '% hit), output ' + fmtTokens(d.output) + '</div>' +
+      '<h4>Findings</h4>' + findingsHtml +
+      '<h4>Tool calls this turn</h4>' + toolCallsHtml +
+      '<h4>Files read</h4>' + filesHtml;
+  }
+
+  document.addEventListener('click', function(e){
+    var line = e.target && e.target.closest && e.target.closest('.trow.clickable');
+    if(line) openTurnPopup(line.getAttribute('data-session'), parseInt(line.getAttribute('data-turn'), 10));
+  });
+  document.getElementById('turnPopupClose').addEventListener('click', closeTurnPopup);
+  document.getElementById('turnPopupOverlay').addEventListener('click', function(e){
+    if(e.target === this) closeTurnPopup();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Escape' && e.key !== 'Esc') return;
+    var overlay = document.getElementById('turnPopupOverlay');
+    if(overlay && !overlay.classList.contains('hidden')) closeTurnPopup();
+  });
 
   var lastSysmonHistory = [];
 
@@ -626,7 +873,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     var rateEl = document.getElementById('hdrBurnRate');
     if(rateEl){
       var cost = recent.reduce(function(sum, b){ return sum + (b.cost || 0); }, 0);
-      rateEl.textContent = fmtCost(minutes > 0 ? cost / minutes : 0);
+      rateEl.textContent = (minutes > 0 ? cost / minutes : 0).toFixed(2);
     }
 
     var tokMinEl = document.getElementById('hdrTokMin');
@@ -644,12 +891,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   }
 
   function pollBurn(){
-    if(!window.bdevBurnNow) return;
-    window.bdevBurnNow().then(function(snap){
+    if(!window.bdevBurnNow) return Promise.resolve();
+    return window.bdevBurnNow().then(function(snap){
       if(!snap) return;
       var agentBySession = agentBySessionMap(snap.sessions, snap.turns);
       renderBars(snap.chart, agentBySession);
-      renderCPULine(lastSysmonHistory, snap.chart);
+      renderBurnAxis(snap.chart, snap.bucket_seconds);
       renderTurnMarkers(snap.turns, snap.chart);
       renderSessionCards(snap.sessions);
       renderTicker(snap.turns);
@@ -658,8 +905,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   }
 
   function pollVendorStrip(){
-    if(!window.bdevVendorStrip) return;
-    window.bdevVendorStrip().then(function(payload){
+    if(!window.bdevVendorStrip) return Promise.resolve();
+    return window.bdevVendorStrip().then(function(payload){
       renderVendorStrip(payload);
       renderHeadline(payload && payload.total);
     }).catch(function(err){ console.error('bdevVendorStrip failed', err); });
@@ -680,9 +927,10 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   }
 
   function pollSysmonHistory(){
-    if(!window.bdevSysmonHistory) return;
-    window.bdevSysmonHistory(1800).then(function(history){
+    if(!window.bdevSysmonHistory) return Promise.resolve();
+    return window.bdevSysmonHistory(1800).then(function(history){
       lastSysmonHistory = history || [];
+      renderHistoryChart(lastSysmonHistory);
     }).catch(function(err){ console.error('bdevSysmonHistory failed', err); });
   }
 
@@ -692,29 +940,147 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     el.textContent = 'PRESSURE ' + score;
     var color = score < 45 ? 'var(--grn)' : score < 75 ? 'var(--yel)' : 'var(--red)';
     el.style.color = color;
-    el.style.borderColor = color;
-    el.style.background = 'transparent';
+  }
+
+  // ---------- System panel (section 6): perfadvisor layout ----------
+
+  function renderCPUBox(sm){
+    var threadsEl = document.getElementById('cpuThreads');
+    if(threadsEl) threadsEl.textContent = (sm.Cores || []).length;
+    var pct = Math.round(sm.CPUPct || 0);
+    var bar = document.getElementById('cpuTotalBar');
+    if(bar) bar.style.width = Math.min(100, pct) + '%';
+    var lbl = document.getElementById('cpuTotal');
+    if(lbl) lbl.textContent = pct + '%';
+    var metaEl = document.getElementById('cpuBaseClock');
+    if(metaEl) metaEl.textContent = sm.base_clock_ghz > 0 ? 'base ' + sm.base_clock_ghz.toFixed(1) + ' GHz' : '';
+
+    var grid = document.getElementById('coreGrid');
+    if(grid){
+      var html = '';
+      (sm.Cores || []).forEach(function(v, i){
+        var color = v < 45 ? 'var(--grn)' : v < 75 ? 'var(--yel)' : 'var(--red)';
+        html += '<div class="coreitem"><span class="corelabel">C' + i + '</span>' +
+          '<div class="corebar"><i style="width:' + Math.min(100, v).toFixed(0) + '%;background:' + color + '"></i></div>' +
+          '<span class="corelabel">' + Math.round(v) + '%</span></div>';
+      });
+      grid.innerHTML = html;
+    }
+  }
+
+  // renderHistoryChart draws cpu/ram/disk/net/gpu as smooth canvas lines,
+  // newest sample on the right (section 6). cpu/ram/gpu already share a
+  // natural 0-100 percent scale; disk and net (bytes/sec, no fixed
+  // ceiling) are each scaled to their own peak within the visible window,
+  // per the reference panel's own "disk and net scaled to own peak" note.
+  var HIST_SERIES = [
+    { key: 'CPUPct', label: 'cpu', color: '#00d26a', fmt: function(v){ return Math.round(v) + '%'; } },
+    { key: 'ram', label: 'ram', color: '#4da6ff', fmt: function(v){ return Math.round(v) + '%'; } },
+    { key: 'DiskReadBps', key2: 'DiskWriteBps', label: 'disk', color: '#ffd75f', ownPeak: true, fmt: fmtBytes },
+    { key: 'NetDownBps', key2: 'NetUpBps', label: 'net', color: '#d68cf0', ownPeak: true, fmt: fmtBytes },
+    { key: 'GPUPct', label: 'gpu', color: '#ff4b4b', fmt: function(v){ return Math.round(v) + '%'; } }
+  ];
+  function seriesValue(s, def){
+    var v = def.key2 != null ? (s[def.key] || 0) + (s[def.key2] || 0) : s[def.key];
+    return v == null || v < 0 ? 0 : v;
+  }
+  function renderHistoryChart(history){
+    var canvas = document.getElementById('histCanvas');
+    var legend = document.getElementById('histLegend');
+    if(!canvas || !legend) return;
+    var wrap = canvas.parentElement;
+    var w = wrap.clientWidth, h = wrap.clientHeight;
+    if(w <= 0 || h <= 0) return;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    var samples = (history || []).map(function(s){
+      return { CPUPct: s.CPUPct, ram: s.MemTotalMB > 0 ? 100 * s.MemUsedMB / s.MemTotalMB : 0,
+        DiskReadBps: s.DiskReadBps, DiskWriteBps: s.DiskWriteBps,
+        NetDownBps: s.NetDownBps, NetUpBps: s.NetUpBps, GPUPct: s.GPUPct };
+    });
+
+    var legendHtml = '';
+    if(!samples.length){
+      legend.innerHTML = '<span class="dim">No system history yet</span>';
+      return;
+    }
+    HIST_SERIES.forEach(function(def){
+      var vals = samples.map(function(s){ return seriesValue(s, def); });
+      var peak = def.ownPeak ? Math.max.apply(null, vals.concat([1])) : 100;
+      ctx.beginPath();
+      vals.forEach(function(v, i){
+        var x = vals.length > 1 ? (i / (vals.length - 1)) * w : 0;
+        var y = h - Math.min(1, v / peak) * h;
+        if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = def.color;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      var current = vals[vals.length - 1];
+      legendHtml += '<span><span class="dot" style="background:' + def.color + '"></span>' + def.label + ' <b>' + def.fmt(current) + '</b></span>';
+    });
+    legendHtml += '<span class="note">disk and net scaled to own peak</span>';
+    legend.innerHTML = legendHtml;
+  }
+
+  function renderMemoryBox(sm){
+    var bar = document.querySelector('#boxMemory .sysbar i');
+    var pct = sm.MemTotalMB > 0 ? 100 * sm.MemUsedMB / sm.MemTotalMB : 0;
+    if(bar) bar.style.width = Math.min(100, pct).toFixed(0) + '%';
+    var l1 = document.getElementById('memLine1');
+    if(l1) l1.innerHTML = pct.toFixed(0) + '% &middot; <b>' + (sm.MemUsedMB / 1024).toFixed(1) + '</b> / ' + (sm.MemTotalMB / 1024).toFixed(1) + ' GB used';
+    var l2 = document.getElementById('memLine2');
+    if(l2) l2.textContent = ((sm.MemTotalMB - sm.MemUsedMB) / 1024).toFixed(1) + ' GB available';
+    var l3 = document.getElementById('memLine3');
+    if(l3){
+      l3.textContent = sm.SwapTotalMB > 0
+        ? 'swap ' + (sm.SwapUsedMB / 1024).toFixed(1) + ' / ' + (sm.SwapTotalMB / 1024).toFixed(1) + ' GB'
+        : 'no swap';
+    }
+  }
+
+  function renderDisksBox(sm){
+    var el = document.getElementById('disksBody');
+    if(!el) return;
+    var disks = sm.Disks || [];
+    if(!disks.length){ el.innerHTML = '<div class="dim">No drives read</div>'; return; }
+    var html = '';
+    disks.forEach(function(d){
+      html += '<div class="line">' + esc(d.Mount) + ' <b>' + Math.round(d.UsedPercent) + '%</b></div>' +
+        '<div class="sysbar"><i style="width:' + Math.min(100, d.UsedPercent).toFixed(0) + '%;background:var(--yel)"></i></div>' +
+        '<div class="line dim">' + d.FreeGB.toFixed(0) + 'G free &middot; R ' + fmtBytes(d.ReadBps) + ', W ' + fmtBytes(d.WriteBps) + '</div>';
+    });
+    el.innerHTML = html;
+  }
+
+  function renderNetworkBox(sm){
+    var down = document.getElementById('netDown');
+    if(down) down.innerHTML = 'down <b>' + fmtBytes(sm.NetDownBps) + '</b>';
+    var up = document.getElementById('netUp');
+    if(up) up.innerHTML = 'up <b>' + fmtBytes(sm.NetUpBps) + '</b>';
+    var wifi = document.getElementById('netWifi');
+    if(wifi){
+      var w = sm.Wifi || {};
+      wifi.textContent = w.OK && w.Connected ? (w.SSID + ' · signal ' + w.SignalPct + '%') : (w.OK ? 'wifi disconnected' : '');
+    }
   }
 
   function poll(){
-    if(!window.bdevSysmonNow){ return; }
-    window.bdevSysmonNow().then(function(sm){
+    if(!window.bdevSysmonNow){ return Promise.resolve(); }
+    return window.bdevSysmonNow().then(function(sm){
       if(!sm) return;
-      var cpuEl = document.getElementById('cpuTotal');
-      if(cpuEl) cpuEl.textContent = Math.round(sm.CPUPct) + '%';
       var hdrCPU = document.getElementById('hdrCPU');
       if(hdrCPU) hdrCPU.textContent = Math.round(sm.CPUPct) + '%';
       var hdrRAM = document.getElementById('hdrRAM');
       if(hdrRAM && sm.MemTotalMB > 0) hdrRAM.textContent = Math.round(100 * sm.MemUsedMB / sm.MemTotalMB) + '%';
-      var mem = document.getElementById('tileMem');
-      if(mem) mem.textContent = (sm.MemUsedMB / 1024).toFixed(1) + ' GB';
-      var disk = document.getElementById('tileDisk');
-      if(disk) disk.textContent = fmtBytes(sm.DiskReadBps + sm.DiskWriteBps);
-      var net = document.getElementById('tileNet');
-      if(net) net.textContent = fmtBytes(sm.NetDownBps + sm.NetUpBps);
-      var gpu = document.getElementById('tileGPU');
-      if(gpu) gpu.textContent = (sm.GPUPct >= 0 ? sm.GPUPct.toFixed(0) : '-') + '%';
-      renderCores(sm.Cores);
+      renderCPUBox(sm);
+      renderMemoryBox(sm);
+      renderDisksBox(sm);
+      renderNetworkBox(sm);
       renderPressureChip(sm.pressure_score);
     }).catch(function(err){ console.error('bdevSysmonNow failed', err); });
   }
@@ -736,6 +1102,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   };
   function harnessColor(h){ return HARNESS_COLOR[h] || '#66788c'; }
 
+  // renderProcessGroups (section 7): headers right-aligned like the numbers
+  // (the shared `th` rule now does this by default), the trend column takes
+  // all remaining width and its sparkline stretches to fill it (the
+  // trendsvg width:100% viewBox below, plus the #processGroups td:last-child
+  // CSS rule).
   function renderProcessGroups(now, historyRows){
     var tbody = document.getElementById('processGroups');
     if(!tbody) return;
@@ -749,7 +1120,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       var series = (byHarness[row.Harness] || []).slice(-30);
       var maxCPU = series.reduce(function(m, r){ return Math.max(m, r.CPUPct); }, 1);
       var pts = series.map(function(r, i){
-        var x = series.length > 1 ? (i / (series.length - 1)) * 42 : 0;
+        var x = series.length > 1 ? (i / (series.length - 1)) * 100 : 0;
         var y = 12 - Math.min(12, 12 * r.CPUPct / maxCPU);
         return x.toFixed(1) + ',' + y.toFixed(1);
       }).join(' ');
@@ -758,8 +1129,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         '<td class="num">' + row.CPUPct.toFixed(0) + '%</td>' +
         '<td class="num">' + (row.MemMB / 1024).toFixed(1) + 'G</td>' +
         '<td class="num">' + fmtBytes(row.IOBps) + '</td>' +
-        '<td><svg width="42" height="12" viewBox="0 0 42 12">' +
-        (pts ? '<polyline points="' + pts + '" fill="none" stroke="' + harnessColor(row.Harness) + '" stroke-width="1.2"/>' : '') +
+        '<td><svg class="trendsvg" viewBox="0 0 100 12" preserveAspectRatio="none">' +
+        (pts ? '<polyline points="' + pts + '" fill="none" stroke="' + harnessColor(row.Harness) + '" stroke-width="1.2" vector-effect="non-scaling-stroke"/>' : '') +
         '</svg></td></tr>';
     });
     tbody.innerHTML = html || '<tr><td colspan="5" style="color:var(--dim);padding:8px">No classified processes yet</td></tr>';
@@ -789,7 +1160,6 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       var sb = Object.values(byHarness[b]).reduce(function(x, y){ return x + y; }, 0);
       return sb - sa;
     });
-    var cols = maxMin - minMin + 1;
     var max = 1;
     harnesses.forEach(function(h){
       Object.keys(byHarness[h]).forEach(function(m){ if(byHarness[h][m] > max) max = byHarness[h][m]; });
@@ -806,50 +1176,6 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       html += '</span></div>';
     });
     el.innerHTML = html;
-  }
-
-  // renderAdvisorFindings draws phase 4's "TODAY'S READ" panel: one line
-  // per advisor.Finding (internal/advisor), newest first (the Go side
-  // already sorts them that way), each with its rule id, message and one
-  // concrete suggestion. rule_id colors reuse the turn ticker's own tag
-  // palette where a rule maps naturally onto an existing finding kind, and
-  // pick a free palette color for the three rules with no ticker
-  // equivalent (harness-runaway, hard-faults-memory, self-overhead).
-  var FINDING_RULE_COLOR = {
-    'heavy-turn-pressure': '#ff4b4b', 'harness-runaway': '#ffd75f',
-    'cache-hit-drop': '#38d3e3', 'context-window': '#ffd75f',
-    'hard-faults-memory': '#ff4b4b', 'self-overhead': '#d68cf0'
-  };
-  function renderAdvisorFindings(findings){
-    var el = document.getElementById('advisorFindings');
-    if(!el) return;
-    var html = '';
-    (findings || []).slice(0, 20).forEach(function(f){
-      var time = new Date(f.at).toLocaleTimeString();
-      var color = FINDING_RULE_COLOR[f.rule_id] || '#ffa028';
-      html += '<div class="trow" style="white-space:normal; align-items:flex-start">' +
-        '<span class="t">' + time + '</span>' +
-        '<span class="tag" style="color:' + color + ';border-color:' + color + '">' + f.rule_id + '</span>' +
-        '<span class="m">' + f.message + '. ' + f.suggestion + '</span></div>';
-    });
-    el.innerHTML = html || '<div class="placeholder" style="padding:10px">No findings in the last hour</div>';
-  }
-  // Same async-resolve pattern as bdevActivityHeatmap: the binding returns
-  // immediately and delivers its real result (computed off the Go side's
-  // UI thread) through this resolver.
-  window.__bdevAdvisorResolve = renderAdvisorFindings;
-
-  function pollAdvisor(){
-    if(!window.bdevAdvisorNow) return;
-    window.bdevAdvisorNow();
-  }
-
-  function fmtBytesPlain(n){
-    if(n == null) return '-';
-    var units = ['B','KB','MB'];
-    var v = n, i = 0;
-    while(v >= 1024 && i < units.length - 1){ v /= 1024; i++; }
-    return v.toFixed(v < 10 && i > 0 ? 1 : 0) + ' ' + units[i];
   }
 
   window.__bdevExportResolve = function(result){
@@ -896,16 +1222,17 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   setInterval(pollVendorStrip, 60000);
   setInterval(pollActivityHeatmap, 60000);
   setInterval(pollSysmonHistory, 10000);
-  setInterval(pollAdvisor, 15000);
   setInterval(renderClock, 1000);
   renderClock();
   setupExportButton();
-  poll();
-  pollSysmonHistory();
-  pollBurn();
-  pollVendorStrip();
+  // Section 11 step 1 (startup measurement): the first full render is the
+  // page's own first poll cycle finishing, not a Go-side guess, so this
+  // reports back to bdevMarkFirstRender exactly once, whichever of the
+  // four initial polls below resolves last.
+  Promise.all([poll(), pollSysmonHistory(), pollBurn(), pollVendorStrip()]).then(function(){
+    if(window.bdevMarkFirstRender) window.bdevMarkFirstRender();
+  });
   pollActivityHeatmap();
-  pollAdvisor();
 })();
 </script>
 </body>

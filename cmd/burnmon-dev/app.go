@@ -353,11 +353,16 @@ func (a *app) startSampling() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		tick := 0
+		firstSample := true
 		for range ticker.C {
 			sm, err := a.sampler.Tick()
 			if err != nil {
 				log.Println("sysmon sample:", err)
 				continue
+			}
+			if firstSample {
+				firstSample = false
+				startupMark("first system sample")
 			}
 			a.mu.Lock()
 			a.latest = sm

@@ -26,6 +26,43 @@ type Sample struct {
 	DiskQueueLen float64 // PhysicalDisk(_Total)\Avg. Disk Queue Length
 	DiskLatMs    float64 // PhysicalDisk(_Total)\Avg. Disk sec/Transfer, in ms
 	HardFaults   float64 // Memory\Pages Input/sec
+
+	// UI review patch (2026-09-25), section 6: the perfadvisor-style system
+	// panel's bottom row (memory/disks/network boxes) needs swap, a
+	// per-drive breakdown and wifi, none of which the phase 1-3 Sample
+	// carried (only the aggregate CPU/RAM/disk/net totals above). Ported
+	// from perfadvisor's own live TUI (internal/tui/sample.go's swap and
+	// per-disk loop, internal/tui/sysmetrics_windows.go's readWifi),
+	// source commit perfadvisor main 2ed8046 (same commit design doc
+	// section 7 already cites for the rest of this package).
+	SwapUsedMB  float64
+	SwapTotalMB float64
+	Disks       []DiskSample
+	Wifi        WifiSample
+}
+
+// DiskSample is one drive's usage and IO rate for one tick, the system
+// panel's "disks" box (one bar per drive, free space, read and write
+// rates).
+type DiskSample struct {
+	Mount       string
+	System      bool // this machine's %SystemDrive%
+	FreeGB      float64
+	TotalGB     float64
+	UsedPercent float64
+	ReadBps     float64
+	WriteBps    float64
+}
+
+// WifiSample is the system panel's network box (wifi name and signal bar).
+// OK is false when this machine has no wifi adapter or netsh could not be
+// read; Connected can be false with OK true (adapter present, not
+// associated).
+type WifiSample struct {
+	OK        bool
+	Connected bool
+	SSID      string
+	SignalPct int
 }
 
 // ProcessGroupSample is one harness's summed load at one tick, persisted in
