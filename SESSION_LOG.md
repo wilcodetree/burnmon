@@ -2,6 +2,81 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-25, v0.4 burn chart no-scroll patch (sections 1-5)
+
+Followed `02_roadmap\2026-09-25_ws2_burn_chart_no_scroll_patch.md` end to end
+on `burnmon-dev`. Burn chart is bars only now (turn tick marks and finding
+lines gone; findings still show in the ticker tags and turn popup); every
+harness and session gets its own colour from one shared categorical palette
+(`HARNESS_HUE`), Claude Code and Cowork no longer read as the same orange
+anywhere, including the process-groups/harness-heatmap panels that use a
+separate vocabulary for the same tools (found by review: the first pass
+missed that `claude-desktop`, sysmon's own harness key, *is* Cowork there,
+per `internal/advisor`'s own harness map); a compact per-session legend sits
+under the chart. No scrollbar anywhere at 1024x768/1280x860/1152x2048/
+1920x1080/2560x1440 (`cropToFit`/`cropTableRows`, analytical column math for
+the two heatmaps, `overflow:hidden` on `.panel` itself as a last-resort
+backstop): the turn ticker, activity heatmap, harness heatmap, process
+groups and To Do panel all crop to whole items instead of scrolling, the
+turn popup crops its tool-call list with "+N more". Window too small drops
+To Do, then process groups, then the Activity/heatmap row, in that fixed
+order (`applyPanelFit`/`pageOverflows`), header/burn chart/vendor
+strip/turn ticker/system panel never drop; a panel re-render on the way
+back from dropped (and on resize/F11) redraws from its own last-fetched
+cache instead of showing one stale, mis-cropped frame. One shared render
+tick (`bdevSnapshotNow`, 2s default, floored at 1000ms, `refresh_ms` in
+burnmon-dev.json): every panel now paints from one Go-side snapshot inside
+one `requestAnimationFrame`, replacing eleven independent
+setInterval/poll pairs; vendor strip, the activity heatmap, process-groups
+history and Microsoft To Do status/tasks refresh on their own slower
+background cadence (`startSlowRefreshers`, app.go) and are only ever
+painted on the shared tick. Version stays `0.4.0-alpha.1` on purpose (phase
+5, not this patch, does the bump); not pushed, tagged or merged.
+
+Two fresh read-only Opus reviews (sections 1-4, then section 5) both caught
+real bugs before commit: the session-rank sort key read a live shared
+counter instead of each session's own assigned index (bars could visibly
+reorder poll to poll); the session colour palette had three near-duplicate
+hue pairs and reused exact colours after 8 wrapped sessions (replaced the
+lighten/darken wrap with an 8-bit-clean hue rotation); the Cowork/Claude
+Code colour bug above; a hidden-then-shown panel repainted at 0 clientWidth
+until its own next slow poll (fixed: `applyPanelFit` now re-renders a panel
+the instant it stops being dropped); and, most seriously, `startSlowRefreshers`
+called synchronously from `main()` reintroduced the exact "blocks window
+creation" regression section 11 had already fixed (a cold 182-day heatmap
+scan plus up to two Microsoft Graph calls before the window existed) -
+backgrounded now, window creation measured at 702-752ms and first render at
+939-973ms across several runs, matching the established fast-launch
+baseline. Real-window testing at the app's own 1280x860 default launch size
+(this session's own display reports ~2x DPI scaling, so that is really
+~627x395 CSS px) surfaced one more real gap the reviews had not: the vendor
+strip table had no height cap, so it alone could consume the burn zone's
+whole budget and push the turn ticker (an "always stay" panel) to zero
+height with the zone never technically overflowing; capped at 180px,
+`.panel`'s own `overflow:hidden` backstop clips it the same way as
+everything else. At that same tight size, even after both droppable
+candidates are dropped, the "always stay" panels alone still do not fully
+fit; confirmed by direct DOM inspection this is a genuine space constraint
+(the fixed drop order and re-render-on-show both verified working
+correctly), not a logic bug, and very likely specific to this sandboxed
+session's own DPI scaling rather than Wilco's real hardware.
+
+`go vet`, `go test ./... -count=1` and `.\build.ps1` all green. New
+`tools\uicheck` cases: `d8` (1024x768, the fifth viewport), `d9` (the
+no-scrollbar sweep across all five sizes, every element, not just body),
+`d10` (no marker/line elements in the burn chart), `d11` (records
+`paintMark`/`window.__bdevPaintLog` for 30s, fails if a tick's panels do
+not all land within one requestAnimationFrame of each other or the tick
+cadence drifts off `refresh_ms`) - all pass against the real running
+window, `d0`-`d6` unaffected. Screenshots taken at all five sizes against
+the real window; the workstation intermittently auto-locked mid-session
+(BitBlt then captures the lock screen, not the app - the same known
+limitation `d7`'s own comment already documents), so not every size has a
+final matched screenshot from the very last run, though every size was
+visually confirmed correct at least once earlier in the session. Reference
+screenshots `9_burn_chart_lines.png`/`10_scrollbars.png` committed with the
+patch, per house process.
+
 ## 2026-09-25, v0.4 UI review patch (sections 1-11)
 
 Followed `02_roadmap\2026-09-25_ws2_ui_review_patch.md` end to end on
