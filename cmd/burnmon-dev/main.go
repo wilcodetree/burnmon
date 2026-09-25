@@ -170,19 +170,14 @@ func main() {
 	a.startSampling()
 	a.startRetentionPrune(devCfg.RetentionDays)
 
-	nativeClaudeRoots := scan.DefaultSourcesWithOptions(false)
-	nativeCodexRoots := codex.NativeSources()
-	a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)
-	a.startLiveWatch(nativeClaudeRoots, nativeCodexRoots)
-	startHermesPoll(a, st)
-	startCopilotCLIPoll(a, st)
-	startCopilotVSCPoll(a, st)
-	startupMark("watcher and pollers started")
-	a.startInitialCollect()
-	go func() {
-		<-a.initialCollectDone
-		startupMark("initial collect and backfill done")
-	}()
+	// Section 11 steps 2-3: the native-root scan (measured this session at
+	// ~13.7s of this app's own ~17.4s "watcher and pollers started" mark,
+	// almost all of the gap before the pre-patch window even appeared) and
+	// the startup backfill both move into startBackgroundIngest below,
+	// launched only once the window and its loading screen already exist,
+	// instead of blocking window creation itself. bdevBurnNow/bdevVendorStrip
+	// /etc. only ever need a.st/a.cache/a.sys, all already set above, so
+	// none of the bindings below need to wait for this.
 
 	wv2Dir := filepath.Join(dataDir, "wv2-dev")
 	_ = os.MkdirAll(wv2Dir, 0o755)
@@ -614,7 +609,89 @@ func main() {
 	startUICheckServer(w)
 
 	w.SetHtml(pageHTML)
+	go startBackgroundIngest(a, st, w)
 	w.Run()
+}
+
+// startBackgroundIngest is section 11 steps 2-3: everything that used to run
+// synchronously before the window was created (the native-root scan, the
+// live watcher, the adapter pollers, the startup backfill) now runs here
+// instead, after the window and its own loading screen already exist, so
+// "time to window" no longer includes any of it. Progress reaches the page
+// through the same w.Eval mechanism bdevAsyncResolveJS already uses
+// elsewhere in this file, not a bound function: the loading screen has
+// nothing to call, only something to listen for.
+func startBackgroundIngest(a *app, st *store.Store, w webview2.WebView) {
+	// "Opening store" already finished, synchronously, before the window
+	// was created (it is fast: 24ms measured this session); shown here
+	// anyway so the loading screen's own step list reads as one coherent
+	// narrative from 0%, not starting partway through.
+	pushLoadingStep(w, "Opening store", 5)
+	pushLoadingStep(w, "Sampling system", 15)
+
+	// The Hermes/Copilot pollers (app.go) never touch the native Claude/
+	// Codex roots below; starting them first means those vendors show up
+	// as soon as this goroutine runs, rather than being delayed behind the
+	// ~13s native-root scan for no reason (found by review, 2026-09-25).
+	startHermesPoll(a, st)
+	startCopilotCLIPoll(a, st)
+	startCopilotVSCPoll(a, st)
+
+	pushLoadingStep(w, "Starting watchers", 30)
+	nativeClaudeRoots := scan.DefaultSourcesWithOptions(false)
+	nativeCodexRoots := codex.NativeSources()
+	a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)
+	a.startLiveWatch(nativeClaudeRoots, nativeCodexRoots)
+	startupMark("watcher and pollers started")
+
+	pushLoadingStep(w, "Reading sessions", 45)
+	// Throttled to at most 4 pushes/second: dataset.Cache.Collect calls
+	// this once per file, including skipped ones, so an unthrottled push
+	// (two w.Dispatch/w.Eval round trips each) could reach thousands of
+	// calls against a large trail, competing with the UI thread's own
+	// message queue for no visible benefit once the loading screen only
+	// updates a few times a second anyway (found by review, 2026-09-25).
+	var lastProgressPush time.Time
+	a.startInitialCollect(func(done, total int) {
+		now := time.Now()
+		last := done == total
+		if !last && now.Sub(lastProgressPush) < 250*time.Millisecond {
+			return
+		}
+		lastProgressPush = now
+		pct := 45
+		if total > 0 {
+			pct = 45 + int(50*float64(done)/float64(total))
+		}
+		pushHeaderStatus(w, fmt.Sprintf("backfilling: %d of %d files", done, total))
+		pushLoadingStep(w, fmt.Sprintf("Reading sessions: %d of %d files", done, total), pct)
+	})
+	<-a.initialCollectDone
+	startupMark("initial collect and backfill done")
+	pushLoadingStep(w, "Ready", 100)
+	pushHeaderStatus(w, "")
+}
+
+// pushLoadingStep and pushHeaderStatus both just run JS in the page, the
+// same w.Dispatch/w.Eval pattern every async bdev* binding in this file
+// already uses to deliver a result computed off the UI thread; neither is a
+// bound function since the page never calls either of these itself.
+func pushLoadingStep(w webview2.WebView, text string, pct int) {
+	textJSON, err := json.Marshal(text)
+	if err != nil {
+		return
+	}
+	js := fmt.Sprintf("window.__bdevLoadingStep && window.__bdevLoadingStep(%s, %d)", textJSON, pct)
+	w.Dispatch(func() { w.Eval(js) })
+}
+
+func pushHeaderStatus(w webview2.WebView, text string) {
+	textJSON, err := json.Marshal(text)
+	if err != nil {
+		return
+	}
+	js := fmt.Sprintf("window.__bdevHeaderStatus && window.__bdevHeaderStatus(%s)", textJSON)
+	w.Dispatch(func() { w.Eval(js) })
 }
 
 // openBrowser opens url in the default browser (cmd\burnmon-cli\main.go's
