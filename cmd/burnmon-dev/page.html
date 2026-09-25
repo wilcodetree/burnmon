@@ -20,10 +20,13 @@ body{
 }
 /* no-scroll patch section 3: no visible scrollbar in any panel or on the
    page, at any window size. Every list/grid that used to scroll internally
-   (turn ticker, harness heatmap, activity heatmap, To Do, turn popup) now
-   crops to whole items instead (see cropToFit/cropTableRows/the two
-   heatmaps' column math below), so nothing here is ever meant to overflow;
-   overflow:hidden on each of those containers is the hard backstop. */
+   (harness heatmap, activity heatmap, To Do, turn popup) now crops to whole
+   items instead (see cropToFit/cropTableRows/the two heatmaps' column math
+   below), so nothing here is ever meant to overflow; overflow:hidden on
+   each of those containers is the hard backstop. The turn ticker is the
+   one deliberate exception (headline patch section 1): it scrolls instead
+   of cropping, .ticker's own overflow-y:auto below and check_d9.go's own
+   exclusion for #turnTicker both reflect that. */
 .fit-dropped{display:none !important}
 
 /* loading screen, section 11 steps 2-3: shown from first paint, hidden once
@@ -40,16 +43,26 @@ body{
 .loadingbar{width:280px; height:4px; background:#10151d; border:1px solid var(--bd)}
 .loadingbar i{display:block; height:100%; background:var(--amber); transition:width .3s ease-out}
 
-/* header, UI review patch section 1: smaller, quieter, no boxed chips */
+/* header, UI review patch section 1: smaller, quieter, no boxed chips.
+   Headline patch section 4: gap widened (14_topbar.png showed "3 sessions"
+   clipped against its left neighbour) now that hltotal reserves its own
+   fixed width below rather than sizing exactly to its own text. */
 header{
   flex:0 0 auto; min-height:32px; background:#000; border-bottom:2px solid var(--amber);
-  display:flex; align-items:center; flex-wrap:wrap; gap:4px 16px; padding:5px 14px;
+  display:flex; align-items:center; flex-wrap:wrap; gap:6px 24px; padding:5px 14px;
 }
 .brand{display:flex; flex-direction:column; gap:0; flex:0 0 auto; line-height:1.15}
 .logo{font-size:13px; font-weight:700; color:#fff; letter-spacing:1px; white-space:nowrap}
 .logo span{color:var(--amber)}
 .pressuretext{font-size:10px; font-weight:700; letter-spacing:.06em; white-space:nowrap}
-.hltotal{font-size:22px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; white-space:nowrap}
+/* hltotal, headline patch section 4: whole number with thousands separators
+   (fmtTokensFull), no K/M/B - bigger, and min-width reserves room for 12
+   digits plus their thousands separators (e.g. 999,999,999,999) so the
+   header never reflows/shifts as the true value grows digit by digit. */
+.hltotal{font-size:36px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; white-space:nowrap; min-width:15ch}
+@media (min-width: 1152px){
+  .hltotal{font-size:48px}
+}
 /* max-width+ellipsis (no-scroll patch section 3 backstop): every .hstat
    here is normally a short readout, but #exportStatus can hold a full
    absolute export path, long enough on its own (nowrap, so header's own
@@ -135,10 +148,20 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
 /* vendor strip totals row, section 3 */
 tr.totalrow td{font-weight:700; color:#fff; border-bottom:1px solid var(--bd)}
 
-/* turn ticker, section 5: dense lines, amber outline tag, white tokens, hover, click */
-.ticker{display:flex; flex-direction:column; gap:2px; flex:1; min-height:0; overflow:hidden; padding:4px 10px}
+/* turn ticker, section 5: dense lines, amber outline tag, white tokens, hover, click.
+   Headline patch section 1: the ticker is the one exception to "no scrollbars" - rows
+   get a fixed height instead of being squeezed by flexbox's default shrink (the exact
+   11_ticker_broken.png bug: cropToFit's own scrollHeight<=clientHeight check never
+   trips because flex children shrink to fit instead of overflowing), and the box
+   scrolls vertically with a thin scrollbar in the house style instead. */
+.ticker{display:flex; flex-direction:column; gap:2px; flex:1; min-height:0; overflow-y:auto; overflow-x:hidden;
+  padding:4px 10px; scrollbar-width:thin; scrollbar-color:#8a7245 var(--panel2)}
+.ticker::-webkit-scrollbar{width:8px}
+.ticker::-webkit-scrollbar-track{background:var(--panel2)}
+.ticker::-webkit-scrollbar-thumb{background:#8a7245}
+.ticker::-webkit-scrollbar-thumb:hover{background:#a68753}
 .trow{display:flex; gap:8px; align-items:baseline; font:11.5px/1.35 var(--mono); white-space:nowrap; overflow:hidden;
-  padding:1px 4px; cursor:default}
+  padding:1px 4px; cursor:default; flex:0 0 22px}
 .trow.clickable{cursor:pointer}
 .trow.clickable:hover{background:var(--panel2)}
 .trow .t{color:var(--dim)}
@@ -221,11 +244,24 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .sysbox .line b{color:#fff; font-variant-numeric:tabular-nums}
 .sysbox .dim{color:var(--dim)}
 
-/* process groups, section 7: trend column fills remaining width. No-scroll
-   patch section 3: capped to the same 200px budget the To Do panel already
-   uses, cropped to whole rows (cropTableRows), busiest first (already the
-   render order), rather than growing with content or scrolling. */
-#processGroups td:last-child, #processGroupsHead th:last-child{width:100%}
+/* process groups, section 7: name/CPU/RAM/IO-per-second share the left half,
+   the trend column takes at most the other half (headline patch section 2:
+   12_process_groups.png showed the trend eating most of the panel, name and
+   numbers squeezed into a sliver on the left) - table-layout:fixed plus the
+   colgroup on the table itself (page markup below) is what actually holds
+   these percentages, since an auto-layout table ignores a width hint on one
+   cell once its content wants more room. No-scroll patch section 3: capped
+   to the same 200px budget the To Do panel already uses, cropped to whole
+   rows (cropTableRows), busiest first (already the render order), rather
+   than growing with content or scrolling. */
+/* Column widths come entirely from the table's own colgroup (page markup
+   below), which sizes thead and tbody alike under table-layout:fixed - a
+   width rule on a cell here would be redundant at best (found by review,
+   2026-09-26: an earlier version of this had one on td:last-child, plus a
+   #processGroupsHead th:... pair that matched nothing at all, since that id
+   belongs to the .panelhead title div above the table, not its own thead). */
+#processGroupsWrap table{table-layout:fixed}
+#processGroups td:first-child{overflow:hidden; text-overflow:ellipsis}
 .trendsvg{display:block; width:100%; height:14px}
 #processGroupsWrap{max-height:200px; overflow:hidden}
 
@@ -242,7 +278,6 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
 @media (max-aspect-ratio: 4/5){
   header{min-height:40px}
-  .hltotal{font-size:28px}
 }
 </style>
 </head>
@@ -333,6 +368,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         <div class="panelhead" id="processGroupsHead">Process groups</div>
         <div id="processGroupsWrap">
           <table>
+            <colgroup><col style="width:22%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:50%"></colgroup>
             <thead><tr><th></th><th>CPU</th><th>RAM</th><th>IO/s</th><th>Trend</th></tr></thead>
             <tbody id="processGroups"></tbody>
           </table>
@@ -537,32 +573,49 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // value replaces it, rather than the previous 400ms/1000ms split.
   var TWEEN_MS = 600;
 
+  // easeOutQuart is animateNumber's own default easing; headline patch
+  // section 4 passes a linear ease instead for the one shared-tween
+  // exception (renderHeadline below).
+  function easeOutQuart(t){ return 1 - Math.pow(1 - t, 4); }
+
   // animateNumber (token-monitor's own recipe, reimplemented): one RAF tween
-  // per element, easeOutQuart, cancelling any tween already running on that
-  // element so a fast poll cadence never lets an old loop overwrite a
-  // newer value. State (_animVal, _animRAF) lives on the element itself, so
-  // callers must reuse the same DOM node across polls rather than
-  // rebuilding it each time (see ensureVendorRow).
-  function animateNumber(el, newVal, duration, formatFn){
+  // per element, easeOutQuart by default, cancelling any tween already
+  // running on that element so a fast poll cadence never lets an old loop
+  // overwrite a newer value. State (_animVal, _animRAF) lives on the
+  // element itself, so callers must reuse the same DOM node across polls
+  // rather than rebuilding it each time (see ensureVendorRow). easeFn is
+  // optional (defaults to easeOutQuart); renderHeadline is the one caller
+  // that passes a linear ease over the tick's own duration instead of the
+  // shared 600ms (headline patch section 4).
+  function animateNumber(el, newVal, duration, formatFn, easeFn){
     if(!el || newVal == null) return;
     if(REDUCED_MOTION){
       el.textContent = formatFn(newVal);
       el._animVal = newVal;
       return;
     }
+    easeFn = easeFn || easeOutQuart;
     var from = el._animVal != null ? el._animVal : newVal;
     if(el._animRAF) cancelAnimationFrame(el._animRAF);
     if(from === newVal){ el.textContent = formatFn(newVal); el._animVal = newVal; return; }
     var start = performance.now();
     function tick(now){
       var t = Math.min(1, (now - start) / duration);
-      var eased = 1 - Math.pow(1 - t, 4);
-      var val = from + (newVal - from) * eased;
+      var val = from + (newVal - from) * easeFn(t);
       el.textContent = formatFn(val);
+      // _animVal tracks the in-flight value on every frame, not only at
+      // t=1 (found by review, 2026-09-26): a tween cancelled mid-flight by
+      // a new call (the next line's own cancelAnimationFrame) would
+      // otherwise leave _animVal at the OLD start value, so the next
+      // animateNumber call computes `from` as that stale value and the
+      // number visibly snaps backward before counting up again. Matters
+      // most for renderHeadline, whose duration (tickRefreshMs) is close
+      // to the tick cadence itself, so an early tick routinely cancels the
+      // previous tween before it finishes.
+      el._animVal = val;
       if(t < 1){
         el._animRAF = requestAnimationFrame(tick);
       } else {
-        el._animVal = newVal;
         el._animRAF = null;
       }
     }
@@ -574,6 +627,13 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     if(n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
     if(n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
     return String(n);
+  }
+  // fmtTokensFull, headline patch section 4: the headline total's own whole
+  // number with thousands separators, no K/M/B, the one exception to
+  // fmtTokens' abbreviated form used everywhere else on the page.
+  function fmtTokensFull(n){
+    if(n == null) return '-';
+    return Math.round(n).toLocaleString('en-US');
   }
   function fmtCost(c){ return '$' + (c || 0).toFixed(2); }
 
@@ -902,9 +962,22 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     animateNumber(total.month, (payload && payload.total && payload.total.month) || 0, TWEEN_MS, fmtTokens);
   }
 
+  // renderHeadline, section 4: the one exception to the shared 600ms tween
+  // (TWEEN_MS) - runs over the whole current tick interval with linear
+  // easing instead of the shared easeOutQuart, so on the one tick where
+  // total.today actually changes (payload.total is vendor_strip's own 60s
+  // cache, startSlowRefreshers/app.go, so this is roughly once a minute,
+  // not every 2s tick) the digits roll smoothly and land on the true value
+  // right as that tick's snapshot paints, rather than darting to it and
+  // stopping early the way the shared 600ms ease-out would on a big jump.
+  // Every other tick calls this with the same total.today, so animateNumber's
+  // own from===newVal check makes it a no-op rather than a tween (found by
+  // review, 2026-09-26: an earlier version of this comment overstated it as
+  // "digits keep running while tokens flow", implying continuous motion the
+  // 60s-cached source cannot actually produce).
   function renderHeadline(total){
     total = total || {};
-    animateNumber(document.getElementById('hlToday'), total.today || 0, TWEEN_MS, fmtTokens);
+    animateNumber(document.getElementById('hlToday'), total.today || 0, tickRefreshMs, fmtTokensFull, function(t){ return t; });
   }
 
   var MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -998,9 +1071,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   }
 
   // renderTicker (section 5): one dense line per turn, newest first, click
-  // opens the turn detail popup. Cropped (cropToFit, no-scroll patch
-  // section 3) to as many whole rows as the ticker's own box actually has
-  // room for, rather than the old scroll-internally behaviour.
+  // opens the turn detail popup. Headline patch section 1: the ticker is
+  // the one exception to "no scrollbars" (see .ticker/.trow above), so this
+  // just renders every row and lets the box scroll, rather than cropToFit.
   function renderTicker(turns){
     var el = document.getElementById('turnTicker');
     if(!el) return;
@@ -1021,7 +1094,15 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       el.innerHTML = '<div class="placeholder" style="padding:10px">No turns in the last 30 minutes</div>';
       return;
     }
-    cropToFit(el, items);
+    // Skip the repaint while the user has scrolled away from the top
+    // (found by review, 2026-09-26): newest-first plus a full innerHTML
+    // replace every tick would otherwise drift a scrolled-down reading
+    // position by one row height per new turn (a new row inserts above
+    // whatever they're reading, but scrollTop is a raw pixel offset that
+    // does not follow it) and drop the row's own :hover state. Catches
+    // back up to live the moment they scroll back to the top.
+    if(el.scrollTop > 2 && el.children.length) return;
+    el.innerHTML = items.join('');
   }
 
   // ---------- Turn detail popup (section 5) ----------
@@ -1397,10 +1478,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
   // renderProcessGroups (section 7): headers right-aligned like the numbers
   // (the shared `th` rule now does this by default), the trend column takes
-  // all remaining width and its sparkline stretches to fill it (the
-  // trendsvg width:100% viewBox below, plus the #processGroups td:last-child
-  // CSS rule), busiest first (order is already sorted descending by current
-  // CPU%). No-scroll patch section 3: cropped to as many whole rows as
+  // at most half the panel width (headline patch section 2, the page's own
+  // colgroup plus #processGroupsWrap table{table-layout:fixed}) and its
+  // sparkline stretches to fill it (trendsvg width:100% viewBox below),
+  // busiest first (order is already sorted descending by current CPU%).
+  // No-scroll patch section 3: cropped to as many whole rows as
   // #processGroupsWrap's own 200px budget fits (cropTableRows), rather than
   // growing with content.
   function renderProcessGroups(now, historyRows){
@@ -1453,25 +1535,73 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // (clientWidth / per-cell px) approach renderHeatmap uses above -
   // heatrow-label is a fixed 110px plus the row's own 6px gap
   // (.heatrow/.heatrow-label), and each cell is 9px plus a 1px gap
-  // (.heatrow-cells).
+  // (.heatrow-cells). Headline patch section 3: each cell also carries a
+  // hover title in the same style as the Activity heatmap above (HARNESS_AGENTS
+  // below correlates burn.turns onto the same minute buckets for the token
+  // figure).
   // lastHarnessHeatmapNow: the shared tick's own "now" (section 5, "all
   // time-axis charts... use the same now from the snapshot"), so a resize
   // or a panel un-hiding (rerenderFitCandidate) can redraw against a
   // reasonable anchor even without a fresh snapshot in hand.
   var lastHarnessHeatmapNow = Date.now();
 
-  function renderHarnessHeatmap(rows, nowMs){
+  // lastHarnessHeatmapTurns: the shared snapshot's own burn.turns (same cap
+  // and 30-minute window as the turn ticker), cached the same way as
+  // lastProcessGroupsHistory/lastHarnessHeatmapNow so a resize or panel
+  // un-hide can redraw the hover text below without a fresh snapshot.
+  var lastHarnessHeatmapTurns = [];
+
+  // HARNESS_AGENTS mirrors internal/advisor's own harnessAgents map (Go):
+  // which schema.Event.Agent value(s) a sysmon.Harness's turns would carry,
+  // so a cell's hover text (section 3) can add "tokens in that minute" from
+  // burn.turns to the same CPU-sample bucket this heatmap already sums.
+  // wsl/burnmon-dev/node have no such counterpart agent (not a coding tool
+  // that emits its own turn events), so they simply never show tokens.
+  var HARNESS_AGENTS = {
+    claude: 'claude-code', 'claude-desktop': 'cowork', codex: 'codex',
+    'copilot-cli': 'copilot-cli', 'copilot-vscode': 'copilot-vscode', hermes: 'hermes'
+  };
+  var AGENT_TO_HARNESS = {};
+  Object.keys(HARNESS_AGENTS).forEach(function(h){ AGENT_TO_HARNESS[HARNESS_AGENTS[h]] = h; });
+
+  function renderHarnessHeatmap(rows, nowMs, turns){
     lastProcessGroupsHistory = rows || [];
     if(nowMs) lastHarnessHeatmapNow = nowMs;
+    if(turns) lastHarnessHeatmapTurns = turns;
     var el = document.getElementById('harnessHeatmap');
     if(!el) return;
     if(!rows || !rows.length){ el.innerHTML = ''; return; }
 
-    var byHarness = {};
+    // byHarness sums every sample's CPUPct per minute (the design doc's own
+    // CPU-weighted intensity, unchanged); countByHarness counts how many
+    // samples landed in that minute alongside it, purely so the hover text
+    // below can show a true average instead of presenting that sum as if it
+    // were itself a percentage (found by review, 2026-09-26: at the default
+    // ~6 samples/minute, one harness pinning a single core the whole minute
+    // would sum to "~600% CPU", not the "60%" an average would show).
+    var byHarness = {}, countByHarness = {};
     rows.forEach(function(r){
       var minuteKey = Math.floor(new Date(r.Ts).getTime() / 60000);
       var byMin = (byHarness[r.Harness] || (byHarness[r.Harness] = {}));
       byMin[minuteKey] = (byMin[minuteKey] || 0) + r.CPUPct;
+      var cntMin = (countByHarness[r.Harness] || (countByHarness[r.Harness] = {}));
+      cntMin[minuteKey] = (cntMin[minuteKey] || 0) + 1;
+    });
+    // tokensByHarness only ever covers lastHarnessHeatmapTurns' own window
+    // (burn.turns: last 30 minutes, capped at 50 turns) - the CPU history
+    // this heatmap otherwise draws from goes back a full 60 minutes
+    // (RecentProcessGroups' own window, app.go), and a busy 30 minutes can
+    // exceed 50 turns on its own, so a cell can legitimately have real
+    // token activity this map has no way to know about; it just shows CPU
+    // only for that cell rather than claiming certainty it had none.
+    var tokensByHarness = {};
+    lastHarnessHeatmapTurns.forEach(function(t){
+      var h = AGENT_TO_HARNESS[t.agent];
+      if(!h) return;
+      var minuteKey = Math.floor(new Date(t.at).getTime() / 60000);
+      var byMin = (tokensByHarness[h] || (tokensByHarness[h] = {}));
+      var tok = (t.fresh || 0) + (t.cache_write || 0) + (t.cache_read || 0) + (t.output || 0);
+      byMin[minuteKey] = (byMin[minuteKey] || 0) + tok;
     });
     var harnesses = Object.keys(byHarness).sort(function(a, b){
       var sa = Object.values(byHarness[a]).reduce(function(x, y){ return x + y; }, 0);
@@ -1497,11 +1627,26 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
     var html = '';
     harnesses.forEach(function(h){
-      html += '<div class="heatrow"><span class="heatrow-label">' + (HARNESS_LABEL[h] || h) + '</span><span class="heatrow-cells">';
+      var label = HARNESS_LABEL[h] || h;
+      html += '<div class="heatrow"><span class="heatrow-label">' + label + '</span><span class="heatrow-cells">';
       for(var m = fromMin; m <= maxMin; m++){
         var v = byHarness[h][m] || 0;
         var op = v > 0 ? (0.12 + 0.85 * Math.min(1, v / max)) : 0;
-        html += '<i class="heatcell' + (v > 0 ? ' active' : '') + '" style="background:' + harnessColor(h) + ';opacity:' + op.toFixed(2) + '"></i>';
+        // hover text, section 3: same style as the Activity heatmap
+        // (renderHeatmap above) - harness, HH:mm, CPU percent for that
+        // minute, and tokens when there are any; an empty minute (no CPU
+        // sample) shows "no activity" regardless of any stray token match.
+        // The percent shown is v's own average over that minute's sample
+        // count, not the raw sum op/max use for colour intensity - the sum
+        // can honestly run past 100% (several busy processes at once), but
+        // labelling it "% CPU" without averaging first would misread as a
+        // single core pinned at an impossible value.
+        var cnt = (countByHarness[h] && countByHarness[h][m]) || 1;
+        var avgPct = v / cnt;
+        var tok = (tokensByHarness[h] && tokensByHarness[h][m]) || 0;
+        var title = label + ', ' + fmtHM(new Date(m * 60000)) +
+          (v > 0 ? ': ' + Math.round(avgPct) + '% CPU' + (tok > 0 ? ', ' + fmtTokens(tok) + ' tok' : '') : ': no activity');
+        html += '<i class="heatcell' + (v > 0 ? ' active' : '') + '" style="background:' + harnessColor(h) + ';opacity:' + op.toFixed(2) + '" title="' + esc(title) + '"></i>';
       }
       html += '</span></div>';
     });
@@ -1685,7 +1830,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     lastProcessGroupsNow = snap.process_groups_now || [];
     lastProcessGroupsHistory = snap.process_groups_history || [];
     renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory); paintMark('processGroups');
-    renderHarnessHeatmap(lastProcessGroupsHistory, snap.now); paintMark('harnessHeatmap');
+    renderHarnessHeatmap(lastProcessGroupsHistory, snap.now, (snap.burn && snap.burn.turns) || []); paintMark('harnessHeatmap');
     renderTodoPanel(snap.todo, snap.todo_tasks); paintMark('todo');
     applyPanelFit();
     paintMark('tickEnd');
