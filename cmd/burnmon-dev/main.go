@@ -17,10 +17,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"syscall"
 	"time"
 
 	webview2 "github.com/jchv/go-webview2"
@@ -32,11 +35,38 @@ import (
 	"burnmon/internal/scan"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
+	"burnmon/internal/todo"
 	"burnmon/internal/vendorstrip"
 )
 
 //go:embed page.html
 var pageHTML string
+
+// Microsoft To Do panel payloads (section 9). Kept small and purpose-built
+// per call rather than reusing internal/todo's own structs directly: the
+// unexported deviceCode/interval/expiresIn fields on todo.DeviceCodeInfo
+// never need to reach the page at all (main.go keeps the whole struct
+// server-side to hand to FinishLogin).
+type todoStatusPayload struct {
+	Enabled  bool `json:"enabled"`
+	SignedIn bool `json:"signed_in"`
+}
+
+type todoLoginStartPayload struct {
+	UserCode        string `json:"user_code"`
+	VerificationURI string `json:"verification_uri"`
+	Message         string `json:"message"`
+}
+
+type todoLoginDonePayload struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+type todoTasksPayload struct {
+	Items []todo.Item `json:"items"`
+	Error string      `json:"error,omitempty"`
+}
 
 // progStart marks process entry, so every startupMark call below logs an
 // elapsed time from the same zero point (section 11 step 1: "measure
@@ -510,10 +540,103 @@ func main() {
 		log.Println("could not bind bdevExport:", err)
 	}
 
+	// Microsoft To Do panel (section 9), off unless burnmon-dev.json sets
+	// microsoft_todo_enabled. Read-only, own token cache under
+	// %LOCALAPPDATA%\burnmon\ (internal/todo's own doc comment), never
+	// touched by the export bundle or any log line - task titles are
+	// personal data the design doc's "never in exports, logs or
+	// screenshots" line covers by this package simply never being imported
+	// from that path, not by a redaction rule.
+	if err := w.Bind("bdevTodoStatus", func() todoStatusPayload {
+		return todoStatusPayload{Enabled: devCfg.MicrosoftTodoEnabled, SignedIn: todo.SignedIn()}
+	}); err != nil {
+		log.Println("could not bind bdevTodoStatus:", err)
+	}
+
+	// bdevTodoLogin: StartLogin is one fast HTTP call, so this returns
+	// synchronously with the code/URL to show; the browser opens
+	// immediately, and FinishLogin's own slow polling loop (the
+	// interactive "type this code in your browser" wait) runs in a
+	// goroutine, resolving through bdevAsyncResolveJS once the user
+	// actually approves it (or it times out), the same pattern every other
+	// slow bdev* binding in this file already uses.
+	if err := w.Bind("bdevTodoLogin", func() (todoLoginStartPayload, error) {
+		if !devCfg.MicrosoftTodoEnabled {
+			return todoLoginStartPayload{}, fmt.Errorf("Microsoft To Do is not enabled")
+		}
+		info, err := todo.StartLogin()
+		if err != nil {
+			return todoLoginStartPayload{}, err
+		}
+		openBrowser(info.VerificationURI)
+		go func() {
+			loginErr := todo.FinishLogin(info)
+			payload := todoLoginDonePayload{OK: loginErr == nil}
+			if loginErr != nil {
+				payload.Error = loginErr.Error()
+			}
+			js, jerr := bdevAsyncResolveJS("__bdevTodoLoginResolve", payload)
+			if jerr != nil {
+				log.Println("bdevTodoLogin: encode result:", jerr)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
+		return todoLoginStartPayload{UserCode: info.UserCode, VerificationURI: info.VerificationURI, Message: info.Message}, nil
+	}); err != nil {
+		log.Println("could not bind bdevTodoLogin:", err)
+	}
+
+	// bdevTodoTasks: TodayTasks makes one or more Graph HTTP calls, off the
+	// UI thread for the same reason every other network/store-touching
+	// binding here is.
+	if err := w.Bind("bdevTodoTasks", func() {
+		if !devCfg.MicrosoftTodoEnabled {
+			return
+		}
+		go func() {
+			items, err := todo.TodayTasks()
+			payload := todoTasksPayload{Items: items}
+			if err != nil {
+				payload.Error = err.Error()
+			}
+			js, jerr := bdevAsyncResolveJS("__bdevTodoTasksResolve", payload)
+			if jerr != nil {
+				log.Println("bdevTodoTasks: encode result:", jerr)
+				return
+			}
+			w.Dispatch(func() { w.Eval(js) })
+		}()
+	}); err != nil {
+		log.Println("could not bind bdevTodoTasks:", err)
+	}
+
 	startUICheckServer(w)
 
 	w.SetHtml(pageHTML)
 	w.Run()
+}
+
+// openBrowser opens url in the default browser (cmd\burnmon-cli\main.go's
+// own Windows branch, ported here since burnmon-dev is Windows-only and has
+// no such helper of its own yet). Only ever called with Microsoft's own
+// device-code verification_uri (internal/todo.StartLogin), never anything
+// page- or user-supplied, but still checked for an https scheme before
+// shelling out (found by review, 2026-09-25: cheap, and rules out this
+// call site ever being repurposed later with a less trusted URL).
+// HideWindow: burnmon-dev.exe is built -H windowsgui, so without it `cmd`
+// can still flash a console window.
+func openBrowser(rawURL string) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "https" {
+		log.Println("openBrowser: refusing a non-https URL:", rawURL)
+		return
+	}
+	cmd := exec.Command("cmd", "/c", "start", "", rawURL)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if err := cmd.Start(); err != nil {
+		log.Println("openBrowser: could not start:", err)
+	}
 }
 
 // bdevAsyncResolveJS mirrors cmd\burnmon\main.go's own asyncResolveJS: a
