@@ -964,20 +964,17 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
   // renderHeadline, section 4: the one exception to the shared 600ms tween
   // (TWEEN_MS) - runs over the whole current tick interval with linear
-  // easing instead of the shared easeOutQuart, so on the one tick where
-  // total.today actually changes (payload.total is vendor_strip's own 60s
-  // cache, startSlowRefreshers/app.go, so this is roughly once a minute,
-  // not every 2s tick) the digits roll smoothly and land on the true value
-  // right as that tick's snapshot paints, rather than darting to it and
-  // stopping early the way the shared 600ms ease-out would on a big jump.
-  // Every other tick calls this with the same total.today, so animateNumber's
-  // own from===newVal check makes it a no-op rather than a tween (found by
-  // review, 2026-09-26: an earlier version of this comment overstated it as
-  // "digits keep running while tokens flow", implying continuous motion the
-  // 60s-cached source cannot actually produce).
-  function renderHeadline(total){
-    total = total || {};
-    animateNumber(document.getElementById('hlToday'), total.today || 0, tickRefreshMs, fmtTokensFull, function(t){ return t; });
+  // easing instead of the shared easeOutQuart, so the digits roll smoothly
+  // and land on the true value right as that tick's snapshot paints, rather
+  // than darting to it and stopping early the way the shared 600ms ease-out
+  // would on a big jump. todayTokens is snap.headline_today (2026-09-26
+  // phase 5 fix): the Go side now adds tokens ingested since vendor_strip's
+  // own last 60s cache refresh (bdevSnapshotNow/headline.go), so this
+  // genuinely moves most ticks instead of only once a minute; a tick with
+  // no new tokens still calls this with the same value, and animateNumber's
+  // own from===newVal check makes that a no-op rather than a tween.
+  function renderHeadline(todayTokens){
+    animateNumber(document.getElementById('hlToday'), todayTokens || 0, tickRefreshMs, fmtTokensFull, function(t){ return t; });
   }
 
   var MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1314,7 +1311,6 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // instead of its own poll.
   function renderVendorPanels(payload){
     renderVendorStrip(payload);
-    renderHeadline(payload && payload.total);
   }
 
   function renderPressureChip(score){
@@ -1826,6 +1822,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     renderHistoryChart(lastSysmonHistory); paintMark('sysmonHistory');
     renderBurnPanels(snap.burn); paintMark('burn');
     renderVendorPanels(snap.vendor_strip); paintMark('vendorStrip');
+    renderHeadline(snap.headline_today); paintMark('headline');
     renderHeatmap(snap.activity_heatmap); paintMark('activityHeatmap');
     lastProcessGroupsNow = snap.process_groups_now || [];
     lastProcessGroupsHistory = snap.process_groups_history || [];

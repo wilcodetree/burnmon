@@ -299,15 +299,21 @@ func main() {
 	type snapshotPayload struct {
 		Now                  int64                       `json:"now"`
 		RefreshMs            int                         `json:"refresh_ms"`
-		Sysmon               sysmonNowPayload             `json:"sysmon"`
-		SysmonHistory        []sysmon.Sample              `json:"sysmon_history"`
-		ProcessGroupsNow     []sysmon.ProcessGroupSample  `json:"process_groups_now"`
-		ProcessGroupsHistory []sysmon.ProcessGroupSample  `json:"process_groups_history"`
-		Burn                 live.Snapshot                `json:"burn"`
-		VendorStrip          vendorstrip.Payload          `json:"vendor_strip"`
-		ActivityHeatmap      heatmapPayload               `json:"activity_heatmap"`
-		Todo                 todoStatusPayload            `json:"todo"`
-		TodoTasks            todoTasksPayload             `json:"todo_tasks"`
+		Sysmon               sysmonNowPayload            `json:"sysmon"`
+		SysmonHistory        []sysmon.Sample             `json:"sysmon_history"`
+		ProcessGroupsNow     []sysmon.ProcessGroupSample `json:"process_groups_now"`
+		ProcessGroupsHistory []sysmon.ProcessGroupSample `json:"process_groups_history"`
+		Burn                 live.Snapshot               `json:"burn"`
+		VendorStrip          vendorstrip.Payload         `json:"vendor_strip"`
+		ActivityHeatmap      heatmapPayload              `json:"activity_heatmap"`
+		Todo                 todoStatusPayload           `json:"todo"`
+		TodoTasks            todoTasksPayload            `json:"todo_tasks"`
+		// HeadlineToday (2026-09-26 phase 5 fix) is vendorStrip.Total.Today
+		// plus tokens ingested since that cache's own GeneratedAt, from the
+		// events this same tick already fetched below for Burn - see
+		// headline.go's headlineTodayTokens. The header no longer waits on
+		// vendorStrip's own 60s refresh to move.
+		HeadlineToday int64 `json:"headline_today"`
 	}
 	if err := w.Bind("bdevSnapshotNow", func() (snapshotPayload, error) {
 		now := time.Now()
@@ -361,6 +367,7 @@ func main() {
 			ActivityHeatmap:      heatmapPayload{Rows: heatmapRows},
 			Todo:                 todoStatus,
 			TodoTasks:            todoTasks,
+			HeadlineToday:        headlineTodayTokens(vendorStrip.Total, vendorStrip.GeneratedAt, events, now),
 		}, nil
 	}); err != nil {
 		log.Println("could not bind bdevSnapshotNow:", err)
