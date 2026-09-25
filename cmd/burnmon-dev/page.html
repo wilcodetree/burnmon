@@ -58,8 +58,12 @@ header{
 /* hltotal, headline patch section 4: whole number with thousands separators
    (fmtTokensFull), no K/M/B - bigger, and min-width reserves room for 12
    digits plus their thousands separators (e.g. 999,999,999,999) so the
-   header never reflows/shifts as the true value grows digit by digit. */
-.hltotal{font-size:36px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; white-space:nowrap; min-width:15ch}
+   header never reflows/shifts as the true value grows digit by digit.
+   flex:1 1 auto plus centered text (Wilco, 2026-09-26): the box grows to
+   fill the header's free space up to the next fixed-width .hstat, so the
+   number sits centered between the brand on its left and the stat
+   cluster on its right instead of hugging the brand. */
+.hltotal{font-size:36px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; white-space:nowrap; min-width:15ch; flex:1 1 auto; text-align:center}
 @media (min-width: 1152px){
   .hltotal{font-size:48px}
 }
