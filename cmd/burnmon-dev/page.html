@@ -32,6 +32,20 @@ body{
 ::-webkit-scrollbar-thumb:hover{background:var(--dim)}
 ::-webkit-scrollbar-corner{background:transparent}
 
+/* loading screen, section 11 steps 2-3: shown from first paint, hidden once
+   the page's own first poll cycle renders (see the Promise.all near the
+   bottom of this file's script); house style, same wordmark and colors as
+   the header. */
+.loadingoverlay{
+  position:fixed; inset:0; z-index:2000; background:var(--bg);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+}
+.loadingoverlay.hidden{display:none}
+.loadingoverlay .logo{font-size:20px}
+#loadingStepText{font-size:12px; color:var(--dim)}
+.loadingbar{width:280px; height:4px; background:#10151d; border:1px solid var(--bd)}
+.loadingbar i{display:block; height:100%; background:var(--amber); transition:width .3s ease-out}
+
 /* header, UI review patch section 1: smaller, quieter, no boxed chips */
 header{
   flex:0 0 auto; min-height:32px; background:#000; border-bottom:2px solid var(--amber);
@@ -216,6 +230,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
+<div class="loadingoverlay" id="loadingOverlay">
+  <div class="logo">BURN<span>MON</span> DEV</div>
+  <div class="dim" id="loadingStepText">Starting&hellip;</div>
+  <div class="loadingbar"><i id="loadingBarFill" style="width:0%"></i></div>
+</div>
 <header>
   <div class="brand">
     <div class="logo">BURN<span>MON</span> DEV</div>
@@ -228,6 +247,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   <div class="hstat">CPU <b id="hdrCPU">-</b></div>
   <div class="hstat">RAM <b id="hdrRAM">-</b></div>
   <div class="hstat" id="hdrClock">-</div>
+  <div class="hstat" id="hdrBackfillStatus" style="display:none"></div>
   <div class="hdrspacer"></div>
   <button class="textbtn" id="exportBtn" title="Export the last 24 hours to an AI-ready bundle">EXPORT</button>
   <div class="hstat" id="exportStatus"></div>
@@ -423,6 +443,29 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     var el = document.getElementById('hdrClock');
     if(el) el.textContent = fmtHMS(new Date());
   }
+
+  // ---------- Loading screen (section 11 steps 2-3) ----------
+  // startBackgroundIngest (main.go) pushes step text and a percentage as
+  // the native-root scan and startup backfill progress; neither of these
+  // is a bound function the page calls, only something main.go's own
+  // w.Eval delivers into, the same way every async bdev* resolver already
+  // works in this file.
+  function hideLoadingOverlay(){
+    var overlay = document.getElementById('loadingOverlay');
+    if(overlay) overlay.classList.add('hidden');
+  }
+  window.__bdevLoadingStep = function(text, pct){
+    var stepText = document.getElementById('loadingStepText');
+    if(stepText) stepText.textContent = text;
+    var bar = document.getElementById('loadingBarFill');
+    if(bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  };
+  window.__bdevHeaderStatus = function(text){
+    var el = document.getElementById('hdrBackfillStatus');
+    if(!el) return;
+    el.textContent = text || '';
+    el.style.display = text ? '' : 'none';
+  };
 
   // agentBySessionMap must cover every session_id the chart's by_session
   // buckets can name, not just the top-level running sessions: a session
@@ -1407,9 +1450,16 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // Section 11 step 1 (startup measurement): the first full render is the
   // page's own first poll cycle finishing, not a Go-side guess, so this
   // reports back to bdevMarkFirstRender exactly once, whichever of the
-  // four initial polls below resolves last.
+  // four initial polls below resolves last. Section 11 step 3 ("show the
+  // full UI as soon as the store's existing data can render") hides the
+  // loading screen at this same point, whether or not the background
+  // backfill (startBackgroundIngest, main.go) has finished yet: this dashboard
+  // already reflects whatever the store holds right now, real history on a
+  // second launch or an honestly-empty "no sessions" on a first one, and
+  // either way the next poll cycle picks up anything backfill adds after.
   Promise.all([poll(), pollSysmonHistory(), pollBurn(), pollVendorStrip()]).then(function(){
     if(window.bdevMarkFirstRender) window.bdevMarkFirstRender();
+    hideLoadingOverlay();
   });
   pollActivityHeatmap();
 })();

@@ -413,7 +413,11 @@ func (a *app) startSampling() {
 // of its own to override it with. MonthsN matches burnmon.exe's own
 // default (2); RefreshSlow true matches its first pass, which also
 // resolves and walks WSL roots rather than waiting for a later refresh.
-func (a *app) startInitialCollect() {
+// progress, when non-nil, is section 11's own loading-screen callback
+// ("Reading sessions: N of M files"): dataset.Cache.Collect already reports
+// (done, total) across its own file scan, previously passed nil and never
+// surfaced anywhere.
+func (a *app) startInitialCollect(progress func(done, total int)) {
 	go func() {
 		defer close(a.initialCollectDone)
 		a.mu.Lock()
@@ -424,7 +428,7 @@ func (a *app) startInitialCollect() {
 			seat = "Standard"
 		}
 		opts := dataset.CollectOpts{Seat: seat, MonthsN: 2, RefreshSlow: true}
-		if _, err := a.cache.Collect(&cfg, opts, nil); err != nil {
+		if _, err := a.cache.Collect(&cfg, opts, progress); err != nil {
 			log.Println("initial collection failed:", err)
 		}
 	}()
