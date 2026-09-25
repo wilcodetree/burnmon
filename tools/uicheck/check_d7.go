@@ -10,7 +10,7 @@ import (
 // as if two different fullscreen sizes can be requested, but F11 always
 // covers whatever the real monitor's own resolution is (windowstate.go's
 // enterFullscreen sizes to MonitorFromWindow's rcMonitor, not to whatever
-// size the window happened to be beforehand) — this laptop has no monitor
+// size the window happened to be beforehand): this laptop has no monitor
 // of either named resolution to actually test against. What this check
 // verifies instead, honestly: the window resizes to each of those two
 // sizes first (a real regression case: does enter/exit-fullscreen still
