@@ -10,11 +10,13 @@ import (
 // scrollWidth > clientWidth, with the corresponding overflow axis not
 // hidden) at each of the five sizes the patch names: 1024x768, 1280x860,
 // 1152x2048, 1920x1080, 2560x1440. Every list/grid the patch touches
-// (turn ticker, activity heatmap, harness heatmap, process groups, To Do,
-// turn popup) is meant to crop to whole items instead of scrolling, so
-// this sweeps every element in the DOM rather than naming those
-// containers by hand, the same way an actual scrollbar could show up
-// anywhere a future change forgets to crop.
+// (activity heatmap, harness heatmap, process groups, To Do, turn popup)
+// is meant to crop to whole items instead of scrolling, so this sweeps
+// every element in the DOM rather than naming those containers by hand,
+// the same way an actual scrollbar could show up anywhere a future change
+// forgets to crop. #turnTicker is excluded: the headline patch (section 1)
+// made it the one deliberate exception to "no scrollbars", rows get a
+// fixed height and the box scrolls instead of cropping.
 func init() {
 	checks["d9"] = func(hwnd uintptr, args []string) error {
 		sizes := [][2]int32{{1024, 768}, {1280, 860}, {1152, 2048}, {1920, 1080}, {2560, 1440}}
@@ -30,6 +32,7 @@ func init() {
   var all = document.querySelectorAll('*');
   for (var i = 0; i < all.length; i++) {
     var el = all[i];
+    if (el.id === 'turnTicker' || el.closest('#turnTicker')) continue;
     var cs = getComputedStyle(el);
     if (cs.display === 'none') continue;
     var vOver = el.scrollHeight > el.clientHeight + 1 && cs.overflowY !== 'hidden';
