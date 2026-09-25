@@ -30,6 +30,8 @@ var (
 	procGetWindowTextW      = user32.NewProc("GetWindowTextW")
 	procIsWindow            = user32.NewProc("IsWindow")
 	procSetProcessDPIAware  = user32.NewProc("SetProcessDPIAware")
+	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
+	procAttachThreadInput   = user32.NewProc("AttachThreadInput")
 
 	procSetWindowPos = user32.NewProc("SetWindowPos")
 	procShowWindow   = user32.NewProc("ShowWindow")
@@ -205,9 +207,35 @@ func clientOrigin(hwnd uintptr) (point, error) {
 // bringToFront activates the window (needed before a key press: keyboard
 // input goes to whichever window has focus, unlike a mouse click, which
 // lands on whatever window is physically under the cursor regardless of
-// focus).
+// focus). Windows restricts a background process calling
+// SetForegroundWindow on its own (the "foreground lock" behavior) unless it
+// shares input state with whatever currently owns the foreground; since
+// uicheck.exe is exactly such an unrelated background process, that call
+// can silently do nothing on its own (ensureWindowSizeWH's own HWND_TOPMOST
+// toggle only affects z-order, not this). AttachThreadInput briefly shares
+// input state with the current foreground thread so SetForegroundWindow
+// actually takes effect, the standard workaround for this restriction; this
+// only started mattering once windowstate.go's F11 hook began gating on
+// GetForegroundWindow()==hwnd for real F11 safety (found by review,
+// 2026-09-25: check_d7.go started failing because this window was never
+// actually foreground, despite every other check's clicks/keypresses
+// working fine without needing true foreground status).
 func bringToFront(hwnd uintptr) {
+	var targetPID uint32
+	targetTID, _, _ := procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&targetPID)))
+
+	fgHwnd, _, _ := procGetForegroundWindow.Call()
+	var fgPID uint32
+	fgTID, _, _ := procGetWindowThreadProcessId.Call(fgHwnd, uintptr(unsafe.Pointer(&fgPID)))
+
+	attached := fgTID != 0 && fgTID != targetTID
+	if attached {
+		procAttachThreadInput.Call(fgTID, targetTID, 1)
+	}
 	procSetForegroundWindow.Call(hwnd)
+	if attached {
+		procAttachThreadInput.Call(fgTID, targetTID, 0)
+	}
 	time.Sleep(150 * time.Millisecond)
 }
 
@@ -320,8 +348,11 @@ func clickAt(x, y int32) error {
 	})
 }
 
-// VK_ESCAPE, the only key code W2's check needs today.
-const vkEscape = 0x1B
+// VK_ESCAPE and VK_F11 (d7's fullscreen toggle, UI review patch section 10).
+const (
+	vkEscape = 0x1B
+	vkF11    = 0x7A
+)
 
 func pressKey(vk uint16) error {
 	return sendInputs([]input{

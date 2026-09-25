@@ -18,6 +18,19 @@ body{
   font:13px/1.45 var(--mono);
   display:flex; flex-direction:column;
 }
+/* No default OS scrollbar chrome anywhere (section 10, "no horizontal
+   scroll" plus Wilco's own review: the native gray scrollbar clashed with
+   the dark theme on the harness heatmap's horizontal scroll). The turn
+   ticker and the harness heatmap still genuinely need to scroll internally
+   (more rows/columns than fit); this keeps that working via a thin,
+   theme-matched bar instead of hiding scroll entirely. WebView2 is
+   Chromium-based, so the ::-webkit-scrollbar family applies everywhere in
+   this app, not just a Safari-specific corner case. */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+::-webkit-scrollbar-corner{background:transparent}
 
 /* header, UI review patch section 1: smaller, quieter, no boxed chips */
 header{
@@ -37,10 +50,27 @@ header{
 .textbtn:hover{text-decoration:underline}
 .textbtn:disabled{opacity:.5; cursor:default; text-decoration:none}
 
-main{flex:1; min-height:0; display:flex; flex-direction:column; padding:4px; gap:4px}
-.zone{display:flex; flex-direction:column; min-height:0}
+main{flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; padding:4px; gap:4px}
+.zone{display:flex; flex-direction:column; min-height:0; min-width:0}
 .zone.burn{flex:45}
 .zone.system{flex:55; border-top:2px solid var(--bd); padding-top:4px}
+
+/* section 10, responsive: below 900px one compact column; 900-1599px one
+   column (the portrait design, the two rules above); from 1600px two
+   columns, burn left and system right, each stretching to the window's
+   full height instead of splitting it 45/55 vertically (main becomes a
+   row, so flex:45/55 above now sizes each column's width instead). */
+@media (min-width: 1600px){
+  main{flex-direction:row}
+  .zone.burn{border-right:2px solid var(--bd); padding-right:4px}
+  .zone.system{border-top:none; padding-top:0}
+}
+@media (max-width: 899px){
+  main{padding:2px; gap:2px}
+  .zonebody{padding:2px; gap:2px}
+  .cards{gap:4px}
+  .sysbottom{flex-direction:column}
+}
 .zonelabel{
   flex:0 0 auto; background:var(--panel2); border-bottom:1px solid var(--bd); color:var(--amber);
   font:700 12px/1 var(--mono); letter-spacing:.1em; padding:6px 10px; text-transform:uppercase;
@@ -114,7 +144,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .splitrow{display:flex; gap:4px; flex:0 0 auto}
 .splitrow > .panel:first-child{flex:0 0 40%; min-width:0}
 .splitrow > .panel:last-child{flex:1; min-width:0}
-@media (max-width: 900px){
+@media (max-width: 899px){
   .splitrow{flex-direction:column}
   .splitrow > .panel:first-child{flex:0 0 auto}
 }
@@ -844,10 +874,23 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   document.getElementById('turnPopupOverlay').addEventListener('click', function(e){
     if(e.target === this) closeTurnPopup();
   });
+  // Window, section 10: Esc also leaves fullscreen. F11 itself is not
+  // handled here: WebView2/Chromium reserves it as a default browser
+  // accelerator key and never lets the page's own keydown listener see it
+  // at all (confirmed empirically), so the Go side catches it directly with
+  // a global hotkey instead (installF11Hotkey, windowstate.go) rather than
+  // through this page. An open turn popup takes priority on Esc (closes the
+  // popup, does not also exit fullscreen in the same keypress);
+  // bdevExitFullscreen is always safe to call regardless, since it no-ops
+  // when the window is not fullscreen.
   document.addEventListener('keydown', function(e){
     if(e.key !== 'Escape' && e.key !== 'Esc') return;
     var overlay = document.getElementById('turnPopupOverlay');
-    if(overlay && !overlay.classList.contains('hidden')) closeTurnPopup();
+    if(overlay && !overlay.classList.contains('hidden')){
+      closeTurnPopup();
+      return;
+    }
+    if(window.bdevExitFullscreen) window.bdevExitFullscreen();
   });
 
   var lastSysmonHistory = [];
@@ -1224,6 +1267,25 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   setInterval(pollSysmonHistory, 10000);
   setInterval(renderClock, 1000);
   renderClock();
+
+  // Section 10 (responsive, "panels grow and shrink with the window"): the
+  // history canvas sets its backing-store pixel size from its container's
+  // clientWidth/clientHeight at draw time (renderHistoryChart), so a window
+  // resize between polls leaves it drawn at the OLD size while its CSS box
+  // has already grown or shrunk to the new one, stretching/blurring the
+  // existing bitmap until the next 10s poll redraws it (found visually
+  // against a real resize this session, not just in review). Re-drawing
+  // from the already-cached lastSysmonHistory on resize, debounced to one
+  // redraw per animation frame rather than once per resize event, fixes it
+  // without waiting on the next poll.
+  var histResizeRAF = null;
+  window.addEventListener('resize', function(){
+    if(histResizeRAF) return;
+    histResizeRAF = requestAnimationFrame(function(){
+      histResizeRAF = null;
+      renderHistoryChart(lastSysmonHistory);
+    });
+  });
   setupExportButton();
   // Section 11 step 1 (startup measurement): the first full render is the
   // page's own first poll cycle finishing, not a Go-side guess, so this
