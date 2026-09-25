@@ -322,6 +322,11 @@ func loadConfig(dataDir string) (pricing.Config, string) {
 // convention as an absent burnmon.json: every field keeps its default.
 type devConfig struct {
 	RetentionDays int `json:"retention_days"`
+	// MicrosoftTodoEnabled turns on section 9's Microsoft To Do panel.
+	// Off by default (the zero value): the panel makes network calls to
+	// Microsoft Graph on the user's own credentials, so it must be an
+	// explicit opt-in, not something a fresh install starts doing.
+	MicrosoftTodoEnabled bool `json:"microsoft_todo_enabled"`
 }
 
 func loadDevConfig(dataDir string) devConfig {
@@ -339,6 +344,7 @@ func loadDevConfig(dataDir string) devConfig {
 	if loaded.RetentionDays > 0 {
 		cfg.RetentionDays = loaded.RetentionDays
 	}
+	cfg.MicrosoftTodoEnabled = loaded.MicrosoftTodoEnabled
 	return cfg
 }
 

@@ -198,6 +198,17 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 #processGroups td:last-child, #processGroupsHead th:last-child{width:100%}
 .trendsvg{display:block; width:100%; height:14px}
 
+/* Microsoft To Do panel, section 9: off by default, full width, sits below
+   the two-column layout too (a sibling of main, not inside either zone). */
+.todopanel{flex:0 1 auto; max-height:200px; margin:0 4px 4px; display:none; flex-direction:column}
+.todobody{flex:1; min-height:0; overflow-y:auto; padding:6px 10px; display:flex; flex-direction:column; gap:3px}
+.todorow{display:flex; gap:8px; align-items:baseline; font:11.5px/1.4 var(--mono); white-space:nowrap; overflow:hidden}
+.todorow .due{color:var(--dim); flex:0 0 auto}
+.todorow .due.overdue{color:var(--red)}
+.todorow .title{color:var(--txt); overflow:hidden; text-overflow:ellipsis}
+.todorow .list{color:var(--dim); flex:0 0 auto}
+.tododevicecode{font-size:20px; font-weight:700; color:var(--amber); letter-spacing:.1em; margin:4px 0}
+
 @media (max-aspect-ratio: 4/5){
   header{min-height:40px}
   .hltotal{font-size:28px}
@@ -295,6 +306,10 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     </div>
   </section>
 </main>
+<section class="panel todopanel" id="todoPanel">
+  <div class="panelhead">Microsoft To Do</div>
+  <div class="todobody" id="todoBody"></div>
+</section>
 <div id="turnPopupOverlay" class="hidden">
   <div id="turnPopup">
     <button id="turnPopupClose" type="button" title="Close" aria-label="Close">&times;</button>
@@ -1259,14 +1274,116 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       .catch(function(err){ console.error('process groups poll failed', err); });
   }
 
+  // ---------- Microsoft To Do panel (section 9) ----------
+  // Off unless burnmon-dev.json sets microsoft_todo_enabled; bdevTodoStatus
+  // itself is cheap (one local file stat plus a bool), so it is fine to
+  // poll it even while the panel stays hidden, the same way this page
+  // already treats every other bdev* status call. todoState tracks what the
+  // panel is currently showing so pollTodoStatus's own 30s poll never
+  // clobbers an in-progress sign-in ("waiting for approval") with the plain
+  // sign-in button again.
+  var todoState = 'unknown'; // 'unknown' | 'signedout' | 'pending' | 'signedin'
+
+  function renderTodoTasks(items){
+    var body = document.getElementById('todoBody');
+    if(!body) return;
+    if(!items || !items.length){
+      body.innerHTML = '<div class="placeholder" style="padding:10px">No tasks due today</div>';
+      return;
+    }
+    var html = '';
+    items.forEach(function(t){
+      html += '<div class="todorow">' +
+        '<span class="due' + (t.Overdue ? ' overdue' : '') + '">' + esc(t.DueDate || '') + '</span>' +
+        '<span class="title">' + esc(t.Title) + '</span>' +
+        '<span class="list">' + esc(t.List) + '</span></div>';
+    });
+    body.innerHTML = html;
+  }
+
+  window.__bdevTodoTasksResolve = function(payload){
+    if(todoState !== 'signedin') return; // signed out or a sign-in retry raced this response
+    var body = document.getElementById('todoBody');
+    if(!body) return;
+    if(payload && payload.error){
+      body.innerHTML = '<div class="placeholder" style="padding:10px">Could not read tasks: ' + esc(payload.error) + '</div>';
+      return;
+    }
+    renderTodoTasks(payload && payload.items);
+  };
+
+  function pollTodoTasks(){
+    if(todoState !== 'signedin' || !window.bdevTodoTasks) return;
+    window.bdevTodoTasks();
+  }
+
+  // renderTodoSignIn always leaves a working Sign in button behind, even
+  // after a failed attempt (errorMsg, optional): without this, a failed or
+  // expired device code left the panel permanently stuck on a static error
+  // with no way to retry short of restarting the app, since pollTodoStatus
+  // only ever calls this once per signedout transition (found by review,
+  // 2026-09-25).
+  function renderTodoSignIn(errorMsg){
+    var body = document.getElementById('todoBody');
+    if(!body) return;
+    var errorHtml = errorMsg ? '<div class="placeholder" style="padding:4px 0">' + esc(errorMsg) + '</div>' : '';
+    body.innerHTML = errorHtml + '<button class="textbtn" id="todoSignInBtn" style="align-self:flex-start">Sign in</button>';
+    document.getElementById('todoSignInBtn').addEventListener('click', function(){
+      this.disabled = true;
+      if(!window.bdevTodoLogin) return;
+      todoState = 'pending';
+      window.bdevTodoLogin().then(function(info){
+        if(todoState !== 'pending') return; // status poll already moved on
+        body.innerHTML = '<div>' + esc(info.message) + '</div>' +
+          '<div class="tododevicecode">' + esc(info.user_code) + '</div>' +
+          '<div class="dim">Waiting for approval&hellip; a browser window should already be open.</div>';
+      }).catch(function(e){
+        todoState = 'signedout';
+        renderTodoSignIn('Sign-in failed: ' + (e && e.message ? e.message : String(e)));
+      });
+    });
+  }
+
+  window.__bdevTodoLoginResolve = function(result){
+    if(!result || !result.ok){
+      todoState = 'signedout';
+      renderTodoSignIn('Sign-in failed' + (result && result.error ? ': ' + result.error : ''));
+      return;
+    }
+    todoState = 'signedin';
+    pollTodoTasks();
+  };
+
+  function pollTodoStatus(){
+    if(!window.bdevTodoStatus) return;
+    window.bdevTodoStatus().then(function(status){
+      var panel = document.getElementById('todoPanel');
+      if(!panel) return;
+      if(!status || !status.enabled){
+        panel.style.display = 'none';
+        todoState = 'unknown';
+        return;
+      }
+      panel.style.display = 'flex';
+      if(status.signed_in){
+        if(todoState !== 'signedin'){ todoState = 'signedin'; pollTodoTasks(); }
+      } else if(todoState !== 'pending'){
+        if(todoState !== 'signedout'){ todoState = 'signedout'; renderTodoSignIn(); }
+      }
+    }).catch(function(err){ console.error('bdevTodoStatus failed', err); });
+  }
+
   setInterval(poll, 2000);
   setInterval(pollBurn, 2000);
   setInterval(pollProcessGroups, 10000);
   setInterval(pollVendorStrip, 60000);
   setInterval(pollActivityHeatmap, 60000);
   setInterval(pollSysmonHistory, 10000);
+  setInterval(pollTodoStatus, 30000);
+  setInterval(pollTodoTasks, 300000);
   setInterval(renderClock, 1000);
   renderClock();
+  pollTodoStatus();
 
   // Section 10 (responsive, "panels grow and shrink with the window"): the
   // history canvas sets its backing-store pixel size from its container's
