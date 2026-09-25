@@ -157,12 +157,26 @@ func main() {
 	wv2Dir := filepath.Join(dataDir, "wv2-dev")
 	_ = os.MkdirAll(wv2Dir, 0o755)
 
+	// Window, section 10: first launch is a normal 1280x860 window,
+	// centered; every launch after that remembers size, position, maximized
+	// state and monitor, restoring them only if that monitor still exists
+	// (windowstate.go). WindowOptions has no X/Y field, so a restored
+	// window is created at this same default size/center and then
+	// immediately repositioned via applyWindowState below; a very brief
+	// visible jump to the default rect is an accepted tradeoff of
+	// go-webview2's WebView interface having no "create hidden, then show"
+	// hook to avoid it.
+	savedState, hasSavedState := loadWindowState(dataDir)
+	initialWidth, initialHeight := uint(1280), uint(860)
+	if hasSavedState {
+		initialWidth, initialHeight = uint(savedState.Width), uint(savedState.Height)
+	}
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath: wv2Dir,
 		WindowOptions: webview2.WindowOptions{
 			Title:  windowTitle,
-			Width:  1152,
-			Height: 2048,
+			Width:  initialWidth,
+			Height: initialHeight,
 			Center: true,
 			IconId: 1, // matches the "#1" icon group winres/burnmon-dev.json embeds
 		},
@@ -171,7 +185,38 @@ func main() {
 		log.Println("could not create the WebView2 window; BurnMon Dev needs the WebView2 runtime")
 		return
 	}
+	hwnd := uintptr(w.Window())
+	if hasSavedState {
+		applyWindowState(hwnd, savedState)
+	}
+
+	// F11 toggles fullscreen, Esc also leaves it (section 10). fs is this
+	// window's own fullscreen state (windowstate.go), declared before
+	// startWindowStateSaver so that goroutine can skip saving while
+	// fullscreen (its own doc comment explains why). Esc reaches
+	// bdevExitFullscreen through the page's own keydown handler, same as any
+	// other binding; F11 does not, since WebView2/Chromium reserves it as a
+	// default browser accelerator key and never lets the DOM see it at all
+	// (found empirically this session) - installF11Hotkey works around that
+	// with a global hotkey plus a thread-local message hook instead (see its
+	// own doc comment, windowstate.go), so bdevToggleFullscreen below is
+	// only reachable from the uicheck dev eval channel, not from a real F11
+	// keypress.
+	fs := &fullscreenState{}
+	startWindowStateSaver(hwnd, dataDir, fs)
 	startupMark("window created")
+
+	installF11Hotkey(hwnd, fs)
+	if err := w.Bind("bdevToggleFullscreen", func() {
+		toggleFullscreen(hwnd, fs)
+	}); err != nil {
+		log.Println("could not bind bdevToggleFullscreen:", err)
+	}
+	if err := w.Bind("bdevExitFullscreen", func() {
+		exitFullscreen(hwnd, fs)
+	}); err != nil {
+		log.Println("could not bind bdevExitFullscreen:", err)
+	}
 
 	// bdevMarkFirstRender: page.html calls this once, after its very first
 	// poll cycle (sysmon, burn, vendor strip) has all resolved and painted,
