@@ -29,6 +29,8 @@ import (
 	"burnmon/internal/schema"
 	"burnmon/internal/store"
 	"burnmon/internal/sysmon"
+	"burnmon/internal/todo"
+	"burnmon/internal/vendorstrip"
 	"burnmon/internal/watch"
 )
 
@@ -107,6 +109,32 @@ type app struct {
 	// closedDayRows saw on that first call, potentially a half-backfilled
 	// store, and then never rebuilt until the next UTC midnight).
 	initialCollectDone chan struct{}
+
+	// slowMu guards every "slow data" cache the shared render tick
+	// (no-scroll patch section 5, bdevSnapshotNow in main.go) reads but
+	// never itself recomputes: vendor strip and the activity heatmap
+	// refresh every 60s, process-groups history (also the harness heatmap's
+	// own source) every 10s, Microsoft To Do status every 30s and its task
+	// list every 300s (startSlowRefreshers, this file) - the same cadences
+	// this app used to poll each of these from the page directly, just
+	// moved server-side so every panel still paints from one snapshot per
+	// tick instead of resolving independently.
+	slowMu                 sync.Mutex
+	vendorStripCache       vendorstrip.Payload
+	heatmapRowsCache       []history.Row
+	processGroupsHistCache []sysmon.ProcessGroupSample
+	todoStatusCache        todoStatusPayload
+	todoTasksCache         todoTasksPayload
+	// todoStatusGen guards a real (if narrow) race between the 30s status
+	// loop below and bdevTodoLogin's own success path (main.go): both write
+	// todoStatusCache from an independent read of the outside world (a disk
+	// check here, "FinishLogin just returned nil" there), so a loop pass
+	// that started its own disk read moments before a fresh sign-in could
+	// otherwise still land after it and overwrite Signed:true with a stale
+	// Signed:false. Bumped on every write; a writer that finds this has
+	// moved since it started skips its own write rather than clobbering a
+	// fresher one (found by review, 2026-09-25).
+	todoStatusGen int
 }
 
 // closedDayRows returns the per-day token/cost rows for every day strictly
@@ -327,10 +355,14 @@ type devConfig struct {
 	// Microsoft Graph on the user's own credentials, so it must be an
 	// explicit opt-in, not something a fresh install starts doing.
 	MicrosoftTodoEnabled bool `json:"microsoft_todo_enabled"`
+	// RefreshMs (no-scroll patch section 5) is the page's one shared
+	// render tick, default 2000, floored at 1000: every panel repaints
+	// from one bdevSnapshotNow call on this cadence, no faster.
+	RefreshMs int `json:"refresh_ms"`
 }
 
 func loadDevConfig(dataDir string) devConfig {
-	cfg := devConfig{RetentionDays: 7}
+	cfg := devConfig{RetentionDays: 7, RefreshMs: 2000}
 	path := filepath.Join(dataDir, "burnmon-dev.json")
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -345,18 +377,29 @@ func loadDevConfig(dataDir string) devConfig {
 		cfg.RetentionDays = loaded.RetentionDays
 	}
 	cfg.MicrosoftTodoEnabled = loaded.MicrosoftTodoEnabled
+	if loaded.RefreshMs > 0 {
+		cfg.RefreshMs = loaded.RefreshMs
+	}
+	if cfg.RefreshMs < 1000 {
+		cfg.RefreshMs = 1000
+	}
 	return cfg
 }
 
-// startSampling ticks the live sampler every 2s, keeping the latest sample
-// in memory for bdevSysmonNow, and persists every 5th tick (10s) to
-// burnmon-dev.db, per the design doc's sampling cadence. The same tick
-// also runs the process-group sampler (harness CPU/RAM/IO), on the same
-// cadence: perfadvisor's own live TUI already proves a full process scan
-// once a second is affordable, so once every 2s is not a new cost class.
-func (a *app) startSampling() {
+// startSampling ticks the live sampler on interval (no-scroll patch section
+// 5: "align system sampling to the same 2s tick" - interval is
+// devCfg.RefreshMs, so a custom refresh_ms moves this cadence too, not just
+// the page's own render tick), keeping the latest sample in memory for
+// bdevSnapshotNow, and persists every 5th tick to burnmon-dev.db, per the
+// design doc's original 10s-at-2s-ticks sampling cadence (this scales the
+// same way: 5 ticks, whatever interval a tick now is). The same tick also
+// runs the process-group sampler (harness CPU/RAM/IO), on the same cadence:
+// perfadvisor's own live TUI already proves a full process scan once a
+// second is affordable, so once every 2s (the default) is not a new cost
+// class.
+func (a *app) startSampling(interval time.Duration) {
 	go func() {
-		ticker := time.NewTicker(2 * time.Second)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		tick := 0
 		firstSample := true
@@ -453,6 +496,158 @@ func (a *app) startRetentionPrune(retentionDays int) {
 			prune()
 		}
 	}()
+}
+
+// startSlowRefreshers runs the background loop behind every "slow data"
+// cache bdevSnapshotNow reads (no-scroll patch section 5, "may be fetched
+// less often in the background, but is only painted on the shared tick"):
+// vendor strip and the activity heatmap refresh every 60s, process-groups
+// history (also the harness heatmap's own source) every 10s, and Microsoft
+// To Do status every 30s / its task list every 300s - the same cadences
+// this app used to poll each of these from the page directly, just moved
+// server-side so every panel still paints from one snapshot per render
+// tick instead of resolving independently. Each refresher runs once
+// synchronously here before its own ticker starts, so the very first
+// render tick already has real data rather than an empty cache for up to a
+// whole cadence; the status loop is registered (and so runs its own first
+// synchronous pass) before the task loop, so that first task refresh
+// already sees a populated todoStatusCache rather than the zero value.
+func (a *app) startSlowRefreshers(st *store.Store, devCfg devConfig) {
+	loop := func(interval time.Duration, fn func()) {
+		fn()
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for range ticker.C {
+				fn()
+			}
+		}()
+	}
+
+	loop(60*time.Second, func() {
+		a.mu.Lock()
+		cfg := a.cfg
+		a.mu.Unlock()
+		payload, err := vendorstrip.Build(st, &cfg, time.Now())
+		if err != nil {
+			log.Println("slow refresh: vendor strip:", err)
+			return
+		}
+		a.slowMu.Lock()
+		a.vendorStripCache = payload
+		a.slowMu.Unlock()
+	})
+
+	loop(60*time.Second, func() {
+		a.mu.Lock()
+		cfg := a.cfg
+		a.mu.Unlock()
+		rows, err := a.activityHeatmapRows(st, &cfg)
+		if err != nil {
+			log.Println("slow refresh: activity heatmap:", err)
+			return
+		}
+		a.slowMu.Lock()
+		a.heatmapRowsCache = rows
+		a.slowMu.Unlock()
+	})
+
+	loop(10*time.Second, func() {
+		since := time.Now().Add(-60 * time.Minute)
+		rows, err := a.sys.RecentProcessGroups(since)
+		if err != nil {
+			log.Println("slow refresh: process groups history:", err)
+			return
+		}
+		a.slowMu.Lock()
+		a.processGroupsHistCache = rows
+		a.slowMu.Unlock()
+	})
+
+	if !devCfg.MicrosoftTodoEnabled {
+		return
+	}
+	loop(30*time.Second, func() {
+		a.slowMu.Lock()
+		genBefore := a.todoStatusGen
+		wasSignedIn := a.todoStatusCache.SignedIn
+		a.slowMu.Unlock()
+
+		signedIn := todo.SignedIn() // a disk read, deliberately outside the lock
+
+		a.slowMu.Lock()
+		if a.todoStatusGen == genBefore {
+			// Nothing else (bdevTodoLogin) wrote in the meantime; this
+			// read is still the freshest information available.
+			a.todoStatusCache = todoStatusPayload{Enabled: true, SignedIn: signedIn}
+			a.todoStatusGen++
+		} else {
+			// A fresher write landed while signedIn was being read (most
+			// likely bdevTodoLogin's own success path); trust that one
+			// instead of overwriting it with this now-stale read.
+			signedIn = a.todoStatusCache.SignedIn
+		}
+		a.slowMu.Unlock()
+		if signedIn && !wasSignedIn {
+			a.refreshTodoTasks() // a fresh sign-in shows tasks immediately, not up to 300s later
+		}
+	})
+	loop(300*time.Second, func() {
+		a.slowMu.Lock()
+		signedIn := a.todoStatusCache.SignedIn
+		a.slowMu.Unlock()
+		if signedIn {
+			a.refreshTodoTasks()
+		}
+	})
+}
+
+// activityHeatmapRows is bdevActivityHeatmap's own former body (UI review
+// patch phase 2b): closedDayRows' own cached 182-day pass plus a fresh
+// query for today alone, merged. Now run by startSlowRefreshers'
+// background ticker instead of once per page poll.
+func (a *app) activityHeatmapRows(st *store.Store, cfg *pricing.Config) ([]history.Row, error) {
+	closed, today, dayStart, _, err := a.closedDayRows(st, cfg)
+	if err != nil {
+		return nil, err
+	}
+	todayEvents, err := st.EventsSince(dayStart)
+	if err != nil {
+		return nil, err
+	}
+	todayPayload := history.Build(todayEvents, cfg, history.Filter{Period: "day"})
+
+	rows := make([]history.Row, 0, len(closed)+1)
+	rows = append(rows, closed...)
+	foundToday := false
+	for _, r := range todayPayload.Rows {
+		if r.Key == today {
+			rows = append(rows, r)
+			foundToday = true
+		}
+	}
+	if !foundToday {
+		rows = append(rows, history.Row{Key: today})
+	}
+	return rows, nil
+}
+
+// refreshTodoTasks fetches today's Microsoft To Do tasks and caches them
+// for the shared render tick to paint. Unconditional (callers decide
+// whether signed in first): called by startSlowRefreshers' own 300s loop
+// and its post-sign-in transition above, and directly by bdevTodoLogin
+// (main.go) right after a successful interactive sign-in, so the page
+// shows real tasks on its very next tick instead of waiting up to 300s.
+func (a *app) refreshTodoTasks() todoTasksPayload {
+	items, err := todo.TodayTasks()
+	payload := todoTasksPayload{Items: items}
+	if err != nil {
+		payload.Error = err.Error()
+	}
+	a.slowMu.Lock()
+	a.todoTasksCache = payload
+	a.slowMu.Unlock()
+	return payload
 }
 
 // ---------------------------------------------------------------------------

@@ -167,17 +167,33 @@ func main() {
 		st: st, cfg: cfg, initialCollectDone: make(chan struct{}),
 	}
 	a.cache.Store = st
-	a.startSampling()
+	a.startSampling(time.Duration(devCfg.RefreshMs) * time.Millisecond)
 	a.startRetentionPrune(devCfg.RetentionDays)
+	// Backgrounded (found by review, 2026-09-25): startSlowRefreshers' own
+	// first pass per cache runs synchronously before that cache's own
+	// ticker starts (app.go's own doc comment), which is exactly right for
+	// ordering between the To Do status and task loops, but wrong called
+	// straight from main() - it ran a full 182-day activityHeatmapRows scan
+	// (3.34s against a cold cache, closedDayRows' own comment) plus a
+	// vendor-strip build, a process-groups query and up to two Microsoft
+	// Graph calls before the window even existed, silently reintroducing
+	// the same "blocks window creation" problem section 11 moved the
+	// native-root scan and startup backfill off of. bdevSnapshotNow below
+	// tolerates empty caches fine (the loading screen covers the gap, the
+	// same as any other startBackgroundIngest step), so there is nothing
+	// here the window needs to wait for.
+	go a.startSlowRefreshers(st, devCfg)
 
 	// Section 11 steps 2-3: the native-root scan (measured this session at
 	// ~13.7s of this app's own ~17.4s "watcher and pollers started" mark,
 	// almost all of the gap before the pre-patch window even appeared) and
 	// the startup backfill both move into startBackgroundIngest below,
 	// launched only once the window and its loading screen already exist,
-	// instead of blocking window creation itself. bdevBurnNow/bdevVendorStrip
-	// /etc. only ever need a.st/a.cache/a.sys, all already set above, so
-	// none of the bindings below need to wait for this.
+	// instead of blocking window creation itself. bdevSnapshotNow below only
+	// ever needs a.st/a.cache/a.sys/a.slowMu's own caches, all already set
+	// up by the time it is bound, so none of the bindings below need to
+	// wait for this (startSlowRefreshers above is likewise backgrounded, for
+	// the same reason).
 
 	wv2Dir := filepath.Join(dataDir, "wv2-dev")
 	_ = os.MkdirAll(wv2Dir, 0o755)
@@ -243,10 +259,11 @@ func main() {
 		log.Println("could not bind bdevExitFullscreen:", err)
 	}
 
-	// bdevMarkFirstRender: page.html calls this once, after its very first
-	// poll cycle (sysmon, burn, vendor strip) has all resolved and painted,
-	// so "first full render" is measured from the page's own perspective
-	// rather than guessed at from the Go side.
+	// bdevMarkFirstRender: page.html calls this once, as soon as its very
+	// first shared render tick's bdevSnapshotNow call resolves (section 5;
+	// the actual paint follows immediately after, in the same
+	// requestAnimationFrame), so "first full render" is measured from the
+	// page's own perspective rather than guessed at from the Go side.
 	if err := w.Bind("bdevMarkFirstRender", func() {
 		startupMark("first full render")
 	}); err != nil {
@@ -263,84 +280,90 @@ func main() {
 		PressureScore int     `json:"pressure_score"`
 		BaseClockGHz  float64 `json:"base_clock_ghz"`
 	}
-	if err := w.Bind("bdevSysmonNow", func() (sysmonNowPayload, error) {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		return sysmonNowPayload{
-			Sample: a.latest, PressureScore: sysmon.PressureScore(a.latest),
-			BaseClockGHz: sysmon.BaseClockGHz(),
-		}, nil
-	}); err != nil {
-		log.Println("could not bind bdevSysmonNow:", err)
-	}
 
-	// bdevProcessGroupsNow: the process-groups table's current row per
-	// harness, the latest 2s tick's sums (design doc section 3).
-	if err := w.Bind("bdevProcessGroupsNow", func() ([]sysmon.ProcessGroupSample, error) {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		return a.latestGroups, nil
-	}); err != nil {
-		log.Println("could not bind bdevProcessGroupsNow:", err)
+	// snapshotPayload is bdevSnapshotNow's own return shape (no-scroll patch
+	// section 5): one call, once per render tick, carries everything every
+	// panel needs, so the page renders all of them inside a single
+	// requestAnimationFrame instead of each panel resolving its own
+	// independent poll. Now is the tick's own shared instant, computed once
+	// here and reused for every time-axis field below (Burn, SysmonHistory),
+	// so the burn chart and system history both shift left together rather
+	// than each reading a slightly different time.Now(); the harness
+	// heatmap (ProcessGroupsHistory) is one of the slow caches below, so its
+	// own data can lag by up to its own refresh cadence, but page.html still
+	// anchors its right edge to this same Now (passed through the snapshot)
+	// so it visibly shifts on the same beat even between refreshes, rather
+	// time.Now(). VendorStrip/ActivityHeatmap/ProcessGroupsHistory/Todo/
+	// TodoTasks are read straight from app's own slow-refresh caches
+	// (startSlowRefreshers, app.go) rather than recomputed on this tick.
+	type snapshotPayload struct {
+		Now                  int64                       `json:"now"`
+		RefreshMs            int                         `json:"refresh_ms"`
+		Sysmon               sysmonNowPayload             `json:"sysmon"`
+		SysmonHistory        []sysmon.Sample              `json:"sysmon_history"`
+		ProcessGroupsNow     []sysmon.ProcessGroupSample  `json:"process_groups_now"`
+		ProcessGroupsHistory []sysmon.ProcessGroupSample  `json:"process_groups_history"`
+		Burn                 live.Snapshot                `json:"burn"`
+		VendorStrip          vendorstrip.Payload          `json:"vendor_strip"`
+		ActivityHeatmap      heatmapPayload               `json:"activity_heatmap"`
+		Todo                 todoStatusPayload            `json:"todo"`
+		TodoTasks            todoTasksPayload             `json:"todo_tasks"`
 	}
+	if err := w.Bind("bdevSnapshotNow", func() (snapshotPayload, error) {
+		now := time.Now()
 
-	// bdevProcessGroupsHistory: the same table's per-harness sparklines and
-	// the harness x minute heatmap both read from this one call (the page
-	// buckets the raw 10s rows into 1-minute columns itself; the dataset is
-	// small enough - a handful of harnesses times 6 rows/minute - that a
-	// second Go-side aggregation buys nothing a client-side one doesn't
-	// already do just as cheaply).
-	if err := w.Bind("bdevProcessGroupsHistory", func(sinceMinutes int) ([]sysmon.ProcessGroupSample, error) {
-		if sinceMinutes <= 0 {
-			sinceMinutes = 60
-		}
-		since := time.Now().Add(-time.Duration(sinceMinutes) * time.Minute)
-		rows, err := sys.RecentProcessGroups(since)
-		if err != nil {
-			log.Println("bdevProcessGroupsHistory:", err)
-			return nil, err
-		}
-		return rows, nil
-	}); err != nil {
-		log.Println("could not bind bdevProcessGroupsHistory:", err)
-	}
-
-	if err := w.Bind("bdevSysmonHistory", func(sinceSeconds int) ([]sysmon.Sample, error) {
-		if sinceSeconds <= 0 {
-			sinceSeconds = 1800
-		}
-		since := time.Now().Add(-time.Duration(sinceSeconds) * time.Second)
-		samples, err := sys.RecentSamples(since)
-		if err != nil {
-			log.Println("bdevSysmonHistory:", err)
-			return nil, err
-		}
-		return samples, nil
-	}); err != nil {
-		log.Println("could not bind bdevSysmonHistory:", err)
-	}
-
-	// bdevBurnNow: the burn zone's chart, session cards and turn ticker, all
-	// from live.Snapshot, reused directly against the shared store (same
-	// windowed EventsSince plus ApplySessionTotals cmd\burnmon\main.go's own
-	// bmLive binding runs). Polled every 2s by the page, same cadence as
-	// bmLive on the Now page.
-	if err := w.Bind("bdevBurnNow", func() (live.Snapshot, error) {
 		a.mu.Lock()
 		cfg := a.cfg
+		latest := a.latest
+		latestGroups := a.latestGroups
 		a.mu.Unlock()
-		now := time.Now()
+
+		a.slowMu.Lock()
+		vendorStrip := a.vendorStripCache
+		heatmapRows := a.heatmapRowsCache
+		groupsHistory := a.processGroupsHistCache
+		todoStatus := a.todoStatusCache
+		todoTasks := a.todoTasksCache
+		a.slowMu.Unlock()
+
+		// A failed query here returns the error (skipping this whole tick's
+		// paint, section 5's own "if a tick's data is late, skip that paint
+		// rather than painting part of the panels" - the same rule applies
+		// to a failed one) rather than logging and continuing with a nil
+		// history, which would have painted every other panel while system
+		// history alone silently went blank (found by review, 2026-09-25).
+		sysHistory, err := sys.RecentSamples(now.Add(-live.ChartWindow))
+		if err != nil {
+			return snapshotPayload{}, err
+		}
+
 		events, err := st.EventsSince(now.Add(-live.ChartWindow))
 		if err != nil {
-			return live.Snapshot{}, err
+			return snapshotPayload{}, err
 		}
-		snap := live.BuildSnapshot(events, &cfg, now)
-		if err := live.ApplySessionTotals(snap.Sessions, st, &cfg); err != nil {
-			log.Println("bdevBurnNow: session totals:", err)
+		burn := live.BuildSnapshot(events, &cfg, now)
+		if err := live.ApplySessionTotals(burn.Sessions, st, &cfg); err != nil {
+			log.Println("bdevSnapshotNow: session totals:", err)
 		}
-		return snap, nil
+
+		return snapshotPayload{
+			Now:       now.UnixMilli(),
+			RefreshMs: devCfg.RefreshMs,
+			Sysmon: sysmonNowPayload{
+				Sample: latest, PressureScore: sysmon.PressureScore(latest),
+				BaseClockGHz: sysmon.BaseClockGHz(),
+			},
+			SysmonHistory:        sysHistory,
+			ProcessGroupsNow:     latestGroups,
+			ProcessGroupsHistory: groupsHistory,
+			Burn:                 burn,
+			VendorStrip:          vendorStrip,
+			ActivityHeatmap:      heatmapPayload{Rows: heatmapRows},
+			Todo:                 todoStatus,
+			TodoTasks:            todoTasks,
+		}, nil
 	}); err != nil {
-		log.Println("could not bind bdevBurnNow:", err)
+		log.Println("could not bind bdevSnapshotNow:", err)
 	}
 
 	// bdevTurnDetail: the turn ticker's click-through popup (UI review patch
@@ -380,85 +403,11 @@ func main() {
 		log.Println("could not bind bdevTurnDetail:", err)
 	}
 
-	// bdevVendorStrip: today/week/month per vendor, reused directly, same
-	// 1-minute-cadence data cmd\burnmon's own bmVendorStrip binding builds.
-	if err := w.Bind("bdevVendorStrip", func() (vendorstrip.Payload, error) {
-		a.mu.Lock()
-		cfg := a.cfg
-		a.mu.Unlock()
-		return vendorstrip.Build(st, &cfg, time.Now())
-	}); err != nil {
-		log.Println("could not bind bdevVendorStrip:", err)
-	}
-
-	// bdevActivityHeatmap: phase 2b's "N active days" grid, design doc
-	// section 9. Wilco's own finding (2026-09-24): the original version
-	// ran a fresh 182-day EventsSince plus history.Build on every 1-minute
-	// poll, 3.34s for 52,728 rows against the real store, about 5.5 percent
-	// of one core on average, alone over this workstream's 2 percent CPU
-	// target (moving it off the UI thread, done in the same commit that
-	// first added it, fixed the freeze but not that CPU cost). Every day
-	// except today is closed, its events never change once the day is
-	// over, so app.closedDayRows caches the 182-day pass and only
-	// recomputes it once per UTC day (and only once the startup backfill
-	// has finished, see closedDayRows' own comment); this binding now runs
-	// that (cheap on every call except the rare day-rollover/pre-backfill
-	// one) plus a fresh query for today alone (a single day's rows, not
-	// 182), and merges the two. dayStart comes back from closedDayRows
-	// itself rather than a second time.Now() call, so the two queries
-	// can never straddle different UTC days (fixed after review). Runs
-	// off the UI thread and resolves through bdevAsyncResolveJS for the
-	// same reason as before: even the cheap path still touches the store.
-	if err := w.Bind("bdevActivityHeatmap", func() {
-		go func() {
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			start := time.Now()
-
-			closed, today, dayStart, cacheHit, err := a.closedDayRows(st, &cfg)
-			if err != nil {
-				log.Println("bdevActivityHeatmap: closedDayRows:", err)
-				return
-			}
-
-			todayEvents, err := st.EventsSince(dayStart)
-			if err != nil {
-				log.Println("bdevActivityHeatmap: EventsSince(today):", err)
-				return
-			}
-			todayPayload := history.Build(todayEvents, &cfg, history.Filter{Period: "day"})
-
-			rows := make([]history.Row, 0, len(closed)+1)
-			rows = append(rows, closed...)
-			foundToday := false
-			for _, r := range todayPayload.Rows {
-				if r.Key == today {
-					rows = append(rows, r)
-					foundToday = true
-				}
-			}
-			if !foundToday {
-				rows = append(rows, history.Row{Key: today})
-			}
-
-			if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
-				state := "closed cache miss, rebuilt"
-				if cacheHit {
-					state = "closed cache hit"
-				}
-				log.Printf("bdevActivityHeatmap: %v (%s, %d today rows scanned)", elapsed, state, len(todayEvents))
-			}
-			js, err := bdevAsyncResolveJS("__bdevActivityHeatmapResolve", heatmapPayload{Rows: rows})
-			if err != nil {
-				log.Println("bdevActivityHeatmap: encode result:", err)
-				return
-			}
-			w.Dispatch(func() { w.Eval(js) })
-		}()
-	}); err != nil {
-		log.Println("could not bind bdevActivityHeatmap:", err)
-	}
+	// bdevVendorStrip/bdevActivityHeatmap are gone: no-scroll patch section 5
+	// moves both onto startSlowRefreshers' own background cadence (app.go),
+	// read from a.vendorStripCache/a.heatmapRowsCache by bdevSnapshotNow
+	// above instead of recomputed per call. activityHeatmapRows (app.go) is
+	// this binding's own former body, moved verbatim.
 
 	// bdevCacheBreakdown: phase 2b's click-to-expand cache-hit breakdown,
 	// scoped to vendor-strip (harness) rows, design doc section 9. Today's
@@ -541,12 +490,9 @@ func main() {
 	// touched by the export bundle or any log line - task titles are
 	// personal data the design doc's "never in exports, logs or
 	// screenshots" line covers by this package simply never being imported
-	// from that path, not by a redaction rule.
-	if err := w.Bind("bdevTodoStatus", func() todoStatusPayload {
-		return todoStatusPayload{Enabled: devCfg.MicrosoftTodoEnabled, SignedIn: todo.SignedIn()}
-	}); err != nil {
-		log.Println("could not bind bdevTodoStatus:", err)
-	}
+	// from that path, not by a redaction rule. bdevTodoStatus is gone: its
+	// periodic poll moves onto startSlowRefreshers' own 30s cadence
+	// (app.go), read from a.todoStatusCache by bdevSnapshotNow above.
 
 	// bdevTodoLogin: StartLogin is one fast HTTP call, so this returns
 	// synchronously with the code/URL to show; the browser opens
@@ -554,7 +500,10 @@ func main() {
 	// interactive "type this code in your browser" wait) runs in a
 	// goroutine, resolving through bdevAsyncResolveJS once the user
 	// actually approves it (or it times out), the same pattern every other
-	// slow bdev* binding in this file already uses.
+	// slow bdev* binding in this file already uses. On success this also
+	// updates a.todoStatusCache and fetches tasks immediately, so the very
+	// next render tick already shows signed-in with real tasks rather than
+	// waiting on startSlowRefreshers' own 30s status loop to notice.
 	if err := w.Bind("bdevTodoLogin", func() (todoLoginStartPayload, error) {
 		if !devCfg.MicrosoftTodoEnabled {
 			return todoLoginStartPayload{}, fmt.Errorf("Microsoft To Do is not enabled")
@@ -569,6 +518,12 @@ func main() {
 			payload := todoLoginDonePayload{OK: loginErr == nil}
 			if loginErr != nil {
 				payload.Error = loginErr.Error()
+			} else {
+				a.slowMu.Lock()
+				a.todoStatusCache = todoStatusPayload{Enabled: true, SignedIn: true}
+				a.todoStatusGen++
+				a.slowMu.Unlock()
+				a.refreshTodoTasks()
 			}
 			js, jerr := bdevAsyncResolveJS("__bdevTodoLoginResolve", payload)
 			if jerr != nil {
@@ -582,29 +537,12 @@ func main() {
 		log.Println("could not bind bdevTodoLogin:", err)
 	}
 
-	// bdevTodoTasks: TodayTasks makes one or more Graph HTTP calls, off the
-	// UI thread for the same reason every other network/store-touching
-	// binding here is.
-	if err := w.Bind("bdevTodoTasks", func() {
-		if !devCfg.MicrosoftTodoEnabled {
-			return
-		}
-		go func() {
-			items, err := todo.TodayTasks()
-			payload := todoTasksPayload{Items: items}
-			if err != nil {
-				payload.Error = err.Error()
-			}
-			js, jerr := bdevAsyncResolveJS("__bdevTodoTasksResolve", payload)
-			if jerr != nil {
-				log.Println("bdevTodoTasks: encode result:", jerr)
-				return
-			}
-			w.Dispatch(func() { w.Eval(js) })
-		}()
-	}); err != nil {
-		log.Println("could not bind bdevTodoTasks:", err)
-	}
+	// bdevTodoTasks is gone: the page no longer calls it directly. On a
+	// successful sign-in, bdevTodoLogin above already calls
+	// a.refreshTodoTasks() itself, and every other refresh comes from
+	// startSlowRefreshers' own 300s background loop (app.go); either way,
+	// the page just paints whatever bdevSnapshotNow's own todo_tasks field
+	// carries on its next tick.
 
 	startUICheckServer(w)
 
