@@ -330,3 +330,97 @@ store or SQL: every number below comes from a package the burn zone already call
   the vendor strip has no model dimension today, and phase 2b does not add one (that
   would be a new panel outside this section's brief items, not a reuse of an existing
   one): a ruling, not a silent narrowing, recorded here per house process.
+
+## 11. UI review patch (2026-09-25), sections 1-11
+
+Plan: `02_roadmap\2026-09-25_ws2_ui_review_patch.md`, which overrides this note and the
+phase 0-4 plan wherever they differ. Not a phase re-run: a review pass over the shipped
+phase 0-4 UI. Written after the code, not before, per this session's own read order; the
+corrections below are this session's own findings, not a separate design step.
+
+- **Header (section 1)** is now small and quiet: plain `PRESSURE nn` text under the
+  wordmark (no chip box), a bare headline total (no "tok today"/week/month sub-line, moved
+  to the vendor strip's own totals row), inline dim stats, `EXPORT` as a text button. The
+  search input (`/cmd`) is gone; nothing in this codebase ever wired it to anything, so
+  nothing else needed to change.
+- **Burn chart (section 2)** stacks by session now, not by harness: `AGENT_COLOR` still
+  picks the base color per harness, but each session inside that harness gets its own
+  shade (`shadeColor`, an HSL-free RGB lighten/darken by a fixed offset table) so two
+  concurrent sessions of the same harness are visually distinct. The CPU line overlay
+  (`renderCPULine`, the `#cpuLine` SVG) is deleted outright, per Wilco's own "bars only"
+  ruling; the turn-marker SVG overlay is unchanged. An `HH:mm` axis row draws under the
+  bars every 5 minutes, from the chart's own bucket timestamps (always 30 slots, section
+  2's own "with no sessions, still draw the empty axis" is automatic since `buildChart`
+  always returns a full window regardless of events).
+- **Section 2.2's "not wired yet" tabbed secondary viewport is superseded**, not fixed: the
+  UI review patch's own section 10 replaces the phase 1-2 two-viewport plan (1152x2048
+  primary, 1024x1152 secondary, one CSS layout shared by both) with three width
+  breakpoints instead (below 900px one compact column, 900-1599px one column, 1600px+ two
+  columns, burn left/system right, each full height rather than a 45/55 vertical split).
+  The system zone no longer scrolls at 1024x1152 in this new layout (measured this
+  session); no tabs were ever built, and none are needed now.
+- **Vendor strip (section 3)**: a bold `Total` row, pinned to the top via `insertBefore` on
+  every render (created once, like the per-vendor rows, so `animateNumber`'s tween state
+  survives). Header cells and numeric cells right-align by default now (`th{text-align:
+  right}`, `th:first-child{text-align:left}`), a page-wide change also used by the process
+  -groups table (section 7).
+- **Activity heatmap and the harness x minute heatmap (section 4)** now share one flex row
+  (`.splitrow`, 40/60), stacking below 900px. Both heatmaps' own rendering is unchanged;
+  only their container moved.
+- **Turn ticker (section 5)**: capped at 50 (was 30), one amber-outlined `.tag` box
+  regardless of finding kind (was four separate finding colors; the chart's own turn
+  markers keep their per-kind colors, only the ticker's badge changed), tokens in white,
+  row hover, and a click-through popup (`#turnPopupOverlay`) - the burnmon-dev equivalent
+  of burnmon.exe's own turn drawer (`internal/report/template.html`'s `renderTurnDrawer`,
+  read for reference, restyled rather than reused verbatim). New `live.TurnDetail.Cost`
+  field (populated via the package's own existing `turnCost` helper) and a `bdevTurnDetail`
+  binding, mirroring `cmd\burnmon\main.go`'s `bmTurn` async-resolve pattern with a
+  session-id:turn key so a fast second click cannot have its response overwritten by a
+  slower first one (`currentTurnKey` guard, page.html).
+- **System panel (section 6)** is a full redesign: perfadvisor's own layout (`cpu, N
+  threads` total bar plus a 5-column per-core grid with `base X.X GHz`; a canvas history
+  chart, cpu/ram/gpu sharing a 0-100% scale, disk/net each scaled to their own peak; three
+  bottom boxes, memory/disks/network), replacing the old CPU heat grid and four flat tiles.
+  `internal/sysmon.Sample` gained `SwapUsedMB`/`SwapTotalMB`/`Disks`/`Wifi` and a
+  `BaseClockGHz()` helper, ported from perfadvisor's own collectors (source commit
+  perfadvisor main `2ed8046`, same commit section 7 above already cites). The per-drive
+  scan (`disk.Partitions`/`disk.Usage`) and wifi (`netsh`) both run on a slower cadence
+  (every 5th 2s tick, never tick 0) rather than every sample: found by review that running
+  them every tick both delayed the app's own "first system sample" startup mark and risked
+  blocking a whole tick against an unreachable mapped network drive.
+- **Process groups (section 7)**: right-aligned headers (the page-wide `th` rule above),
+  and the trend sparkline's own SVG now uses `viewBox="0 0 100 12"` with
+  `preserveAspectRatio="none"` so it stretches to fill the trend column's own width
+  (`width:100%` via a CSS rule targeting that column) instead of a fixed 42px.
+- **"Today's Read" (section 8) is deleted**: the panel, its polling, and the
+  `bdevAdvisorNow` binding are gone. `internal/advisor` itself is untouched; only
+  `cmd\burnmon-dev\export_run.go`'s `buildExportBundle` calls it now (it always did its own
+  independent, whole-window advisor pass, never through the deleted binding).
+- **Microsoft To Do panel (section 9)**: `internal/todo`, ported from
+  `C:\ZND\projects\perfadvisor\internal\todo\todo.go` (same source commit as the sysmon
+  collectors above), with its own token cache under `%LOCALAPPDATA%\burnmon\` instead of
+  perfadvisor's own folder, and `Login` split into `StartLogin` (one fast HTTP call) plus
+  `FinishLogin` (the slow interactive poll, run in a goroutine) so a WebView2 binding never
+  blocks on OAuth approval time. Off by default (`burnmon-dev.json`'s
+  `microsoft_todo_enabled`); the panel sits below `main` as its own flex-basis-`auto`,
+  height-capped, internally-scrolling block, full width in both the one- and two-column
+  layouts. Never touches `internal/devexport` or any log line: task titles are personal
+  data the "never in exports, logs or screenshots" rule covers by this package simply never
+  being imported from that path.
+- **Window, fullscreen, responsive (section 10)**: first launch is 1280x860 centered
+  (overrides this note's own phase-1 default of 1152x2048 for the *window*, not the
+  viewport breakpoints above, which are unchanged); size/position/maximized/monitor persist
+  across launches (`burnmon-dev-window.json`, polled every 3s, since go-webview2 exposes no
+  move/resize/close hook to save on). F11/Esc fullscreen is hand-rolled Win32
+  (`cmd\burnmon-dev\windowstate.go`): WebView2/Chromium reserves F11 as a browser
+  accelerator key the page's own JS never sees, so a global hotkey plus a thread-local
+  `WH_GETMESSAGE` hook reacts to it directly, gated on this window holding real foreground
+  focus so it never hijacks F11 from other running apps.
+- **Startup (section 11)**: measured before changing anything (this session's own baseline,
+  a cold run against the real store): store open 24ms, first system sample 3.65s, watcher
+  and pollers started 17.4s (almost entirely `scan.DefaultSourcesWithOptions`/
+  `codex.NativeSources` filesystem scanning, run synchronously before the window is
+  created), window created 18.67s, first full render 19.08s, backfill finished 31.85s.
+  Startup ordering changes (loading screen, background backfill) are section 11's own
+  steps 2-5, applied after every other section, per the plan's own stated order; see
+  `SESSION_LOG.md`'s matching entry for the after numbers.
