@@ -2,6 +2,176 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-26, v0.4 WS2 performance patch, v0.4.0-alpha.2
+
+Followed `02_roadmap\2026-09-26_ws2_performance_patch.md` on `burnmon-dev`, after rebasing
+onto `main`'s `v0.3.2` (`69a071e`, WS3's shared-ingest watcher fix and local time
+everywhere): one conflict, `SESSION_LOG.md` (both branches prepend entries, four separate
+conflict points across the 22-commit rebase), resolved by keeping every entry in
+newest-on-top order by real commit timestamp; no other file conflicted. Post-rebase,
+pre-anything-else 10-minute baseline (`burnmon.exe` co-running): Go process 0.89% avg /
+1.95% peak CPU, 252.5 MB peak RAM, 763 peak handles - the WS3 rebase already removed most
+of the earlier session's own documented shared-ingest climb, as expected.
+
+**Item 1, cheaper process sampler.** `internal\sysmon\process.go`'s old `Tick` called
+`process.Processes()` for the PID list, then several more gopsutil calls per process every
+3s walk (`Name`/`Cmdline`/`Ppid`/`Percent`/`MemoryInfo`/`IOCounters`, each opening its own
+process handle). Replaced with one `NtQuerySystemInformation(SystemProcessInformation)`
+snapshot per walk (`process_windows.go`, new: hand-derived `SYSTEM_PROCESS_INFORMATION`
+struct, a growing-buffer retry loop, decode straight into a plain Go struct so the raw
+buffer can be discarded immediately) - CPU time, working set and IO counters for every
+process on the machine in one syscall. `Cmdline()` (the one thing that snapshot cannot
+give: only a bare image name) is still a per-process gopsutil call, but now only the first
+tick a pid is ever seen, cached in the registry until that pid exits, not every tick for
+every already-known process. `process_other.go` keeps the old gopsutil-only path verbatim
+for the untested darwin/linux build (`process.go` now holds only the OS-independent
+`resolveHarnesses`). New `TestQuerySystemProcesses_FindsSelfWithSanePPID` is this file's
+own correctness gate for the hand-derived struct layout: the parsed parent pid must match
+`os.Getppid()`, an independent ground truth a wrong field offset could not satisfy by
+chance; passed first try.
+
+**Item 2, pause when nobody looks.** Minimized: page.html's own shared render tick stops
+entirely (`document.visibilitychange`, which WebView2/Chromium already ties to the host
+window's real minimize state, no new Win32 hook needed) rather than just slowing, since
+nobody can see a paint against a minimized window; a new `bdevSetHidden` binding tells the
+Go side, whose cheap system-sample ticker (`app.go`'s `startSampling`) then slows to a
+fixed 10s while hidden - the process walk and persistence stay on their own fixed
+cadences, unaffected, per item 1's own "independent of refresh_ms." Un-hide: the page
+fires one immediate tick itself, not a stale one from wherever the timer's phase happened
+to be. Not built: WebView2's own memory usage target to "Low" while hidden -
+`ICoreWebView2Controller4` (the interface that carries it) is not vendored in
+`go-webview2`, and hand-deriving its COM vtable layout without the official SDK header
+risks a wrong method-slot offset, a crash risk in a tool run daily, for a soft (RAM-only)
+win; flagged in STATUS.md rather than silently dropped.
+
+**Item 3, no per-tick DOM rebuilds.** Burn chart, session cards, turn ticker and process
+groups (vendor strip already did this, `ensureVendorRow`'s own doc comment) now create
+their DOM nodes once and update text/attributes/sparkline points in place, reordering only
+when a row's own rank actually changed, instead of tearing down and rebuilding their whole
+`innerHTML` every `refresh_ms` tick. Process groups' old `cropTableRows` helper (a
+rebuild-and-remeasure loop) is gone with it, replaced by a one-shot height estimate from a
+real row's own `offsetHeight` plus a tightening loop against already-built rows; it had no
+other caller.
+
+**Item 4, honest self row.** `internal\sysmon\harness.go`'s `Classify` used to fold
+burnmon-dev.exe's own WebView2 host process tree into `HarnessSelf` via generic
+parent-chain inheritance (Wilco's own "BurnMon Dev 47%" observation, phase 5b, could not
+be read as meaning the Go process or the browser process specifically). New
+`HarnessSelfWebview`: a `msedgewebview2.exe` whose nearest classified ancestor is already
+`HarnessSelf` or `HarnessSelfWebview` gets its own bucket; a webview2 process belonging to
+any other app on the machine still falls through to that app's own classification or
+`HarnessOther`, never this one. Process groups now shows "BurnMon Dev (Go)" and "BurnMon
+Dev (WebView2)" as two rows (`page.html`'s `HARNESS_LABEL`), and its CPU column header now
+states the percent is of the whole machine, matching the header/CPU box's own convention
+(phase 5b already did the normalization; only the label was missing).
+
+**Item 5, local time everywhere.** `headline.go`'s `headlineDayStart` was a UTC copy left
+behind when `vendorstrip`'s own switched (WS3); now local, matching it exactly, with a new
+DST-transition test (`TestHeadlineDayStart_LocalNotUTC`, both 2026 Europe/Amsterdam
+dates). Auditing every other `.UTC()` call in `cmd\burnmon-dev` found two more of the same
+class, neither named directly in the spec: `app.go`'s `closedDayRows` (the activity
+heatmap's own "today"/182-day-window boundary) and `main.go`'s `bdevCacheBreakdown` (the
+vendor strip's own click-through cache breakdown) - both switched to local. The heatmap's
+JS-side grid math (`page.html`'s `mondayOnOrBefore`/`renderHeatmap`) was UTC too
+(`Date.UTC`, `toISOString()`), disagreeing with the Go side's own local-day row keys for
+the early-local-morning window each day; now built from local y/m/d (`fmtLocalDateKey`,
+new). `export_run.go`'s `parseExportTime` (the CLI's own `--since`/`--until`) parsed a
+bare day as UTC and added a UTC calendar day for `--until`'s "through the end of that
+day" - modeled on burnmon-cli's own pre-WS3 convention, but never updated when that
+command's flag was; now `time.ParseInLocation` plus `AddDate` on the resulting
+local-located time, with two new tests confirmed to fail against the old code first. Every
+`.UTC()` call in `cmd\burnmon-dev` is now gone; `internal\devexport`'s own `.UTC()` calls
+on the exported bundle's `GeneratedAt`/`Since`/`Until`/event `At` are kept, deliberately -
+a portable, machine-readable export stays UTC, matching WS3's own established convention
+that display converts to local at render time, not the stored/exported value itself.
+
+**Item 6, headline evidence.** Watched the shared render tick for 30 real seconds during
+this session's own active Claude Code session (its own transcript file, live-ingested):
+30 ticks, 9 of them a real headline change (measured span 29.0s), via a new
+`window.__bdevHeadlineLog` (the same pattern `paintMark`/`__bdevPaintLog` already
+established, read through the dev eval channel like a uicheck case).
+
+**Review, one fresh Opus pass, five real findings, all fixed.** Over the full diff before
+committing: (1) the activity heatmap's own week count (`renderHeatmap`) divided a raw ms
+difference by a fixed 604800000, silently dropping a whole week - including today's own
+column - on any Monday whose 182-day lookback crossed a DST transition; confirmed with a
+`node` repro against the old code first, fixed by counting whole days (rounded, absorbing
+the DST hour) before dividing into weeks. (2) the process-groups crop's own "-1 row"
+guess for the thead's headroom hid one row that actually fit whenever the real thead was
+shorter than a data row (the ordinary case); now measured against the thead's own real
+`offsetHeight`, confirmed by screenshot at a wide viewport showing all seven harness rows
+where the guess-based version would have hidden the lowest-CPU one. (3) item 4's harness
+split broke `internal/advisor`'s `evalSelfOverhead` rule, which still only read
+`HarnessSelf` - the smaller half of this app's own footprint after the split - silently
+under-reporting BurnMon Dev's real overhead in both the advisor findings and the export's
+own summary.md; now sums `HarnessSelf` plus `HarnessSelfWebview` per tick before
+averaging, new test confirms neither harness alone crosses the budget but their sum does.
+(4) `internal/devexport`'s `dailyRows` bucketed by `t.At`'s own UTC calendar day even
+though `--since`/`--until` (this same session's own item 5 fix) now select a local
+window - the exact class of bug this item was meant to close, just in a file the spec did
+not name directly; fixed (local day for the bucket key, `t.At` itself stays the portable
+UTC instant its own doc comment already promised), plus the same fix for summary.md's
+top-turns table, which showed a bare, unlabelled UTC time a reader would reasonably read
+as local. (5) the process-registry cache (item 1) had no way to notice a pid reappearing
+as a different process within one 3s walk (Windows reuses pids aggressively; the old
+gopsutil-based sampler re-read name/cmdline every tick, so this self-corrected, the new
+cached one does not) - fixed with the snapshot's own `CreateTime`, already available and
+previously discarded, as the reuse guard. Every fix RED (a failing test, or a `node`
+repro for the JS-only heatmap one) before GREEN. The struct hand-derivation in item 1
+(`systemProcessInfoT`) was checked field-by-field against the real Win32 layout and found
+correct as written; the harness-split ordering, the DOM-reuse reconciliation, the
+`hidden`/atomic.Bool concurrency and the headline-log cap were all checked and found
+correct. Not addressed: the Microsoft To Do panel's own due-date comparison against
+Graph's `dueDateTime` (named under item 5's own "To Do", never touched this session,
+correctness depends on an undocumented Graph API timezone behaviour this sandbox cannot
+verify live) - flagged in STATUS.md rather than guessed at.
+
+**Verify.** `go vet ./...`, `go test ./... -count=1` (every package, including the new
+process-sampler, harness-split, local-time and review-fix tests), `.\build.ps1`, `node
+--check` on both page JS files, `uicheck d0`-`d12` (the real running window, confirming
+the split process-groups rows, the DOM-reuse panels and both review-fixed heatmap/crop
+bugs render correctly - re-run in full after the review's own fixes) all green. `w0`-`w8`
+against `burnmon.exe`: `w0`/`w2`-`w8` all green on the final post-review-fix build; `w1`
+(startup, a fixed 1500ms WebView2-engine-warm-up budget its own doc comment already calls
+"independent of app code") passed once earlier in the session but could not get a clean
+run against the final build - five attempts, the last of which captured an entirely
+unrelated foreground window in its own screenshot (confirmed: `GetForegroundWindow` read
+a different Claude Code window at the same moment), not a blank or malformed BurnMon
+window. This is real, interactive desktop contention on a machine in active use during
+the run, the same category of limitation `d7`'s own comment already documents for BitBlt
+against a locked screen, not a code regression: `w1` exercises only `cmd\burnmon`'s own
+startup path, which nothing in this session's diff touches. Left unresolved rather than
+force-retried further; Wilco should re-run `w1` alone once the desktop is idle. One `d9`
+run (no-scrollbar sweep, unrelated to this session) failed at 1920x1080 only, on a
+`.heatmonth` label whose CSS (`overflow:visible`,
+committed 2026-09-24, two days before this session) deliberately lets an 8px month
+abbreviation peek a few px past its own 9px column; `check_d9.go`'s own sweep flags any
+non-`hidden` overflow as a possible scrollbar, which `overflow:visible` can never actually
+produce. Confirmed unrelated to this session's own changes two ways: today (2026-09-26)
+is not a Monday, the one day-of-week the heatmap's own DST fix could have changed
+anything about; and the CSS predates this session. Reproduced consistently at that one
+viewport on a display configuration that changed mid-session (100% scale, 3440x1440,
+against an earlier 200%-scale, 1600x1000 pass that ran `d9` clean at all five sizes);
+d9 passed clean at 1024x768, 1280x860, 1152x2048 and 2560x1440 both before and after. Not
+fixed (out of WS2's own scope, a pre-existing `check_d9.go` detection gap, not a real
+scrollbar); flagged in STATUS.md. Post-patch 10-minute measurement (active, `burnmon.exe` co-running): Go
+process 0.28% avg / 0.59% peak CPU (was 0.89%/1.95%), 195.4 MB peak RAM (was 252.5 MB,
+under the 250 MB target), 781 peak handles (was 763 - item 1 is a CPU fix, handle count is
+governed by the already-rebased WS3 watcher); WebView2 tree 0.51% avg / 1.36% peak CPU
+(was 0.71%/1.58%), 671.1 MB peak RAM (was 680.9 MB), 6 processes peak both runs. Minimized
+for 5 minutes: Go process 0.15% avg / 0.80% peak CPU, 297.2 MB peak RAM; WebView2 tree
+0.03% avg / 0.11% peak CPU, 499.0 MB peak RAM - CPU on both drops sharply from the active
+run, confirming the pause actually holds even without the WebView2 memory-target call.
+
+A stray, garbled-named WebView2 profile cache folder appeared in the worktree root again
+during this session's own repeated test runs (`EBWebView` inside it, same harmless
+pattern a prior session already found and removed once); removed again, flagging in case
+it keeps recurring.
+
+Version `0.4.0-alpha.2` (`cmd\burnmon-dev\app.go`, `winres\burnmon-dev.json`). README,
+STATUS updated. Committed, not pushed or tagged; see the hub brief and the commands
+handed to Wilco for the exact next steps.
+
 ## 2026-09-26, v0.4 phase 5: verify and release
 
 Followed `02_roadmap\2026-09-24_ws2_burnmon_dev.md`'s "Verify and close" and this session's

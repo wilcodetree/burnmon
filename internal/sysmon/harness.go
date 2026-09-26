@@ -16,14 +16,23 @@ import "strings"
 type Harness string
 
 const (
-	HarnessClaude           Harness = "claude"
-	HarnessClaudeDesktop    Harness = "claude-desktop"
-	HarnessCodex            Harness = "codex"
-	HarnessCopilotCLI       Harness = "copilot-cli"
-	HarnessCopilotVSCode    Harness = "copilot-vscode"
-	HarnessHermes           Harness = "hermes"
-	HarnessWSL              Harness = "wsl"
-	HarnessSelf             Harness = "burnmon-dev"
+	HarnessClaude        Harness = "claude"
+	HarnessClaudeDesktop Harness = "claude-desktop"
+	HarnessCodex         Harness = "codex"
+	HarnessCopilotCLI    Harness = "copilot-cli"
+	HarnessCopilotVSCode Harness = "copilot-vscode"
+	HarnessHermes        Harness = "hermes"
+	HarnessWSL           Harness = "wsl"
+	HarnessSelf          Harness = "burnmon-dev"
+	// HarnessSelfWebview (WS2 item 4, "honest self row") is burnmon-dev.exe's
+	// own WebView2 host process tree (msedgewebview2.exe, split by parent
+	// chain from any other app's own WebView2 processes below), kept out
+	// of HarnessSelf so the process-groups panel reports the Go process and
+	// its WebView2 renderer separately rather than one summed "BurnMon Dev"
+	// row that silently mixed both (Wilco's own "BurnMon Dev 47%"
+	// observation, phase 5b, could not otherwise be read as meaning either
+	// one specifically).
+	HarnessSelfWebview      Harness = "burnmon-dev-webview2"
 	HarnessNodeUnclassified Harness = "node"
 	HarnessOther            Harness = "other"
 )
@@ -94,6 +103,24 @@ func Classify(p Proc, copilotVSCodeConfigured bool, parentHarness func(pid int32
 		return HarnessWSL
 	case name == "burnmon-dev.exe" || name == "burnmon-dev":
 		return HarnessSelf
+	}
+
+	// A WebView2 host process (the browser process, plus its own renderer/
+	// GPU/utility children, all also named msedgewebview2.exe) descending
+	// from burnmon-dev.exe itself gets its own bucket rather than the
+	// generic "inherit whatever the parent already resolved to" fallback
+	// below, which would otherwise report it as plain HarnessSelf, mixing
+	// the Go process and its WebView2 host into one indistinguishable sum.
+	// A msedgewebview2.exe belonging to some other app (a real Edge
+	// browser, another WebView2-hosted tool) is deliberately NOT special
+	// -cased here: parentHarness(p.PPID) for it resolves to that other
+	// app's own harness (or HarnessOther), never HarnessSelfWebview, since
+	// the check below only fires when the nearest already-classified
+	// ancestor is this app's own Go process or its own WebView2 tree.
+	if (name == "msedgewebview2.exe" || name == "msedgewebview2") && parentHarness != nil {
+		if ph, ok := parentHarness(p.PPID); ok && (ph == HarnessSelf || ph == HarnessSelfWebview) {
+			return HarnessSelfWebview
+		}
 	}
 
 	if parentHarness != nil {

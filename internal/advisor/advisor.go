@@ -71,8 +71,9 @@ type Thresholds struct {
 	HardFaultsPerSec float64
 	MemPressureRatio float64
 
-	// self-overhead: BurnMon Dev's own process group (sysmon.HarnessSelf)
-	// averaging CPU or RAM at or above these numbers, over at least
+	// self-overhead: BurnMon Dev's own process groups (sysmon.HarnessSelf
+	// plus sysmon.HarnessSelfWebview, combined) averaging CPU or RAM at or
+	// above these numbers, over at least
 	// RunawayMinSamples samples (shared with harness-runaway: both are a
 	// "sustained load" read over the same process-group sample table).
 	// SelfCPUPct is the same summed-across-processes percent RunawayCPUPct
@@ -552,26 +553,48 @@ func joinReasons(reasons []string) string {
 // ---------------------------------------------------------------------------
 
 func evalSelfOverhead(in Input, _ *pricing.Config, th Thresholds) []Finding {
-	var samples []sysmon.ProcessGroupSample
+	// Self-overhead is BurnMon Dev (Go) plus BurnMon Dev (WebView2) combined,
+	// not just the Go process's own row: WS2 item 4 split what used to be
+	// one summed HarnessSelf process-groups row into two, and WebView2 is
+	// the larger share of this app's own footprint (671MB vs 195MB
+	// measured that same session) - reading only HarnessSelf here would
+	// silently under-report this rule's whole "this app's own total
+	// overhead" purpose by the larger half (found by review, 2026-09-26).
+	// Grouped by Ts (both rows share the same timestamp: one process-walk
+	// tick emits both in the same Tick call) rather than averaged as two
+	// independently pooled series, so a tick missing one harness's row
+	// (should not happen in practice, but not assumed) does not skew the
+	// combined average toward whichever harness has more samples.
+	byTs := map[time.Time]*sysmon.ProcessGroupSample{}
+	var order []time.Time
 	for _, s := range in.ProcessGroups {
-		if s.Harness == sysmon.HarnessSelf {
-			samples = append(samples, s)
+		if s.Harness != sysmon.HarnessSelf && s.Harness != sysmon.HarnessSelfWebview {
+			continue
 		}
+		combined, ok := byTs[s.Ts]
+		if !ok {
+			combined = &sysmon.ProcessGroupSample{Ts: s.Ts}
+			byTs[s.Ts] = combined
+			order = append(order, s.Ts)
+		}
+		combined.CPUPct += s.CPUPct
+		combined.MemMB += s.MemMB
 	}
-	if len(samples) < th.RunawayMinSamples {
+	if len(order) < th.RunawayMinSamples {
 		return nil
 	}
 	var sumCPU, sumMem float64
 	var last time.Time
-	for _, s := range samples {
+	for _, ts := range order {
+		s := byTs[ts]
 		sumCPU += s.CPUPct
 		sumMem += s.MemMB
-		if s.Ts.After(last) {
-			last = s.Ts
+		if ts.After(last) {
+			last = ts
 		}
 	}
-	avgCPU := sumCPU / float64(len(samples))
-	avgMem := sumMem / float64(len(samples))
+	avgCPU := sumCPU / float64(len(order))
+	avgMem := sumMem / float64(len(order))
 	if avgCPU < th.SelfCPUPct && avgMem < th.SelfMemMB {
 		return nil
 	}
@@ -579,11 +602,11 @@ func evalSelfOverhead(in Input, _ *pricing.Config, th Thresholds) []Finding {
 		RuleID: "self-overhead",
 		At:     last,
 		Message: fmt.Sprintf("BurnMon Dev itself is averaging %.1f%% CPU and %.0f MB RAM across %d samples, over its own %.0f%%/%.0f MB budget",
-			avgCPU, avgMem, len(samples), th.SelfCPUPct, th.SelfMemMB),
+			avgCPU, avgMem, len(order), th.SelfCPUPct, th.SelfMemMB),
 		Evidence: map[string]float64{
 			"avg_cpu_pct": avgCPU,
 			"avg_mem_mb":  avgMem,
-			"samples":     float64(len(samples)),
+			"samples":     float64(len(order)),
 		},
 		Suggestion: "restart BurnMon Dev to release accumulated memory; if this keeps recurring, it belongs in the shared ingest bug already tracked on main, not this session's own findings",
 	}}

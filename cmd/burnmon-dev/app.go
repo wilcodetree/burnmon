@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -35,7 +36,7 @@ import (
 )
 
 const (
-	version     = "0.4.0-alpha.1"
+	version     = "0.4.0-alpha.2"
 	windowTitle = "BurnMon Dev"
 	mutexName   = `Local\burnmon-dev-app`
 )
@@ -82,6 +83,16 @@ type app struct {
 	procSampler *sysmon.ProcessSampler
 
 	liveWatcher *watch.Watcher
+
+	// hidden is WS2 item 2's "pause when nobody looks": true while the
+	// window is minimized, set by bdevSetHidden (main.go), which page.html
+	// calls from its own visibilitychange listener. startSampling's cheap
+	// system-sample ticker (below) reads this to slow from refresh_ms down
+	// to a fixed 10s while true; the page itself stops calling
+	// bdevSnapshotNow at all while hidden (paintTick never runs against a
+	// window nobody can see), and fires one immediate tick the instant it
+	// un-hides, rather than waiting for the next scheduled one.
+	hidden atomic.Bool
 
 	mu           sync.Mutex
 	cfg          pricing.Config
@@ -144,19 +155,23 @@ type app struct {
 }
 
 // closedDayRows returns the per-day token/cost rows for every day strictly
-// before today (UTC), caching the whole 182-day pass and recomputing it
-// only when the UTC date has rolled over since the last computation (once
-// a day, not once a minute) - but only once the app's one-time startup
-// backfill (startInitialCollect) has finished; before that, every call
-// recomputes fresh rather than locking in a result built from a store that
-// is still being backfilled. Returns today's own date string and UTC
-// midnight alongside, so the caller derives "today"'s own window from the
-// exact same now() this call used, rather than calling time.Now() a second
-// time and risking a day-rollover mismatch between the two (also fixed
-// after review).
+// before today (local, WS2 item 5 - this used to be a UTC boundary, the
+// same class of bug WS3 fixed in vendorstrip/forecast/agg: a store event
+// from the early local morning could still read as "yesterday" here for as
+// long as the machine's own UTC offset, silently missing from the heatmap's
+// "today" row and one day early in the closed-day cache), caching the
+// whole 182-day pass and recomputing it only when the local date has
+// rolled over since the last computation (once a day, not once a minute) -
+// but only once the app's one-time startup backfill (startInitialCollect)
+// has finished; before that, every call recomputes fresh rather than
+// locking in a result built from a store that is still being backfilled.
+// Returns today's own date string and local midnight alongside, so the
+// caller derives "today"'s own window from the exact same now() this call
+// used, rather than calling time.Now() a second time and risking a
+// day-rollover mismatch between the two (also fixed after review).
 func (a *app) closedDayRows(st *store.Store, cfg *pricing.Config) (closed []history.Row, today string, dayStart time.Time, cacheHit bool, err error) {
-	now := time.Now().UTC()
-	dayStart = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	now := time.Now().In(time.Local)
+	dayStart = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 	today = dayStart.Format("2006-01-02")
 
 	a.heatmapMu.Lock()
@@ -413,6 +428,13 @@ func loadDevConfig(dataDir string) devConfig {
 const (
 	processWalkInterval = 3 * time.Second
 	persistInterval     = 10 * time.Second
+	// hiddenSampleInterval is WS2 item 2's own number ("slow system
+	// sampling to 10s") while the window is minimized; the process walk
+	// and persistence above already run on their own fixed cadences
+	// independent of refresh_ms (item 1), and item 2 does not ask to slow
+	// those further, only the cheap per-tick system sample that would
+	// otherwise keep running at refresh_ms against a window nobody can see.
+	hiddenSampleInterval = 10 * time.Second
 )
 
 // startSampling runs three independent tickers instead of one shared one
@@ -430,12 +452,24 @@ func (a *app) startSampling(refreshInterval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(refreshInterval)
 		defer ticker.Stop()
+		// lastSampleAt gates the hidden-window slowdown below: item 2 only
+		// wants the cheap system sample itself to slow to 10s while
+		// nobody's looking, not this ticker's own tick rate (a
+		// refreshInterval below 10s would otherwise mean the "still
+		// hidden" branch keeps re-checking the clock every tick, which is
+		// cheap - a lock and a time comparison, not a real sample - so
+		// that part is not worth avoiding on its own).
+		var lastSampleAt time.Time
 		for range ticker.C {
+			if a.hidden.Load() && time.Since(lastSampleAt) < hiddenSampleInterval {
+				continue
+			}
 			sm, err := a.sampler.Tick()
 			if err != nil {
 				log.Println("sysmon sample:", err)
 				continue
 			}
+			lastSampleAt = time.Now()
 			if firstSample {
 				firstSample = false
 				startupMark("first system sample")

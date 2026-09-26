@@ -21,9 +21,9 @@ body{
 /* no-scroll patch section 3: no visible scrollbar in any panel or on the
    page, at any window size. Every list/grid that used to scroll internally
    (harness heatmap, activity heatmap, To Do, turn popup) now crops to whole
-   items instead (see cropToFit/cropTableRows/the two heatmaps' column math
-   below), so nothing here is ever meant to overflow; overflow:hidden on
-   each of those containers is the hard backstop. The turn ticker is the
+   items instead (see cropToFit/renderProcessGroups' own row crop/the two
+   heatmaps' column math below), so nothing here is ever meant to overflow;
+   overflow:hidden on each of those containers is the hard backstop. The turn ticker is the
    one deliberate exception (headline patch section 1): it scrolls instead
    of cropping, .ticker's own overflow-y:auto below and check_d9.go's own
    exclusion for #turnTicker both reflect that. */
@@ -260,8 +260,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
    these percentages, since an auto-layout table ignores a width hint on one
    cell once its content wants more room. No-scroll patch section 3: capped
    to the same 200px budget the To Do panel already uses, cropped to whole
-   rows (cropTableRows), busiest first (already the render order), rather
-   than growing with content or scrolling. */
+   rows (renderProcessGroups' own row-height crop, WS2 item 3), busiest
+   first (already the render order), rather than growing with content or
+   scrolling. */
 /* Column widths come entirely from the table's own colgroup (page markup
    below), which sizes thead and tbody alike under table-layout:fixed - a
    width rule on a cell here would be redundant at best (found by review,
@@ -332,10 +333,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
            overflowing at the .zonebody level. .panel's own overflow:hidden
            still applies, so a genuinely long vendor list clips silently at
            this budget rather than ever showing a scrollbar; it does not
-           crop to whole rows (cropTableRows would rebuild the whole tbody,
-           which would break vendorRowEls' persistent-DOM-node/animateNumber
-           tween state, ensureVendorRow's own doc comment) - accepted as a
-           lesser problem than an "always stay" panel disappearing outright. -->
+           crop to whole rows the way process groups does (that would mean
+           hiding some of vendorRowEls' own persistent, animateNumber
+           -tweened rows on a tick where they no longer fit, and un-hiding
+           them again later, ensureVendorRow's own doc comment) - accepted
+           as a lesser problem than an "always stay" panel disappearing
+           outright. -->
       <div class="panel" style="flex:0 0 auto; max-height:180px">
         <div class="panelhead">Vendor strip</div>
         <table>
@@ -377,7 +380,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         <div id="processGroupsWrap">
           <table>
             <colgroup><col style="width:22%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:50%"></colgroup>
-            <thead><tr><th></th><th>CPU</th><th>RAM</th><th>IO/s</th><th>Trend</th></tr></thead>
+            <thead><tr><th></th><th id="processGroupsCPUHead" title="percent of the whole machine, not one core - same convention as the header and the CPU box above">CPU %mach</th><th>RAM</th><th>IO/s</th><th>Trend</th></tr></thead>
             <tbody id="processGroups"></tbody>
           </table>
         </div>
@@ -499,7 +502,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     'copilot-vscode': HARNESS_HUE.copilotVscode,
     'hermes': HARNESS_HUE.hermes,
     'wsl': HARNESS_HUE.wsl,
+    // Same hue for both self rows (WS2 item 4's split is a label/data
+    // change, not a new design colour): the two rows are still visually
+    // "this app", just no longer summed together.
     'burnmon-dev': HARNESS_HUE.burnmonDev,
+    'burnmon-dev-webview2': HARNESS_HUE.burnmonDev,
     'node': HARNESS_HUE.other
   };
   function harnessColor(h){ return HARNESS_COLOR[h] || HARNESS_HUE.other; }
@@ -554,22 +561,6 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       var html = itemHtml.slice(0, n).join('') + (footerFn ? footerFn(itemHtml.length - n) : '');
       el.innerHTML = html;
       if(el.scrollHeight <= el.clientHeight + 1) return;
-    }
-  }
-
-  // cropTableRows is cropToFit for a <table>: rowHtml only ever replaces
-  // tbodyEl's rows, while wrapEl (the table's own scroll-bounded ancestor,
-  // thead included) is what gets measured, since a table's rendered height
-  // is thead-plus-rows together.
-  function cropTableRows(wrapEl, tbodyEl, rowHtml){
-    if(!wrapEl || !tbodyEl) return;
-    var n = rowHtml.length;
-    tbodyEl.innerHTML = rowHtml.join('');
-    if(n === 0 || wrapEl.scrollHeight <= wrapEl.clientHeight + 1) return;
-    while(n > 1){
-      n--;
-      tbodyEl.innerHTML = rowHtml.slice(0, n).join('');
-      if(wrapEl.scrollHeight <= wrapEl.clientHeight + 1) return;
     }
   }
 
@@ -672,6 +663,15 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   function pad2(n){ return (n < 10 ? '0' : '') + n; }
   function fmtHMS(d){ return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
   function fmtHM(d){ return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  // fmtLocalDateKey (WS2 item 5): the activity heatmap's own "YYYY-MM-DD"
+  // day key, built from local y/m/d - not toISOString(), which converts to
+  // UTC first and would disagree with the Go side's own local-day row keys
+  // (internal/history, WS3's "local time everywhere") for the early local
+  // -morning window each day where the UTC calendar date is still
+  // yesterday's.
+  function fmtLocalDateKey(d){
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
 
   // renderClock (section 5): shows the shared render tick's own snapshot
   // time, not the wall clock - it steps once per tick (refresh_ms, default
@@ -743,8 +743,17 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // renderBars (no-scroll patch section 1: bars only, no turn markers, no
   // CPU overlay): bars per session per time bucket, stacked, each session
   // coloured from sessionColor (section 2) rather than a per-harness shade.
-  // Rebuilt wholesale on every refresh (decision: "rebuilt on every
-  // refresh").
+  // WS2 item 3 ("no per-tick DOM rebuilds"): the bucket count is fixed for
+  // a given burn-zone window (live.buildChart's own "every slot present"
+  // contract), so bar/segment <div>s are created once per index and their
+  // style/height updated in place on every later tick, rather than the
+  // whole innerHTML being torn down and rebuilt every refresh_ms as this
+  // used to (the older "rebuilt wholesale on every refresh" decision this
+  // comment used to record). A bucket count change (a window-length
+  // config change, never observed at runtime today) is handled by
+  // dropping any now-excess bar elements and growing to add new ones,
+  // same as the segment reconciliation within each bar.
+  var burnBarEls = [];
   function renderBars(chart){
     var el = document.getElementById('burnBars');
     if(!el) return;
@@ -778,17 +787,31 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       if(sum > max) max = sum;
     });
 
-    var html = '';
-    perBucket.forEach(function(list){
-      html += '<div class="bar">';
-      list.forEach(function(s){
+    while(burnBarEls.length > perBucket.length){
+      el.removeChild(burnBarEls.pop());
+    }
+    while(burnBarEls.length < perBucket.length){
+      var bar = document.createElement('div');
+      bar.className = 'bar';
+      el.appendChild(bar);
+      burnBarEls.push(bar);
+    }
+    perBucket.forEach(function(list, bi){
+      var bar = burnBarEls[bi];
+      while(bar.children.length > list.length){
+        bar.removeChild(bar.lastChild);
+      }
+      while(bar.children.length < list.length){
+        bar.appendChild(document.createElement('i'));
+      }
+      list.forEach(function(s, si){
         var pct = 100 * s.tok / max;
         pct = Math.max(pct, 1.5); // a real but tiny bucket still shows a sliver
-        html += '<i style="height:' + pct.toFixed(1) + '%;background:' + sessionColor(s.sid) + '"></i>';
+        var seg = bar.children[si];
+        seg.style.height = pct.toFixed(1) + '%';
+        seg.style.background = sessionColor(s.sid);
       });
-      html += '</div>';
     });
-    el.innerHTML = html;
   }
 
   // renderBurnAxis draws the x-axis labels every 5 minutes (section 2),
@@ -848,19 +871,62 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     cropToFit(el, items);
   }
 
+  // Session cards, WS2 item 3: one <div class="card"> per session_id,
+  // created once and updated in place (same recipe as ensureVendorRow),
+  // rather than the whole panel's innerHTML being torn down and rebuilt
+  // every tick. Session identity (session_id) is stable across a
+  // session's life, so this keys on it directly instead of position.
+  var sessionCardEls = {};
+  function ensureSessionCard(el, sid){
+    var rec = sessionCardEls[sid];
+    if(rec) return rec;
+    var card = document.createElement('div');
+    card.className = 'card';
+    var h4 = document.createElement('h4');
+    var bar = document.createElement('div'); bar.className = 'ctxbar';
+    var barFill = document.createElement('i');
+    bar.appendChild(barFill);
+    var small = document.createElement('small');
+    card.appendChild(h4); card.appendChild(bar); card.appendChild(small);
+    el.appendChild(card);
+    rec = { card: card, h4: h4, barFill: barFill, small: small };
+    sessionCardEls[sid] = rec;
+    return rec;
+  }
+
   function renderSessionCards(sessions){
     var el = document.getElementById('sessionCards');
     if(!el) return;
-    var html = '';
-    (sessions || []).forEach(function(s){
+    sessions = sessions || [];
+    if(!sessions.length){
+      Object.keys(sessionCardEls).forEach(function(sid){ delete sessionCardEls[sid]; });
+      el.innerHTML = '<div class="placeholder" style="flex:0 0 auto;padding:10px">No sessions running</div>';
+      return;
+    }
+    if(!Object.keys(sessionCardEls).length && el.firstChild) el.innerHTML = ''; // drop the placeholder
+    var seen = {};
+    var prevSibling = null;
+    sessions.forEach(function(s){
+      seen[s.session_id] = true;
+      var rec = ensureSessionCard(el, s.session_id);
       var pct = s.context_window > 0 ? Math.min(100, 100 * s.context / s.context_window) : 0;
-      html += '<div class="card">' +
-        '<h4 style="color:' + agentColor(s.agent) + '">' + (s.agent || s.vendor) + '</h4>' +
-        '<div class="ctxbar"><i style="width:' + pct.toFixed(0) + '%;background:' + agentColor(s.agent) + '"></i></div>' +
-        '<small>turn ' + s.turn_count + ' &middot; ' + fmtTokens(s.tokens) + ' tok &middot; ' + fmtCost(s.cost) + '</small>' +
-        '</div>';
+      var color = agentColor(s.agent);
+      rec.h4.textContent = s.agent || s.vendor;
+      rec.h4.style.color = color;
+      rec.barFill.style.width = pct.toFixed(0) + '%';
+      rec.barFill.style.background = color;
+      rec.small.textContent = 'turn ' + s.turn_count + ' · ' + fmtTokens(s.tokens) + ' tok · ' + fmtCost(s.cost);
+      // Keep DOM order in sync with the incoming order (only moves a card
+      // when it is actually out of place, not on every tick).
+      var wantAfter = prevSibling ? prevSibling.nextSibling : el.firstChild;
+      if(rec.card !== wantAfter) el.insertBefore(rec.card, wantAfter);
+      prevSibling = rec.card;
     });
-    el.innerHTML = html || '<div class="placeholder" style="flex:0 0 auto;padding:10px">No sessions running</div>';
+    Object.keys(sessionCardEls).forEach(function(sid){
+      if(seen[sid]) return;
+      sessionCardEls[sid].card.remove();
+      delete sessionCardEls[sid];
+    });
   }
 
   // Vendor strip rows are created once per agent and updated in place on
@@ -981,16 +1047,27 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // genuinely moves most ticks instead of only once a minute; a tick with
   // no new tokens still calls this with the same value, and animateNumber's
   // own from===newVal check makes that a no-op rather than a tween.
+  // __bdevHeadlineLog: WS2 item 6's own evidence ("watch 30s during an
+  // active session, report the exact number of headline changes out of
+  // the number of ticks") - this page never reads it itself, only a
+  // uicheck-style read through the dev eval channel does, the same
+  // pattern paintMark/__bdevPaintLog already established.
+  var lastHeadlineVal = null;
   function renderHeadline(todayTokens){
-    animateNumber(document.getElementById('hlToday'), todayTokens || 0, tickRefreshMs, fmtTokensFull, function(t){ return t; });
+    var v = todayTokens || 0;
+    var log = window.__bdevHeadlineLog || (window.__bdevHeadlineLog = []);
+    log.push({ t: performance.now(), value: v, changed: v !== lastHeadlineVal });
+    if(log.length > 4000) log.splice(0, log.length - 4000);
+    lastHeadlineVal = v;
+    animateNumber(document.getElementById('hlToday'), v, tickRefreshMs, fmtTokensFull, function(t){ return t; });
   }
 
   var MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   function mondayOnOrBefore(d){
     var m = new Date(d.getTime());
-    var diff = (d.getUTCDay() + 6) % 7; // 0=Monday .. 6=Sunday
-    m.setUTCDate(d.getUTCDate() - diff);
+    var diff = (d.getDay() + 6) % 7; // 0=Monday .. 6=Sunday
+    m.setDate(d.getDate() - diff);
     return m;
   }
 
@@ -1018,11 +1095,22 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     ((payload && payload.rows) || []).forEach(function(r){ byDate[r.key] = r; });
 
     var now = new Date();
-    var today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     var start = new Date(today.getTime());
-    start.setUTCDate(start.getUTCDate() - 181);
+    start.setDate(start.getDate() - 181);
     var gridStart = mondayOnOrBefore(start);
-    var weeks = Math.floor((today.getTime() - gridStart.getTime()) / 604800000) + 1;
+    // Days first, rounded, then weeks - not a raw ms/604800000 division
+    // (found by review, 2026-09-26): gridStart and today are local
+    // midnights, so the ms between them is not always a multiple of 7
+    // real days whenever a DST transition falls inside the range (a
+    // 23h/25h day loses/gains an hour); floor-dividing that raw
+    // difference by one week's worth of ms then silently drops a whole
+    // week - including today's own column - on any Monday whose 182-day
+    // lookback crosses 29 March or 25 October. Math.round on the ms/day
+    // division absorbs the DST hour (at most 1/24 of a day) back to the
+    // correct whole-day count before weeks are ever computed.
+    var days = Math.round((today.getTime() - gridStart.getTime()) / 86400000);
+    var weeks = Math.floor(days / 7) + 1;
 
     var cols = [];
     var activeDays = 0;
@@ -1030,9 +1118,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       var col = [];
       for(var d = 0; d < 7; d++){
         var day = new Date(gridStart.getTime());
-        day.setUTCDate(gridStart.getUTCDate() + w * 7 + d);
+        day.setDate(gridStart.getDate() + w * 7 + d);
         if(day < start || day > today){ col.push(null); continue; }
-        var key = day.toISOString().slice(0, 10);
+        var key = fmtLocalDateKey(day);
         var row = byDate[key];
         var tokens = row ? row.tokens : 0;
         var cost = row && row.cost_usd != null ? row.cost_usd : null;
@@ -1079,35 +1167,70 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // opens the turn detail popup. Headline patch section 1: the ticker is
   // the one exception to "no scrollbars" (see .ticker/.trow above), so this
   // just renders every row and lets the box scroll, rather than cropToFit.
+  // WS2 item 3: rows are keyed by "session_id:turn" (a turn's own content
+  // never changes once it exists) and created once, reused by later ticks -
+  // in the ordinary case (only new turns at the front, per d12's own row
+  // -height check) this reduces to prepending the new rows and trimming
+  // the tail, not a full teardown-and-rebuild every refresh_ms.
+  var tickerRowEls = {};
+  function ensureTickerRow(t){
+    var key = t.session_id + ':' + t.turn;
+    var row = tickerRowEls[key];
+    if(row) return row;
+    row = document.createElement('div');
+    row.className = 'trow clickable';
+    row.dataset.session = t.session_id;
+    row.dataset.turn = t.turn;
+    var tEl = document.createElement('span'); tEl.className = 't';
+    var hEl = document.createElement('span'); hEl.className = 'h';
+    var tagEl = document.createElement('span'); tagEl.className = 'tag';
+    var mEl = document.createElement('span'); mEl.className = 'm';
+    row.appendChild(tEl); row.appendChild(hEl); row.appendChild(tagEl); row.appendChild(mEl);
+    tickerRowEls[key] = row;
+    row._t = tEl; row._h = hEl; row._tag = tagEl; row._m = mEl;
+    return row;
+  }
+
   function renderTicker(turns){
     var el = document.getElementById('turnTicker');
     if(!el) return;
-    var items = (turns || []).slice(0, 50).map(function(t){
-      var time = fmtHMS(new Date(t.at));
-      var tag = '';
-      if(t.finding){
-        tag = '<span class="tag">' + esc(t.finding.Kind) + '</span>';
-      }
-      var tok = (t.fresh || 0) + (t.cache_write || 0) + (t.cache_read || 0) + (t.output || 0);
-      return '<div class="trow clickable" data-session="' + esc(t.session_id) + '" data-turn="' + t.turn + '">' +
-        '<span class="t">' + time + '</span>' +
-        '<span class="h" style="color:' + agentColor(t.agent) + '">' + esc(t.agent) + '</span>' +
-        tag +
-        '<span class="m">' + fmtTokens(tok) + ' tok</span></div>';
-    });
-    if(!items.length){
+    turns = (turns || []).slice(0, 50);
+    if(!turns.length){
+      tickerRowEls = {};
       el.innerHTML = '<div class="placeholder" style="padding:10px">No turns in the last 30 minutes</div>';
       return;
     }
     // Skip the repaint while the user has scrolled away from the top
-    // (found by review, 2026-09-26): newest-first plus a full innerHTML
-    // replace every tick would otherwise drift a scrolled-down reading
-    // position by one row height per new turn (a new row inserts above
-    // whatever they're reading, but scrollTop is a raw pixel offset that
-    // does not follow it) and drop the row's own :hover state. Catches
-    // back up to live the moment they scroll back to the top.
+    // (found by review, 2026-09-26): newest-first plus inserting new rows
+    // above whatever they're reading would otherwise drift a scrolled
+    // -down reading position (scrollTop is a raw pixel offset that does
+    // not follow inserted content) and drop the row's own :hover state.
+    // Catches back up to live the moment they scroll back to the top.
     if(el.scrollTop > 2 && el.children.length) return;
-    el.innerHTML = items.join('');
+    if(el.firstChild && el.firstChild.className === 'placeholder') el.innerHTML = '';
+
+    var seen = {};
+    var prevSibling = null;
+    turns.forEach(function(t){
+      var key = t.session_id + ':' + t.turn;
+      seen[key] = true;
+      var row = ensureTickerRow(t);
+      row._t.textContent = fmtHMS(new Date(t.at));
+      row._h.textContent = t.agent;
+      row._h.style.color = agentColor(t.agent);
+      row._tag.textContent = t.finding ? t.finding.Kind : '';
+      row._tag.style.display = t.finding ? '' : 'none';
+      var tok = (t.fresh || 0) + (t.cache_write || 0) + (t.cache_read || 0) + (t.output || 0);
+      row._m.textContent = fmtTokens(tok) + ' tok';
+      var wantAfter = prevSibling ? prevSibling.nextSibling : el.firstChild;
+      if(row !== wantAfter) el.insertBefore(row, wantAfter);
+      prevSibling = row;
+    });
+    Object.keys(tickerRowEls).forEach(function(key){
+      if(seen[key]) return;
+      tickerRowEls[key].remove();
+      delete tickerRowEls[key];
+    });
   }
 
   // ---------- Turn detail popup (section 5) ----------
@@ -1473,9 +1596,15 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
   // renderSysmonPanels (section 5): the system zone's per-tick render,
   // fed from the shared snapshot's own sm field instead of its own poll.
+  var lastCoreCountLabeled = 0;
   function renderSysmonPanels(sm){
     if(!sm) return;
     if(sm.Cores && sm.Cores.length) lastCoreCount = sm.Cores.length;
+    if(lastCoreCount !== lastCoreCountLabeled){
+      lastCoreCountLabeled = lastCoreCount;
+      var cpuHead = document.getElementById('processGroupsCPUHead');
+      if(cpuHead) cpuHead.title = 'percent of the whole machine (' + lastCoreCount + ' cores), not one core - same convention as the header and the CPU box above';
+    }
     var hdrCPU = document.getElementById('hdrCPU');
     if(hdrCPU) hdrCPU.textContent = Math.round(sm.CPUPct) + '%';
     var hdrRAM = document.getElementById('hdrRAM');
@@ -1490,7 +1619,13 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   var HARNESS_LABEL = {
     'claude': 'Claude Code', 'claude-desktop': 'Claude Desktop', 'codex': 'Codex',
     'copilot-cli': 'Copilot CLI', 'copilot-vscode': 'Copilot (VS Code)', 'hermes': 'Hermes',
-    'wsl': 'WSL', 'burnmon-dev': 'BurnMon Dev', 'node': 'node (unclassified)'
+    'wsl': 'WSL',
+    // WS2 item 4 ("honest self row"): the Go process and its WebView2
+    // host used to sum into one "BurnMon Dev" row (internal/sysmon
+    // .Classify's own parent-chain inheritance folded webview2 into
+    // HarnessSelf); split labels for the harness split above.
+    'burnmon-dev': 'BurnMon Dev (Go)', 'burnmon-dev-webview2': 'BurnMon Dev (WebView2)',
+    'node': 'node (unclassified)'
   };
   // HARNESS_COLOR/harnessColor now live near AGENT_COLOR at the top of this
   // file (HARNESS_HUE, the one shared categorical palette both maps draw
@@ -1503,8 +1638,46 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // sparkline stretches to fill it (trendsvg width:100% viewBox below),
   // busiest first (order is already sorted descending by current CPU%).
   // No-scroll patch section 3: cropped to as many whole rows as
-  // #processGroupsWrap's own 200px budget fits (cropTableRows), rather than
-  // growing with content.
+  // #processGroupsWrap's own 200px budget fits.
+  //
+  // WS2 item 3 ("no per-tick DOM rebuilds"): one <tr> per harness, created
+  // once and reused - cells' text/sparkline points update in place, and a
+  // row only actually moves in the DOM when its own rank among the (small,
+  // bounded) harness set changes, not on every tick regardless. Cropping
+  // no longer measures by repeatedly rebuilding smaller and smaller HTML
+  // strings (this panel's own former cropTableRows helper, removed along
+  // with this rewrite since it had no other caller): the fit is computed
+  // once from a real row's own offsetHeight, cheap enough to redo every
+  // tick since it is a read, not a rebuild, and simply hides whatever
+  // does not fit.
+  var processGroupRowEls = {};
+  function ensureProcessGroupRow(tbody, harness){
+    var rec = processGroupRowEls[harness];
+    if(rec) return rec;
+    var tr = document.createElement('tr');
+    var tdName = document.createElement('td');
+    var dot = document.createElement('span'); dot.className = 'dot';
+    var nameText = document.createTextNode('');
+    tdName.appendChild(dot); tdName.appendChild(nameText);
+    var tdCPU = document.createElement('td'); tdCPU.className = 'num';
+    var tdRAM = document.createElement('td'); tdRAM.className = 'num';
+    var tdIO = document.createElement('td'); tdIO.className = 'num';
+    var tdTrend = document.createElement('td');
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('class', 'trendsvg'); svg.setAttribute('viewBox', '0 0 100 12');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    var poly = document.createElementNS(svgNS, 'polyline');
+    poly.setAttribute('fill', 'none'); poly.setAttribute('stroke-width', '1.2');
+    poly.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(poly); tdTrend.appendChild(svg);
+    tr.appendChild(tdName); tr.appendChild(tdCPU); tr.appendChild(tdRAM); tr.appendChild(tdIO); tr.appendChild(tdTrend);
+    tbody.appendChild(tr);
+    rec = { tr: tr, dot: dot, nameText: nameText, cpu: tdCPU, ram: tdRAM, io: tdIO, poly: poly };
+    processGroupRowEls[harness] = rec;
+    return rec;
+  }
+
   function renderProcessGroups(now, historyRows){
     var tbody = document.getElementById('processGroups');
     var wrap = document.getElementById('processGroupsWrap');
@@ -1515,10 +1688,23 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     });
     var order = (now || []).slice().sort(function(a, b){ return b.CPUPct - a.CPUPct; });
     if(!order.length){
+      processGroupRowEls = {};
       tbody.innerHTML = '<tr><td colspan="5" style="color:var(--dim);padding:8px">No classified processes yet</td></tr>';
       return;
     }
-    var rows = order.map(function(row){
+    if(!Object.keys(processGroupRowEls).length && tbody.firstChild) tbody.innerHTML = ''; // drop the placeholder row
+
+    var seen = {};
+    var prevSibling = null;
+    order.forEach(function(row){
+      seen[row.Harness] = true;
+      var rec = ensureProcessGroupRow(tbody, row.Harness);
+      var color = harnessColor(row.Harness);
+      rec.dot.style.background = color;
+      rec.nameText.textContent = HARNESS_LABEL[row.Harness] || row.Harness;
+      rec.cpu.textContent = (row.CPUPct / lastCoreCount).toFixed(0) + '%';
+      rec.ram.textContent = (row.MemMB / 1024).toFixed(1) + 'G';
+      rec.io.textContent = fmtBytes(row.IOBps);
       var series = (byHarness[row.Harness] || []).slice(-30);
       var maxCPU = series.reduce(function(m, r){ return Math.max(m, r.CPUPct); }, 1);
       var pts = series.map(function(r, i){
@@ -1526,16 +1712,56 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         var y = 12 - Math.min(12, 12 * r.CPUPct / maxCPU);
         return x.toFixed(1) + ',' + y.toFixed(1);
       }).join(' ');
-      return '<tr><td><span class="dot" style="background:' + harnessColor(row.Harness) + '"></span>' +
-        (HARNESS_LABEL[row.Harness] || row.Harness) + '</td>' +
-        '<td class="num">' + (row.CPUPct / lastCoreCount).toFixed(0) + '%</td>' +
-        '<td class="num">' + (row.MemMB / 1024).toFixed(1) + 'G</td>' +
-        '<td class="num">' + fmtBytes(row.IOBps) + '</td>' +
-        '<td><svg class="trendsvg" viewBox="0 0 100 12" preserveAspectRatio="none">' +
-        (pts ? '<polyline points="' + pts + '" fill="none" stroke="' + harnessColor(row.Harness) + '" stroke-width="1.2" vector-effect="non-scaling-stroke"/>' : '') +
-        '</svg></td></tr>';
+      rec.poly.setAttribute('points', pts);
+      rec.poly.setAttribute('stroke', color);
+      var wantAfter = prevSibling ? prevSibling.nextSibling : tbody.firstChild;
+      if(rec.tr !== wantAfter) tbody.insertBefore(rec.tr, wantAfter);
+      prevSibling = rec.tr;
+      rec.tr.style.display = '';
     });
-    cropTableRows(wrap, tbody, rows);
+    Object.keys(processGroupRowEls).forEach(function(h){
+      if(seen[h]) return;
+      processGroupRowEls[h].tr.remove();
+      delete processGroupRowEls[h];
+    });
+
+    // Crop to whatever whole-row count wrap's own budget fits, same effect
+    // cropTableRows had, from one real row's own rendered height instead of
+    // a rebuild-and-measure loop: every row is the same height (no
+    // per-harness variation in this table), so the first row already
+    // measured is representative of all of them.
+    var firstRow = tbody.firstChild;
+    if(firstRow && firstRow.offsetHeight > 0){
+      // Measured against the real thead height (found by review,
+      // 2026-09-26: a flat "-1 row" guess for the thead's own headroom
+      // hid one row that actually fit whenever the real thead was
+      // shorter than one data row, which it usually is - "CPU %MACH"
+      // only wraps to two lines at a handful of specific widths).
+      var theadEl = tbody.previousElementSibling;
+      var theadHeight = theadEl ? theadEl.offsetHeight : firstRow.offsetHeight;
+      var availableForRows = wrap.clientHeight - theadHeight;
+      var maxRows = Math.max(1, Math.floor(availableForRows / firstRow.offsetHeight));
+      var i = 0;
+      var node = tbody.firstChild;
+      while(node){
+        node.style.display = i < maxRows ? '' : 'none';
+        node = node.nextSibling;
+        i++;
+      }
+      // A crop that still overflows (the -1 headroom above proved too
+      // little, e.g. a taller thead this estimate did not fully account
+      // for) tightens by one row at a time, the same tail cropTableRows'
+      // own while-loop had, just against already-built rows instead of
+      // rebuilding HTML for each attempt.
+      while(maxRows > 1 && wrap.scrollHeight > wrap.clientHeight + 1){
+        maxRows--;
+        var j = 0; node = tbody.firstChild;
+        while(node){
+          if(j >= maxRows) node.style.display = 'none';
+          node = node.nextSibling; j++;
+        }
+      }
+    }
   }
 
   // lastProcessGroupsHistory: the shared snapshot's own process_groups_history
@@ -1901,6 +2127,30 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   scheduleTick(tickRefreshMs);
   tick();
 
+  // WS2 item 2, "pause when nobody looks": document.visibilitychange
+  // fires when this app's own window is minimized (WebView2/Chromium ties
+  // page visibility to the host window's state, the same signal a real
+  // browser tab gets) and again when it is restored. Hidden: stop the
+  // shared render tick entirely, not just slow it - nobody can see a paint
+  // against a minimized window, so there is nothing to buy by still
+  // computing one every refresh_ms. Visible again: one immediate tick
+  // (not a stale one from whatever the timer's own phase happened to be)
+  // then resume the normal cadence. bdevSetHidden also tells the Go side
+  // (app.go's startSampling), which slows its own cheap system sample to
+  // 10s while hidden - a page that is not painting still has that ticker
+  // running server-side, since it feeds sysmon_history for the moment the
+  // page comes back.
+  document.addEventListener('visibilitychange', function(){
+    var hidden = document.hidden;
+    if(window.bdevSetHidden) window.bdevSetHidden(hidden);
+    if(hidden){
+      if(tickTimer){ clearInterval(tickTimer); tickTimer = null; }
+    } else if(!tickTimer){
+      tick();
+      scheduleTick(tickRefreshMs);
+    }
+  });
+
   // Section 10 (responsive, "panels grow and shrink with the window"): the
   // history canvas sets its backing-store pixel size from its container's
   // clientWidth/clientHeight at draw time (renderHistoryChart), so a window
@@ -1932,7 +2182,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     return false;
   }
   // A panel's own width/height-cropped content (renderHeatmap,
-  // renderHarnessHeatmap, cropTableRows) reads clientWidth/clientHeight as
+  // renderHarnessHeatmap, renderProcessGroups) reads clientWidth/clientHeight as
   // 0 while display:none, so whatever last rendered into it while it was
   // fit-dropped is wrong (crops to almost nothing) and would otherwise sit
   // there stale once the panel comes back, until that panel's own next

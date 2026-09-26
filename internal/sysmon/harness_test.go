@@ -9,6 +9,12 @@ func TestClassify(t *testing.T) {
 		}
 		return "", false
 	}
+	selfWebviewParent := func(pid int32) (Harness, bool) {
+		if pid == 101 {
+			return HarnessSelfWebview, true
+		}
+		return "", false
+	}
 	otherParent := func(pid int32) (Harness, bool) {
 		if pid == 200 {
 			return HarnessCodex, true
@@ -101,10 +107,24 @@ func TestClassify(t *testing.T) {
 			want: HarnessSelf,
 		},
 		{
-			name:   "webview2 child of burnmon-dev inherits self",
+			// WS2 item 4 ("honest self row"): a webview2 child of
+			// burnmon-dev.exe itself gets its own bucket, split out from
+			// HarnessSelf, rather than inheriting it directly - this used
+			// to want HarnessSelf before that split.
+			name:   "webview2 child of burnmon-dev is its own webview harness, not plain self",
 			p:      Proc{Name: "msedgewebview2.exe", PPID: 100},
 			parent: selfParent,
-			want:   HarnessSelf,
+			want:   HarnessSelfWebview,
+		},
+		{
+			// The webview2 browser process's own children (renderer/GPU/
+			// utility) are webview2 processes too, one level deeper: their
+			// parent has already resolved to HarnessSelfWebview, not
+			// HarnessSelf directly, and that must still propagate.
+			name:   "webview2 grandchild of burnmon-dev (child of the webview2 browser process) stays in the webview harness",
+			p:      Proc{Name: "msedgewebview2.exe", PPID: 101},
+			parent: selfWebviewParent,
+			want:   HarnessSelfWebview,
 		},
 		{
 			name:   "webview2 child of an unrelated app is other",

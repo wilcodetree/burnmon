@@ -270,6 +270,22 @@ func main() {
 		log.Println("could not bind bdevMarkFirstRender:", err)
 	}
 
+	// bdevSetHidden (WS2 item 2, "pause when nobody looks"): page.html
+	// calls this from its own document.visibilitychange listener, which
+	// WebView2/Chromium already fires when this app's own window is
+	// minimized (the same page-visibility signal a real browser tab gets,
+	// tied here to the host window rather than a background tab). a.hidden
+	// is read by startSampling's cheap system-sample ticker (app.go) to
+	// slow it to a fixed 10s while true; the page itself stops calling
+	// bdevSnapshotNow at all while hidden, so there is nothing here to do
+	// on the "becoming visible again" edge - the page's own listener fires
+	// one immediate tick then resumes its normal cadence, both client-side.
+	if err := w.Bind("bdevSetHidden", func(hidden bool) {
+		a.hidden.Store(hidden)
+	}); err != nil {
+		log.Println("could not bind bdevSetHidden:", err)
+	}
+
 	// sysmonNowPayload adds the header pressure chip's score (internal/sysmon
 	// .PressureScore, phase 3) and the CPU box's static base clock (UI review
 	// patch section 6) alongside the raw sample: Sample is embedded
@@ -422,12 +438,16 @@ func main() {
 	// scoped to vendor-strip (harness) rows, design doc section 9. Today's
 	// events for that vendor through the same history.Build, returning its
 	// Totals (Fresh/CacheW/CacheR/Out) directly rather than a new struct.
+	// "Today" is local (WS2 item 5), matching vendorstrip.Total.Today's own
+	// boundary: this is that same row's click-through detail, so it must
+	// agree with it on which events count as "today", not disagree for
+	// part of every day the way a UTC boundary here would have.
 	if err := w.Bind("bdevCacheBreakdown", func(vendor string) (history.Totals, error) {
 		a.mu.Lock()
 		cfg := a.cfg
 		a.mu.Unlock()
-		now := time.Now().UTC()
-		dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		now := time.Now().In(time.Local)
+		dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 		events, err := st.EventsSince(dayStart)
 		if err != nil {
 			return history.Totals{}, err

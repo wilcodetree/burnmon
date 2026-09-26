@@ -176,9 +176,39 @@ func TestBuildDailyCSV_HasHeaderAndOneRowPerDay(t *testing.T) {
 	if lines[0] != "date,harness,model,fresh,cache_write,cache_read,output,cost_usd" {
 		t.Fatalf("unexpected header: %q", lines[0])
 	}
-	// Two distinct UTC days (base's day, and base+25h's day): one row each.
+	// Two distinct local days (base's day, and base+25h's day, both well
+	// clear of a local-midnight boundary so this holds regardless of the
+	// test machine's own UTC offset): one row each.
 	if len(lines) != 3 {
 		t.Fatalf("expected header + 2 rows, got %d lines: %v", len(lines), lines)
+	}
+}
+
+// TestDailyRows_BucketsByLocalDayNotUTC guards a regression a fresh review
+// caught (2026-09-26): dailyRows keyed by t.At.Format("2006-01-02") where
+// t.At is deliberately kept UTC (a portable instant, matching WS3's own
+// convention), but WS2 item 5 made --since/--until (and every other
+// calendar-day boundary in this app) local - a turn just after local
+// midnight, still before UTC midnight, used to bucket into the previous
+// local day. Skips on a machine whose own time.Local is UTC (nothing to
+// distinguish there), same reasoning other DST/local-time tests in this
+// codebase use, but does not need Europe/Amsterdam specifically: any
+// nonzero offset reproduces the bug this guards against.
+func TestDailyRows_BucketsByLocalDayNotUTC(t *testing.T) {
+	if _, offset := time.Now().Zone(); offset == 0 {
+		t.Skip("this machine's time.Local is UTC; nothing to distinguish from a local day")
+	}
+	localMidnight := time.Date(2026, 9, 26, 0, 30, 0, 0, time.Local)
+	events := []schema.Event{
+		testEvent("s1", "claude-sonnet-5", localMidnight, 1000, ptr(0), ptr(0), 100),
+	}
+	b := Assemble(events, testConfig(), nil, nil, sysmon.MachineProfile{},
+		localMidnight.Add(-time.Hour), localMidnight.Add(time.Hour), localMidnight, nil)
+	if len(b.Daily) != 1 {
+		t.Fatalf("expected 1 daily row, got %d: %+v", len(b.Daily), b.Daily)
+	}
+	if want := "2026-09-26"; b.Daily[0].Date != want {
+		t.Fatalf("Daily[0].Date = %q, want %q (the local day, not the UTC one)", b.Daily[0].Date, want)
 	}
 }
 

@@ -20,7 +20,7 @@ func mkEvent(at time.Time, input, output int64, cacheRead, cacheWrite *int64) sc
 // cache refreshes: events after the cache's own GeneratedAt add on top of
 // the cached Today figure.
 func TestHeadlineTodayTokens_AddsSinceCache(t *testing.T) {
-	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.Local)
 	cacheAt := day.Add(10 * time.Minute)
 	now := day.Add(12 * time.Minute)
 
@@ -43,7 +43,7 @@ func TestHeadlineTodayTokens_AddsSinceCache(t *testing.T) {
 // re-running with the refreshed cache must not add them a second time, and
 // the total must not drop (no jump back).
 func TestHeadlineTodayTokens_NoDoubleCountAfterRefresh(t *testing.T) {
-	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.Local)
 	oldCacheAt := day.Add(10 * time.Minute)
 	deltaEventAt := day.Add(11 * time.Minute)
 	now := day.Add(12 * time.Minute)
@@ -70,8 +70,8 @@ func TestHeadlineTodayTokens_NoDoubleCountAfterRefresh(t *testing.T) {
 // today's own start describes a day that has already ended, so it is not
 // carried forward; only the fetched window's own today-events count.
 func TestHeadlineTodayTokens_CacheCrossesMidnight(t *testing.T) {
-	yesterday := time.Date(2026, 9, 25, 23, 59, 0, 0, time.UTC)
-	today := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	yesterday := time.Date(2026, 9, 25, 23, 59, 0, 0, time.Local)
+	today := time.Date(2026, 9, 26, 0, 0, 0, 0, time.Local)
 	now := today.Add(1 * time.Minute)
 
 	events := []schema.Event{
@@ -92,7 +92,7 @@ func TestHeadlineTodayTokens_CacheCrossesMidnight(t *testing.T) {
 // would then report a lower number than before (its own doc comment says
 // so); headlineTodayMonotonic must hold the floor instead.
 func TestHeadlineTodayMonotonic_NeverDipsOnStaleCache(t *testing.T) {
-	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.Local)
 	cacheAt := day.Add(5 * time.Minute) // never refreshes again in this test
 	vendorTotal := vendorstrip.Row{Today: 1000}
 	tickEvent := mkEvent(cacheAt.Add(1*time.Minute), 500, 0, nil, nil)
@@ -127,8 +127,8 @@ func TestHeadlineTodayMonotonic_NeverDipsOnStaleCache(t *testing.T) {
 // previous day's high one - that is the one intentional exception to
 // "never dips".
 func TestHeadlineTodayMonotonic_DayRolloverResets(t *testing.T) {
-	yesterday := time.Date(2026, 9, 25, 23, 0, 0, 0, time.UTC)
-	today := time.Date(2026, 9, 26, 0, 30, 0, 0, time.UTC)
+	yesterday := time.Date(2026, 9, 25, 23, 0, 0, 0, time.Local)
+	today := time.Date(2026, 9, 26, 0, 30, 0, 0, time.Local)
 
 	a := &app{}
 	if got := a.headlineTodayMonotonic(vendorstrip.Row{Today: 900_000}, yesterday.Format(time.RFC3339), nil, yesterday.Add(10*time.Minute)); got != 900_000 {
@@ -136,6 +136,51 @@ func TestHeadlineTodayMonotonic_DayRolloverResets(t *testing.T) {
 	}
 	if got := a.headlineTodayMonotonic(vendorstrip.Row{Today: 40}, today.Format(time.RFC3339), nil, today); got != 40 {
 		t.Fatalf("day2 = %d, want 40 (new day resets, not clamped to yesterday's 900000)", got)
+	}
+}
+
+// TestHeadlineDayStart_LocalNotUTC guards WS2 item 5: headlineDayStart used
+// to be a UTC copy left behind when vendorstrip's own dayStart switched to
+// time.Local (WS3, "local time everywhere"), so it silently disagreed with
+// vendorStrip.Total.Today's own day boundary for part of every day (the gap
+// between UTC midnight and local midnight, or vice versa, depending on the
+// machine's own offset). Checked directly against both 2026 Europe/Amsterdam
+// DST transition dates, same recipe internal/forecast's own DST test uses:
+// a fixed instant just after local midnight must resolve to that same local
+// midnight, not a UTC-anchored one, on both the spring-forward and
+// fall-back day.
+func TestHeadlineDayStart_LocalNotUTC(t *testing.T) {
+	ams, err := time.LoadLocation("Europe/Amsterdam")
+	if err != nil {
+		t.Skip("Europe/Amsterdam tzdata not available:", err)
+	}
+	cases := []struct {
+		name       string
+		day        time.Time // local midnight, Europe/Amsterdam
+		wantOffset int       // expected UTC offset in seconds at that midnight
+	}{
+		{"spring-forward day (23h)", time.Date(2026, 3, 29, 0, 0, 0, 0, ams), 1 * 3600}, // still CET before the 02:00 jump
+		{"fall-back day (25h)", time.Date(2026, 10, 25, 0, 0, 0, 0, ams), 2 * 3600},     // still CEST before the 03:00 fold
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// monday.Zone() in a forecast-test-style check would always
+			// read ams's own offset, since tc.day was built with that
+			// Location directly; what actually matters is what the real
+			// machine's time.Local reads for this same instant.
+			if _, off := tc.day.In(time.Local).Zone(); off != tc.wantOffset {
+				t.Skipf("this machine's Europe/Amsterdam offset at %s is not the expected %+dh; skipping a DST test that assumes it", tc.day, tc.wantOffset/3600)
+			}
+			now := tc.day.Add(1 * time.Hour) // well past local midnight, still the same local day, before that day's own DST transition
+			got := headlineDayStart(now)
+			wantInstant := time.Date(tc.day.Year(), tc.day.Month(), tc.day.Day(), 0, 0, 0, 0, time.Local)
+			if !got.Equal(wantInstant) {
+				t.Fatalf("headlineDayStart(%v) = %v, want %v (local midnight, not a UTC-anchored one)", now, got, wantInstant)
+			}
+			if got.Location() != time.Local {
+				t.Errorf("headlineDayStart's Location = %v, want time.Local", got.Location())
+			}
+		})
 	}
 }
 

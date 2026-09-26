@@ -28,21 +28,30 @@ import (
 	"burnmon/internal/sysmon"
 )
 
-// parseExportTime accepts a bare UTC day (YYYY-MM-DD) or a full RFC3339
+// parseExportTime accepts a bare local day (YYYY-MM-DD) or a full RFC3339
 // timestamp: burnmon-cli export's own day-string convention, extended,
 // since a 24-hour export benefits from time-of-day granularity that a bare
-// day cannot express. endOfDay shifts a bare-day match forward by 24h, so
-// `--until 2026-09-24` means "through the end of that day" (matching
-// burnmon-cli export's own inclusive-whole-day convention for --until)
-// rather than that day's first instant, which Assemble's exclusive upper
-// bound would otherwise silently exclude entirely (found by review,
-// 2026-09-24). A caller passing an explicit RFC3339 timestamp already names
-// an exact instant, so endOfDay never applies to that form.
+// day cannot express. endOfDay shifts a bare-day match forward by one local
+// day, so `--until 2026-09-24` means "through the end of that day"
+// (matching burnmon-cli export's own inclusive-whole-day convention for
+// --until) rather than that day's first instant, which Assemble's
+// exclusive upper bound would otherwise silently exclude entirely (found
+// by review, 2026-09-24). A caller passing an explicit RFC3339 timestamp
+// already names an exact instant, so endOfDay never applies to that form.
+//
+// WS2 item 5 ("local time everywhere"): this used to parse the bare-day
+// form as UTC (time.Parse's own default with no Location in the layout)
+// and add a UTC calendar day (always exactly 24h, AddDate on a UTC-located
+// time) - modeled on burnmon-cli export's own pre-WS3 convention, but never
+// itself updated when that command's flag was fixed to mean a local day.
+// time.ParseInLocation plus AddDate on the resulting local-located time
+// fixes both: a local calendar day, added as a real local day (23h/25h
+// across a DST transition, not always 24h).
 func parseExportTime(s string, endOfDay bool) (time.Time, error) {
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t, nil
 	}
-	if t, err := time.Parse("2006-01-02", s); err == nil {
+	if t, err := time.ParseInLocation("2006-01-02", s, time.Local); err == nil {
 		if endOfDay {
 			t = t.AddDate(0, 0, 1)
 		}
@@ -154,8 +163,8 @@ func buildExportBundle(st *store.Store, sys *sysmon.Store, cfg *pricing.Config, 
 // 2026-09-24, confirmed empirically against a real build this session).
 func runExport(args []string) int {
 	fs := flag.NewFlagSet("export", flag.ExitOnError)
-	sinceStr := fs.String("since", "", "window start, YYYY-MM-DD or RFC3339 (default: 24h before --until)")
-	untilStr := fs.String("until", "", "window end, YYYY-MM-DD or RFC3339, exclusive (default: now)")
+	sinceStr := fs.String("since", "", "window start, local day (YYYY-MM-DD) or RFC3339 (default: 24h before --until)")
+	untilStr := fs.String("until", "", "window end, local day (YYYY-MM-DD) or RFC3339, exclusive (default: now)")
 	out := fs.String("out", "", "output directory")
 	redact := fs.Bool("redact", false, "replace project, owner and client names with stable hashes")
 	if err := fs.Parse(args); err != nil {

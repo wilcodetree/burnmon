@@ -250,7 +250,15 @@ func dailyRows(turns []TurnRow) []DailyRow {
 	byKey := map[key]*DailyRow{}
 	var order []key
 	for _, t := range turns {
-		date := t.At.Format("2006-01-02")
+		// t.At is a portable UTC instant (kept that way deliberately: see
+		// Assemble's own doc comment), but the day it buckets into must be
+		// the local calendar day the rest of the app groups by (--since/
+		// --until, now local, WS2 item 5); a bare UTC .Format here bucketed
+		// early-local-morning turns into the previous local day (found by
+		// review, 2026-09-26 - the exact class of bug WS3 already fixed
+		// elsewhere: a calendar-day key built from a different Location
+		// than the boundary that selected the data).
+		date := t.At.In(time.Local).Format("2006-01-02")
 		k := key{date, t.Harness, t.Model}
 		row := byKey[k]
 		if row == nil {
@@ -490,8 +498,15 @@ func BuildSummaryMD(b Bundle) string {
 			if sample, ok := nearestSystemState(b.SystemTimeline, t.At); ok {
 				state = fmt.Sprintf("CPU %.0f%%, pressure %d", sample.CPUPct, sysmon.PressureScore(sample))
 			}
+			// Local, not t.At's own stored UTC (found by review,
+			// 2026-09-26): every other time this app shows a human is
+			// local (the header clock, the turn ticker, the heatmap), and
+			// summary.md is read by a human, not machine-parsed like
+			// data.json's own At field - a bare UTC stamp with no zone
+			// marker here reads as local and is silently 1-2 hours off in
+			// Europe/Amsterdam.
 			fmt.Fprintf(&s, "| %s | %s | %s | %s | %s | %s |\n",
-				t.At.Format("2006-01-02 15:04:05"), t.Harness, t.Model, fmtTok(t.tokens()), fmtCost(t.CostUSD), state)
+				t.At.In(time.Local).Format("2006-01-02 15:04:05"), t.Harness, t.Model, fmtTok(t.tokens()), fmtCost(t.CostUSD), state)
 		}
 		s.WriteString("\n")
 	}

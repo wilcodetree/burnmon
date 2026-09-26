@@ -401,6 +401,30 @@ func TestAnalyze_SelfOverhead_FiresOverMemBudget(t *testing.T) {
 	}
 }
 
+// TestAnalyze_SelfOverhead_CombinesGoAndWebviewRows guards a regression a
+// fresh review caught (2026-09-26): WS2 item 4 split what used to be one
+// summed HarnessSelf process-groups row into HarnessSelf (the Go process)
+// and HarnessSelfWebview (its WebView2 host), and evalSelfOverhead still
+// only read HarnessSelf, silently dropping WebView2's own share - the
+// larger half of this app's real footprint. Neither harness alone crosses
+// SelfCPUPct (2%) here, but their sum (2.5%) should.
+func TestAnalyze_SelfOverhead_CombinesGoAndWebviewRows(t *testing.T) {
+	base := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
+	var groups []sysmon.ProcessGroupSample
+	for i := 0; i < 5; i++ {
+		ts := base.Add(time.Duration(i) * time.Second)
+		groups = append(groups,
+			sysmon.ProcessGroupSample{Ts: ts, Harness: sysmon.HarnessSelf, CPUPct: 1, MemMB: 50},
+			sysmon.ProcessGroupSample{Ts: ts, Harness: sysmon.HarnessSelfWebview, CPUPct: 1.5, MemMB: 60},
+		)
+	}
+	in := Input{Now: base, ProcessGroups: groups}
+	findings := Analyze(in, testConfig(), DefaultThresholds)
+	if c := findingIDs(findings)["self-overhead"]; c != 1 {
+		t.Fatalf("expected 1 self-overhead finding from the combined Go+WebView2 CPU (1+1.5=2.5%%, over the 2%% budget), got %d (all: %+v)", c, findings)
+	}
+}
+
 func TestAnalyze_SelfOverhead_NoFireWithinBudget(t *testing.T) {
 	base := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
 	var groups []sysmon.ProcessGroupSample

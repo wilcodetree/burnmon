@@ -30,12 +30,14 @@ func eventTokens(e schema.Event) int64 {
 	return t
 }
 
-// headlineDayStart mirrors vendorstrip's own unexported dayStart (UTC
-// midnight of now): the same calendar boundary VendorStripTotals sums
-// "today" against, so this stays in lockstep with vendorStrip.Total.Today.
+// headlineDayStart mirrors vendorstrip's own unexported dayStart (local
+// midnight of now, WS3's "local time everywhere" - this used to be a UTC
+// copy, left behind when vendorstrip switched, WS2 item 5): the same
+// calendar boundary VendorStripTotals sums "today" against, so this stays
+// in lockstep with vendorStrip.Total.Today.
 func headlineDayStart(now time.Time) time.Time {
-	now = now.UTC()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	now = now.In(time.Local)
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 }
 
 // headlineTodayTokens returns today's running total: vendorStrip's own
