@@ -356,13 +356,20 @@ type devConfig struct {
 	// explicit opt-in, not something a fresh install starts doing.
 	MicrosoftTodoEnabled bool `json:"microsoft_todo_enabled"`
 	// RefreshMs (no-scroll patch section 5) is the page's one shared
-	// render tick, default 2000, floored at 1000: every panel repaints
-	// from one bdevSnapshotNow call on this cadence, no faster.
+	// render tick, default 1000, floored at 1000: every panel repaints
+	// from one bdevSnapshotNow call on this cadence, no faster. Phase 5b
+	// measured a 10-minute refresh_ms 1000 run at 1.89 percent average
+	// whole-machine CPU against refresh_ms 2000's own 2.22 percent
+	// (process walk and persistence run on their own fixed cadences
+	// regardless, see processWalkInterval/persistInterval below, so
+	// halving the paint cadence did not double the cost of sampling);
+	// under the 2 percent bar and not worse than the old default, so the
+	// design doc's own flip condition made 1000 the new default.
 	RefreshMs int `json:"refresh_ms"`
 }
 
 func loadDevConfig(dataDir string) devConfig {
-	cfg := devConfig{RetentionDays: 7, RefreshMs: 2000}
+	cfg := devConfig{RetentionDays: 7, RefreshMs: 1000}
 	path := filepath.Join(dataDir, "burnmon-dev.json")
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -386,23 +393,37 @@ func loadDevConfig(dataDir string) devConfig {
 	return cfg
 }
 
-// startSampling ticks the live sampler on interval (no-scroll patch section
-// 5: "align system sampling to the same 2s tick" - interval is
-// devCfg.RefreshMs, so a custom refresh_ms moves this cadence too, not just
-// the page's own render tick), keeping the latest sample in memory for
-// bdevSnapshotNow, and persists every 5th tick to burnmon-dev.db, per the
-// design doc's original 10s-at-2s-ticks sampling cadence (this scales the
-// same way: 5 ticks, whatever interval a tick now is). The same tick also
-// runs the process-group sampler (harness CPU/RAM/IO), on the same cadence:
-// perfadvisor's own live TUI already proves a full process scan once a
-// second is affordable, so once every 2s (the default) is not a new cost
-// class.
-func (a *app) startSampling(interval time.Duration) {
+// processWalkInterval and persistInterval are phase 5b's own split
+// cadences, both fixed and independent of refreshInterval (unlike the
+// single shared tick this replaced): a full process.Processes() walk
+// (ProcessSampler.Tick, classify plus a per-process Percent/MemoryInfo/
+// IOCounters read) is the expensive part of sampling, so it no longer
+// speeds up just because refresh_ms was lowered for a snappier paint
+// cadence; persistence to burnmon-dev.db is by wall clock for the same
+// reason, so a faster paint or process-walk cadence never multiplies
+// write volume to the store. 10 minutes measured at refresh_ms 2000 and
+// refresh_ms 1000 both against these same two fixed cadences, per
+// 02_roadmap\2026-09-24_ws2_burnmon_dev.md's phase 5 verify pass.
+const (
+	processWalkInterval = 3 * time.Second
+	persistInterval     = 10 * time.Second
+)
+
+// startSampling runs three independent tickers instead of one shared one
+// (phase 5b): refreshInterval paints the cheap, whole-machine system
+// sample (a.sampler.Tick, CPU/mem/disk/net) that bdevSnapshotNow reads on
+// every render tick, matching the page's own paint cadence; a fixed
+// processWalkInterval runs the process-group sampler (harness CPU/RAM/IO)
+// on its own clock; a fixed persistInterval writes whatever the other two
+// goroutines most recently produced to burnmon-dev.db. Each ticker only
+// ever touches its own sampler (both Sampler and ProcessSampler require
+// single-goroutine use), and all three exchange state through a.latest/
+// a.latestGroups under a.mu.
+func (a *app) startSampling(refreshInterval time.Duration) {
+	firstSample := true
 	go func() {
-		ticker := time.NewTicker(interval)
+		ticker := time.NewTicker(refreshInterval)
 		defer ticker.Stop()
-		tick := 0
-		firstSample := true
 		for range ticker.C {
 			sm, err := a.sampler.Tick()
 			if err != nil {
@@ -415,27 +436,42 @@ func (a *app) startSampling(interval time.Duration) {
 			}
 			a.mu.Lock()
 			a.latest = sm
+			a.mu.Unlock()
+		}
+	}()
+
+	go func() {
+		ticker := time.NewTicker(processWalkInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			a.mu.Lock()
 			cfg := a.cfg
 			a.mu.Unlock()
-
 			groups, err := a.procSampler.Tick(cfg.CopilotVSCodeOtelFile != "")
 			if err != nil {
 				log.Println("process sample:", err)
-			} else {
-				a.mu.Lock()
-				a.latestGroups = groups
-				a.mu.Unlock()
+				continue
 			}
+			a.mu.Lock()
+			a.latestGroups = groups
+			a.mu.Unlock()
+		}
+	}()
 
-			tick++
-			if tick%5 == 0 {
-				if err := a.sys.InsertSample(sm); err != nil {
-					log.Println("sysmon insert:", err)
-				}
-				if len(groups) > 0 {
-					if err := a.sys.InsertProcessGroupSamples(groups); err != nil {
-						log.Println("process group insert:", err)
-					}
+	go func() {
+		ticker := time.NewTicker(persistInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			a.mu.Lock()
+			sm := a.latest
+			groups := a.latestGroups
+			a.mu.Unlock()
+			if err := a.sys.InsertSample(sm); err != nil {
+				log.Println("sysmon insert:", err)
+			}
+			if len(groups) > 0 {
+				if err := a.sys.InsertProcessGroupSamples(groups); err != nil {
+					log.Println("process group insert:", err)
 				}
 			}
 		}
