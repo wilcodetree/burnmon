@@ -88,6 +88,12 @@ type app struct {
 	latest       sysmon.Sample
 	latestGroups []sysmon.ProcessGroupSample
 
+	// headlineDay/headlineFloor back headlineTodayMonotonic (headline.go):
+	// a per-day floor on the headline total, guarded by mu like everything
+	// else above. See headlineTodayMonotonic's own doc comment for why.
+	headlineDay   time.Time
+	headlineFloor int64
+
 	// heatmapMu guards the activity heatmap's closed-day cache (Wilco's own
 	// finding, 2026-09-24: bdevActivityHeatmap ran a fresh 182-day
 	// EventsSince plus history.Build on every 1-minute poll, 3.34s/52,728
