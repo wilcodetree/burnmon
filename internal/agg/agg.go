@@ -134,6 +134,20 @@ type target struct {
 func Build(sessions []*scan.Session, cutoff time.Time) (months, weeks, days map[string]*Bucket, kept []*scan.Session) {
 	months, weeks, days = map[string]*Bucket{}, map[string]*Bucket{}, map[string]*Bucket{}
 
+	// cutoffDay: a plain string comparison against s.Daily's own local
+	// calendar-day keys (Wilco's decision, 2026-09-26: local time
+	// everywhere; those keys come from internal/dataset/fromstore.go's
+	// e.At.In(time.Local)). cutoff itself already carries time.Local (its
+	// caller, dataset.monthStart, constructs it that way), so Format here
+	// is safe; comparing it as a time.Time against a day parsed from
+	// s.Start/s.End (UTC-instant-labelled strings, deliberately left that
+	// way, see fromstore.go's own stamps) or from parseDay(daystr) (which
+	// anchors to UTC midnight regardless of what calendar day the string
+	// actually names) would silently drop or keep the wrong session/day
+	// around the cutoff boundary, exactly the class of bug a fresh review
+	// caught before this landed.
+	cutoffDay := cutoff.Format("2006-01-02")
+
 	for _, s := range sessions {
 		if len(s.Start) < 10 || len(s.End) < 10 {
 			continue
@@ -141,16 +155,15 @@ func Build(sessions []*scan.Session, cutoff time.Time) (months, weeks, days map[
 		if _, ok := parseDay(s.Start[:10]); !ok {
 			continue
 		}
-		ed, ok := parseDay(s.End[:10])
-		if !ok || ed.Before(cutoff) {
-			continue // all activity ended before the window opened
-		}
 
 		dayKeys := make([]string, 0, len(s.Daily))
 		for k := range s.Daily {
 			dayKeys = append(dayKeys, k)
 		}
 		sort.Strings(dayKeys)
+		if len(dayKeys) == 0 || dayKeys[len(dayKeys)-1] < cutoffDay {
+			continue // every day this session was active fell before the window opened
+		}
 
 		firstDay := ""
 		seenMonth := map[string]bool{}
@@ -158,8 +171,11 @@ func Build(sessions []*scan.Session, cutoff time.Time) (months, weeks, days map[
 
 		for _, daystr := range dayKeys {
 			dv := s.Daily[daystr]
+			if daystr < cutoffDay {
+				continue
+			}
 			dd, ok := parseDay(daystr)
-			if !ok || dd.Before(cutoff) {
+			if !ok {
 				continue
 			}
 			if firstDay == "" {

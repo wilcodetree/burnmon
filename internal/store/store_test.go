@@ -717,7 +717,8 @@ func TestSessionTotalsVendorQualified(t *testing.T) {
 
 // TestForecastScoresRoundTrip guards F1's store layer: InsertForecastPlan
 // never overwrites a week already on record, RecordForecastActual only
-// fills a week in once, and DailyTokenTotals buckets by UTC calendar day.
+// fills a week in once, and DailyTokenTotals buckets by local calendar day
+// (Wilco's decision, 2026-09-26: local time everywhere).
 func TestForecastScoresRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	st, err := Open(filepath.Join(dir, "burnmon.db"))
@@ -801,10 +802,81 @@ func TestForecastScoresRoundTrip(t *testing.T) {
 	if len(daily) != 2 {
 		t.Fatalf("len(DailyTokenTotals) = %d, want 2 (two distinct days)", len(daily))
 	}
-	if daily[0].Date != ws.Format("2006-01-02") || daily[0].Tokens != 500 {
-		t.Fatalf("day 0 = %+v, want {%s 500}", daily[0], ws.Format("2006-01-02"))
+	if daily[0].Date != ws.In(time.Local).Format("2006-01-02") || daily[0].Tokens != 500 {
+		t.Fatalf("day 0 = %+v, want {%s 500}", daily[0], ws.In(time.Local).Format("2006-01-02"))
 	}
 	if daily[1].Tokens != 50 {
 		t.Fatalf("day 1 tokens = %d, want 50", daily[1].Tokens)
+	}
+}
+
+// TestDailyTokenTotals_DSTEarlyMorning is extra item 5's spec'd check
+// (Wilco, 2026-09-26: local time everywhere), for DailyTokenTotals
+// specifically: SQLite has no IANA timezone database, so bucketing this in
+// SQL (a substr(at,1,10) on the UTC-stored column, the old design) can only
+// ever apply UTC calendar days, or at best a single fixed offset that is
+// wrong on the DST transition's own day. An early-morning turn just after
+// each 2026 Europe/Amsterdam transition must still bucket to the correct
+// local day; late-evening turns do not distinguish the bug (see
+// internal/history's TestBuild_LocalDayBucketing_DST, which explains why in
+// full). Skips itself if this machine's time.Local does not actually agree
+// with Europe/Amsterdam at the tested instants.
+func TestDailyTokenTotals_DSTEarlyMorning(t *testing.T) {
+	ams, err := time.LoadLocation("Europe/Amsterdam")
+	if err != nil {
+		t.Skip("Europe/Amsterdam tzdata not available:", err)
+	}
+
+	cases := []struct {
+		name      string
+		localWall time.Time
+		wantDay   string
+	}{
+		// 2026-03-29, spring forward (23-hour day): 00:30 CET (UTC+1) is
+		// 2026-03-28 23:30 UTC, the distinguishing case.
+		{"spring forward", time.Date(2026, 3, 29, 0, 30, 0, 0, ams), "2026-03-29"},
+		// 2026-10-25, fall back (25-hour day): 00:30 CEST (UTC+2, before
+		// the fold) is 2026-10-24 22:30 UTC, the distinguishing case.
+		{"fall back", time.Date(2026, 10, 25, 0, 30, 0, 0, ams), "2026-10-25"},
+	}
+	for _, c := range cases {
+		_, offAms := c.localWall.Zone()
+		_, offLocal := c.localWall.In(time.Local).Zone()
+		if offAms != offLocal {
+			t.Skipf("this machine's time.Local does not match Europe/Amsterdam at %s; skipping a DST test that assumes it does", c.localWall)
+		}
+	}
+
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	var events []schema.Event
+	for i, c := range cases {
+		events = append(events, schema.Event{
+			Vendor: "anthropic", Agent: "claude-code", SessionID: "s", RequestID: "r" + c.name,
+			Model: "m", At: c.localWall, Input: int64(100 * (i + 1)),
+		})
+	}
+	if err := st.UpsertEvents(events); err != nil {
+		t.Fatal(err)
+	}
+
+	daily, err := st.DailyTokenTotals(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byDay := map[string]int64{}
+	for _, d := range daily {
+		byDay[d.Date] = d.Tokens
+	}
+	for i, c := range cases {
+		want := int64(100 * (i + 1))
+		if got := byDay[c.wantDay]; got != want {
+			t.Errorf("%s: DailyTokenTotals[%s] = %d, want %d (got days: %+v)", c.name, c.wantDay, got, want, daily)
+		}
 	}
 }

@@ -423,6 +423,20 @@ func scanForecastScore(scan func(dest ...any) error) (ForecastScore, error) {
 	if err != nil {
 		return ForecastScore{}, fmt.Errorf("store: parse week_start %q: %w", weekStartStr, err)
 	}
+	// .In(time.Local), not left as the UTC Location time.Parse gives a
+	// string with a "Z"/"+00:00" suffix: WeekStart names a local midnight
+	// instant (forecast.weekStart computes it via time.Local), and callers
+	// do AddDate arithmetic on it directly (forecast.go's EnsureScored and
+	// actualTokensForWeek). AddDate reconstructs a Time via its receiver's
+	// own Location, so doing that arithmetic while still UTC-located adds
+	// UTC calendar days (always exactly 24h, no DST) instead of local
+	// calendar days (23h/25h on a transition's own day), landing one hour
+	// short of the real week boundary on a fall-back week and silently
+	// dropping that week's last day from the recorded actual. Converting
+	// here, once, at the point every stored local-decision instant comes
+	// back from the store, is safer than trusting every call site to
+	// remember .In(time.Local) before its own arithmetic.
+	f.WeekStart = f.WeekStart.In(time.Local)
 	if actual.Valid {
 		v := actual.Int64
 		f.ActualTokens = &v
@@ -493,39 +507,91 @@ WHERE iso_year = ? AND iso_week = ? AND actual_tokens IS NULL`,
 	return err
 }
 
-// DailyTokenTotal is one UTC calendar day's total tokens across every real
-// turn (the claude adapter's synthetic tool-only events excluded, same
-// condition as SessionTotals).
+// DailyTokenTotal is one local calendar day's total tokens (Wilco's
+// decision, 2026-09-26: local time everywhere) across every real turn (the
+// claude adapter's synthetic tool-only events excluded, same condition as
+// SessionTotals).
 type DailyTokenTotal struct {
-	Date   string // YYYY-MM-DD, UTC
+	Date   string // YYYY-MM-DD, local calendar day
 	Tokens int64
 }
 
-// DailyTokenTotals sums tokens per UTC calendar day for every real turn at
-// or after from, oldest first. F1's plan line (weekday-aware averages over
-// the last four weeks) and its actual/live totals are both built from this,
-// one query, rather than loading raw events into Go.
+// DailyTokenTotals sums tokens per LOCAL calendar day for every real turn at
+// or after from, oldest first (no upper bound; DailyTokenTotalsUntil adds
+// one, for a caller that already knows its own range). F1's plan line
+// (weekday-aware averages over the last four weeks) and its actual/live
+// totals are both built from these.
+//
+// Bucketed in Go, not SQL: SQLite has no IANA timezone database, so a query
+// cannot correctly turn a UTC instant into "which local calendar day" across
+// a DST transition (a fixed offset, the only thing SQL here could apply,
+// would mis-bucket events on the transition's own day, which is 23 or 25
+// hours long in local time, not 24; verified by
+// TestDailyTokenTotals_DSTEarlyMorning). from is itself typically 4-5 weeks
+// back (F1's plan/live windows), so reading every matching row and grouping
+// in Go costs at most a few thousand rows: nothing like the whole-table
+// cost step 0 profiling measured for AllEvents (WS3 hypothesis 3, not
+// confirmed as a driver of the reported symptom, so left as SQL aggregation
+// everywhere it still was: see
+// 04_assets\2026-09-26_ws3_profile_before_after.md).
 func (s *Store) DailyTokenTotals(from time.Time) ([]DailyTokenTotal, error) {
-	rows, err := s.readDB.Query(`
-SELECT substr(at, 1, 10) AS day,
-	SUM(input + COALESCE(cache_write,0) + COALESCE(cache_read,0) + output) AS tokens
+	return s.dailyTokenTotals(from, time.Time{})
+}
+
+// DailyTokenTotalsUntil is DailyTokenTotals bounded above by to (exclusive),
+// for a caller that already knows it only needs one specific range (a
+// review of this session's own diff caught that actualTokensForWeek used to
+// call DailyTokenTotals(ws) with no upper bound at all, unboundedly
+// rescanning from ws to "now" every time EnsureScored found an unscored
+// week, an O(weeks x rows-since-ws) cost after any real backlog).
+func (s *Store) DailyTokenTotalsUntil(from, to time.Time) ([]DailyTokenTotal, error) {
+	return s.dailyTokenTotals(from, to)
+}
+
+func (s *Store) dailyTokenTotals(from, to time.Time) ([]DailyTokenTotal, error) {
+	query := `
+SELECT at, input + COALESCE(cache_write,0) + COALESCE(cache_read,0) + output AS tokens
 FROM events
-WHERE at >= ? AND NOT (model = '' AND input = 0 AND output = 0)
-GROUP BY day
-ORDER BY day ASC`, from.UTC().Format(time.RFC3339Nano))
+WHERE at >= ? AND NOT (model = '' AND input = 0 AND output = 0)`
+	args := []any{from.UTC().Format(time.RFC3339Nano)}
+	if !to.IsZero() {
+		query += ` AND at < ?`
+		args = append(args, to.UTC().Format(time.RFC3339Nano))
+	}
+	query += `
+ORDER BY at ASC`
+	rows, err := s.readDB.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []DailyTokenTotal
+
+	byDay := map[string]int64{}
+	var order []string
 	for rows.Next() {
-		var d DailyTokenTotal
-		if err := rows.Scan(&d.Date, &d.Tokens); err != nil {
+		var atStr string
+		var tokens int64
+		if err := rows.Scan(&atStr, &tokens); err != nil {
 			return nil, err
 		}
-		out = append(out, d)
+		at, err := time.Parse(time.RFC3339Nano, atStr)
+		if err != nil {
+			continue
+		}
+		day := at.In(time.Local).Format("2006-01-02")
+		if _, ok := byDay[day]; !ok {
+			order = append(order, day)
+		}
+		byDay[day] += tokens
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]DailyTokenTotal, 0, len(order))
+	for _, day := range order {
+		out = append(out, DailyTokenTotal{Date: day, Tokens: byDay[day]})
+	}
+	return out, nil
 }
 
 func nullInt(p *int64) any {

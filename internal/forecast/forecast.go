@@ -24,7 +24,7 @@ const GateMessage = "forecast unlocks after the first scored week (week 46)"
 // Point is one day's token total, used for both the history and the plan
 // and live lines.
 type Point struct {
-	Date   string `json:"date"` // YYYY-MM-DD, UTC
+	Date   string `json:"date"` // YYYY-MM-DD, local calendar day
 	Tokens int64  `json:"tokens"`
 }
 
@@ -70,12 +70,16 @@ type Payload struct {
 	EndOfMonthCostUSD float64 `json:"end_of_month_cost_usd,omitempty"`
 }
 
+// dayStart, weekStart and monthStart are LOCAL calendar boundaries (Wilco's
+// decision, 2026-09-26: local time everywhere), the same convention
+// internal/vendorstrip uses; see that package's own dayStart/monthStart doc
+// comment for why time.Local here needs no separate DST handling.
 func dayStart(t time.Time) time.Time {
-	t = t.UTC()
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	t = t.In(time.Local)
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local)
 }
 
-// weekStart is the Monday 00:00 UTC of t's ISO week, matching
+// weekStart is the local Monday 00:00 of t's ISO week, matching
 // internal/vendorstrip's own convention.
 func weekStart(t time.Time) time.Time {
 	d := dayStart(t)
@@ -84,11 +88,19 @@ func weekStart(t time.Time) time.Time {
 }
 
 func monthStart(t time.Time) time.Time {
-	t = t.UTC()
-	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+	t = t.In(time.Local)
+	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.Local)
 }
 
-func dateKey(t time.Time) string { return t.Format("2006-01-02") }
+// dateKey is a local calendar day (Wilco's decision, 2026-09-26: local time
+// everywhere). Explicit .In(time.Local), not a bare Format: t here is
+// sometimes a value round-tripped through store.ForecastScores (WeekStart,
+// parsed back from its UTC storage column with a UTC Location, even though
+// the instant it names is a local midnight), and a bare Format renders
+// whatever Location t happens to carry rather than the calendar day Wilco
+// actually means (confirmed by TestBuildOneScoredWeekShowsBand, which broke
+// on exactly this until this fix).
+func dateKey(t time.Time) string { return t.In(time.Local).Format("2006-01-02") }
 
 // Build is bmForecast's implementation: runs EnsureScored first so the
 // current week always has a plan on record and any week that just elapsed
@@ -205,7 +217,7 @@ func addCostForecast(p *Payload, st *store.Store, cfg *pricing.Config, now time.
 	}
 
 	daysElapsedMonth := today.Sub(ms).Hours()/24 + fracDay
-	nextMonth := time.Date(ms.Year(), ms.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0)
+	nextMonth := time.Date(ms.Year(), ms.Month(), 1, 0, 0, 0, 0, time.Local).AddDate(0, 1, 0)
 	daysInMonth := nextMonth.AddDate(0, 0, -1).Day()
 	eomUSD := monthUSD
 	if daysElapsedMonth > 0 {
@@ -304,7 +316,7 @@ func liveLine(byDay map[string]int64, ws time.Time, now time.Time) (line []Point
 		monthSoFar += byDay[dateKey(d)]
 	}
 	daysElapsedMonth := today.Sub(ms).Hours()/24 + fracDay
-	nextMonth := time.Date(ms.Year(), ms.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0)
+	nextMonth := time.Date(ms.Year(), ms.Month(), 1, 0, 0, 0, 0, time.Local).AddDate(0, 1, 0)
 	daysInMonth := nextMonth.AddDate(0, 0, -1).Day()
 	if daysElapsedMonth > 0 {
 		eom = int64(float64(monthSoFar) / daysElapsedMonth * float64(daysInMonth))
@@ -379,11 +391,17 @@ func planTokensForWeek(st *store.Store, ws time.Time) (int64, error) {
 }
 
 func actualTokensForWeek(st *store.Store, ws time.Time) (int64, error) {
-	daily, err := st.DailyTokenTotals(ws)
+	weekEnd := ws.AddDate(0, 0, 7)
+	// DailyTokenTotalsUntil, not the unbounded DailyTokenTotals: this is
+	// called once per unscored week EnsureScored finds, and only ever
+	// needs ws's own seven days, not everything from ws to "now" (a review
+	// caught the old unbounded call as an O(weeks x rows-since-ws) cost
+	// after any real backlog of unscored weeks).
+	daily, err := st.DailyTokenTotalsUntil(ws, weekEnd)
 	if err != nil {
 		return 0, err
 	}
-	end := dateKey(ws.AddDate(0, 0, 7))
+	end := dateKey(weekEnd)
 	var total int64
 	for _, d := range daily {
 		if d.Date >= end { // string dates: YYYY-MM-DD compares lexically as chronologically

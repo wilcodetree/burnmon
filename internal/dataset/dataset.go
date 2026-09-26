@@ -111,13 +111,19 @@ type Payload struct {
 
 func round4(x float64) float64 { return math.Round(x*1e4) / 1e4 }
 
+// monthStart is a LOCAL calendar boundary (Wilco's decision, 2026-09-26:
+// local time everywhere): the 1st of the month back months before t's own
+// local month, local midnight. Determines which months' sessions stay in
+// Payload.Months/Days/Sessions (agg.Build's own cutoff), so this must match
+// Wilco's real calendar, not UTC's.
 func monthStart(t time.Time, back int) time.Time {
+	t = t.In(time.Local)
 	y, m := t.Year(), int(t.Month())-back
 	for m <= 0 {
 		m += 12
 		y--
 	}
-	return time.Date(y, time.Month(m), 1, 0, 0, 0, 0, time.UTC)
+	return time.Date(y, time.Month(m), 1, 0, 0, 0, 0, time.Local)
 }
 
 // BuildPayload assembles the schema-1 payload from already-aggregated data.

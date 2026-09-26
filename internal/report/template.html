@@ -2126,13 +2126,28 @@ var AGENT_LABELS = {'claude-code':'Claude Code', 'cowork':'Cowork', 'codex':'Cod
 var UI_HIST = {period:'week', range:'30', from:'', to:'', vendor:'', owner:'', client:''};
 var histFiltersBuilt = false;
 
-function isoDate(d){ return d.toISOString().slice(0,10); }
+// isoDate is a LOCAL calendar day (Wilco's decision, 2026-09-26: local time
+// everywhere), matching history.Filter.From/To's own convention on the Go
+// side. toISOString() would render the UTC day instead, which for roughly
+// two hours around local midnight (Europe/Amsterdam's own UTC+1/+2 offset)
+// names the wrong day: the default History range would end one day early,
+// silently excluding "today", exactly the class of bug this session's own
+// Go-side fix (internal/history's bucketKey) addressed.
+function isoDate(d){
+  function pad(n){ return n<10 ? '0'+n : ''+n; }
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
 
 function histRangeDates(){
   if(UI_HIST.range === 'custom') return {from: UI_HIST.from, to: UI_HIST.to};
   var days = parseInt(UI_HIST.range, 10) || 30;
   var to = new Date();
-  var from = new Date(to.getTime() - (days-1)*86400000);
+  // Local calendar days, not a fixed (days-1)*86400000ms subtraction: a
+  // second review caught that a fixed-24h step lands one local day early
+  // on a spring-forward day's own 23-hour span (a review of this
+  // workstream's own "local time everywhere" change), the same bug class
+  // isoDate itself was just fixed for.
+  var from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - (days-1));
   return {from: isoDate(from), to: isoDate(to)};
 }
 

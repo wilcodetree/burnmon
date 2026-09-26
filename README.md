@@ -266,5 +266,7 @@ Kit recipient up:
 ## Status
 
 Shipped: `v0.3.0`, 2026-10-09 (`02_roadmap\2026-09-23_v0.3_spec.md`); `v0.3.1`, a cleanup
-pass, 2026-09-24 (`02_roadmap\2026-09-24_ws1_burnmon_cleanup.md`). See `STATUS.md` for
-what is true at the current commit and `SESSION_LOG.md` for the session-by-session record.
+pass, 2026-09-24 (`02_roadmap\2026-09-24_ws1_burnmon_cleanup.md`); `v0.3.2`, shared ingest
+performance and local time everywhere, 2026-09-26
+(`02_roadmap\2026-09-26_ws3_shared_ingest_performance.md`). See `STATUS.md` for what is
+true at the current commit and `SESSION_LOG.md` for the session-by-session record.

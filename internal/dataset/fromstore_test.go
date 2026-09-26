@@ -55,6 +55,66 @@ func TestSessionsFromEventsAggregatesOneSession(t *testing.T) {
 	}
 }
 
+// TestSessionsFromEventsDailyBucketsLocalDST is extra item 5's spec'd check
+// (Wilco, 2026-09-26: local time everywhere): scan.Session.Daily (feeds
+// internal/agg's Days/Weeks/Months view, the Now page's own aggregation)
+// must key by local calendar day, not whatever Location e.At happens to
+// carry. Before this fix buildSession computed it via a bare
+// e.At.Format(...) with no explicit .In(time.Local), which silently
+// rendered UTC (every event loaded from the store carries a UTC Location),
+// so an early-morning local turn landed one day short of Wilco's own
+// calendar; the same bug class internal/history's own DST test guards, see
+// that test's doc comment for why only early-morning cases distinguish it.
+// Skips itself if this machine's time.Local does not actually agree with
+// Europe/Amsterdam at the tested instants.
+func TestSessionsFromEventsDailyBucketsLocalDST(t *testing.T) {
+	ams, err := time.LoadLocation("Europe/Amsterdam")
+	if err != nil {
+		t.Skip("Europe/Amsterdam tzdata not available:", err)
+	}
+	cases := []struct {
+		name      string
+		localWall time.Time
+		wantDay   string
+	}{
+		{"spring forward", time.Date(2026, 3, 29, 0, 30, 0, 0, ams), "2026-03-29"},
+		{"fall back", time.Date(2026, 10, 25, 0, 30, 0, 0, ams), "2026-10-25"},
+	}
+	for _, c := range cases {
+		_, offAms := c.localWall.Zone()
+		_, offLocal := c.localWall.In(time.Local).Zone()
+		if offAms != offLocal {
+			t.Skipf("this machine's time.Local does not match Europe/Amsterdam at %s; skipping a DST test that assumes it does", c.localWall)
+		}
+	}
+
+	cfg := pricing.Defaults()
+	for _, c := range cases {
+		// .UTC() here matters: a real event's At carries a UTC Location by
+		// the time SessionsFromEvents ever sees it (AllEvents/EventsSince
+		// parse it back from the store's UTC storage column), not whatever
+		// Location the original wall-clock construction used. Passing
+		// c.localWall directly would carry the ams Location straight
+		// through to buildSession's own e.At.Format(...) call and hide
+		// exactly the bug this test exists to catch.
+		events := []schema.Event{
+			{Vendor: "anthropic", SessionID: "s-" + c.name, RequestID: "r1",
+				Model: cfg.Families()[0], At: c.localWall.UTC(), Input: 100, Output: 10},
+		}
+		sessions := SessionsFromEvents(events, &cfg)
+		if len(sessions) != 1 {
+			t.Fatalf("%s: got %d sessions, want 1", c.name, len(sessions))
+		}
+		if _, ok := sessions[0].Daily[c.wantDay]; !ok {
+			var keys []string
+			for k := range sessions[0].Daily {
+				keys = append(keys, k)
+			}
+			t.Errorf("%s: Daily has no bucket for %s, got keys %v", c.name, c.wantDay, keys)
+		}
+	}
+}
+
 func TestSessionsFromEventsPricesOpenAIEvents(t *testing.T) {
 	cfg := pricing.Defaults()
 	events := []schema.Event{

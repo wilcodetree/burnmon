@@ -240,6 +240,12 @@ func main() {
 		nativeCodexRoots := codex.NativeSources()
 		a.cache.SeedNativeRoots(nativeClaudeRoots, nativeCodexRoots)
 		a.startLiveWatch(nativeClaudeRoots, nativeCodexRoots)
+		startProfiling(dataDir, func() int {
+			if a.liveWatcher == nil {
+				return -1
+			}
+			return a.liveWatcher.WatchCount()
+		})
 		startHermesPoll(a, st)
 		startCopilotCLIPoll(a, st)
 		startCopilotVSCPoll(a, st)

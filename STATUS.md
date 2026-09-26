@@ -1,6 +1,36 @@
 # BurnMon, status
 
-What is true at this commit (2026-09-24): **v0.3.1**, a cleanup pass over v0.3.0
+What is true at this commit (2026-09-26): **v0.3.2** (WS3, shared ingest performance and
+local time everywhere, `02_roadmap\2026-09-26_ws3_shared_ingest_performance.md`). Step 0
+profiling on Wilco's real store (54,855 events, ~12,700 Cowork session folders) found the
+reported "climbs to 900MB+/13k handles within a minute" symptom was almost entirely one
+`fsnotify` watch per subdirectory (13,125 of 13,541 open handles): `internal\watch` now
+holds a small Windows-only recursive `ReadDirectoryChangesW` watcher
+(`watch_windows.go`, one handle per native root) behind the same `OnChange` interface,
+with the old per-directory fsnotify design kept only for B1's untested darwin/linux
+build (`watch_other.go`). Fixed, measured for real over 10 minutes: peak RAM 957MB→87MB,
+peak handles 13,541→371, both comfortably under the 250MB/2%-avg-CPU targets, alone and
+with `burnmon-dev.exe` running alongside (its own numbers are unimproved until WS2
+rebases onto this commit, out of this session's scope). The other three hypotheses
+(the 400MB memory cap, whole-table `AllEvents` loads, double ingest between the two
+exes) were tested and NOT confirmed as drivers of the reported symptom, so none were
+changed; full reasoning and numbers: `04_assets\2026-09-26_ws3_profile_before_after.md`.
+Separately, every day/week/month boundary ("today", History's buckets, the vendor
+strip, the forecast, the export's `--since`/`--until`) now uses local time (Wilco's
+decision), not UTC; storage stays UTC. Two genuine bugs found and fixed along the way,
+both a bare `.Format(...)` silently rendering whatever Location a time.Time already
+carried rather than the calendar day Wilco actually meant: `internal\dataset\fromstore.go`'s
+per-session daily bucket (fed the Now page's own Days/Weeks/Months aggregation, wrong by
+a UTC offset for early-morning local turns) and `internal\forecast\forecast.go`'s
+`dateKey` (wrong specifically for a `WeekStart` round-tripped through SQLite storage,
+which comes back UTC-located even though the instant it names is a local midnight).
+Both caught by tests, not by inspection alone (`TestBuildOneScoredWeekShowsBand` broke
+until `dateKey` was fixed). DST verified against both 2026 Europe/Amsterdam transition
+dates (29 March, 25 October) with dedicated tests in `internal/history`,
+`internal/store` and `internal/dataset`, each confirmed to actually fail without its
+corresponding fix before being trusted.
+
+What was true at v0.3.1 (2026-09-24), a cleanup pass over v0.3.0
 (`02_roadmap\2026-09-24_ws1_burnmon_cleanup.md`). Dev is now the only mode: the
 Dev/Business header toggle and Monitor mode are both deleted, code and all (not just the
 buttons). The Sessions tab now labels every harness by its real name (Claude Code, Codex,
@@ -163,6 +193,25 @@ ignored), it just no longer does anything.
 
 ## Known gaps at this commit
 
+- A `forecast_scores` row written before this session's local-time change (v0.3.2)
+  keeps a UTC-Monday `week_start` (post-fix rows are local-Monday, `store
+  .scanForecastScore` converts on read either way, but `AddDate` arithmetic on a
+  UTC-Monday value still steps in UTC calendar days). Affects at most the one ISO week
+  that was unscored at the moment of upgrade; every week scored afterward is unaffected.
+  Flagged rather than fixed (a fresh review's own finding, 2026-09-26): a future pass
+  could snap an old row via `weekStart(sc.WeekStart)` in `EnsureScored` before scoring it,
+  if this ever turns out to matter in practice.
+- `store.go`'s event-time bounds (`at >= ?`, `at < ?`) compare RFC3339Nano strings
+  lexically. RFC3339Nano drops trailing zero digits in the fractional seconds, and `.`
+  sorts before `Z`, so a stored `...T22:00:00.5Z` sorts below a bound of
+  `...T22:00:00Z`: an event in the first second of a range can be wrongly excluded at
+  the lower bound, or wrongly included at the new upper bound `DailyTokenTotalsUntil`
+  added (v0.3.2). Pre-existing pattern (the lower bound predates this session), not
+  something v0.3.2 introduced, and `actualTokensForWeek`'s own in-Go `d.Date >= end`
+  filter already catches the upper-bound case; flagged rather than fixed (a fresh
+  review's own finding, 2026-09-26) since a real fix (binding in a fixed-width format,
+  or comparing via SQLite's `julianday()`) touches every timestamp write in the store,
+  well beyond WS3's own scope.
 - `internal\report\template.html`'s Now chart cost-axis toggle: the right-hand cost axis
   used to stay hidden after the cost series is shown through the chart legend
   (`scripts\uicheck.ps1 w8`). Flagging a discrepancy rather than silently picking one: the
@@ -171,7 +220,21 @@ ignored), it just no longer does anything.
   session. Left as an open question rather than marked fixed: could be genuinely resolved
   by an unrelated change, or timing-flaky; a future session should re-run `w8` a few times
   before either closing this gap or reopening the Chart.js debugging session it used to
-  call for.
+  call for. Ran again this session (WS3, incidental, no cost-axis code touched):
+  passed clean a second time; still left open rather than closed, same reasoning.
+- `bmHistory` re-reads the whole store (`store.AllEvents()`, ~3s against Wilco's real
+  ~55k-row store) on every History tab filter change, not just once: a real UI-latency
+  cost, measured but not fixed this session (WS3 hypothesis 3, confirmed real but not a
+  driver of the shared-ingest resource climb that session's Done-when targeted; see
+  `04_assets\2026-09-26_ws3_profile_before_after.md`). A future pass could move this to a
+  SQL aggregate or a daily summary table kept up to date on upsert.
+- `burnmon.exe` and `burnmon-dev.exe` share the same `burnmon.db` (both call
+  `store.DefaultPath()`/`store.Open()`), so both independently watch, parse and ingest
+  the same source files when both run (WS3 hypothesis 4: measured safe, SQLite's WAL
+  mode plus `busy_timeout=5000` plus idempotent upsert already cover it, no fix built).
+  `burnmon-dev.exe`'s own high RAM/handle numbers when run alongside the now-fixed
+  `burnmon.exe` are its pre-rebase build still carrying the old per-directory watcher,
+  not a new problem; resolves automatically once WS2 rebases onto this commit.
 - GitHub Copilot Business and Copilot Enterprise: their AI-credit allotments are now
   confirmed live (1,900/user/month and 3,900/user/month respectively, pooled at the
   billing entity, `docs.github.com/en/copilot/concepts/billing-and-usage/organizations-

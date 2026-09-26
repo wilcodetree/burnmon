@@ -1,20 +1,20 @@
 // Package watch keeps burnmon's store current between the 15-minute full
-// rescan ticks: fsnotify on every native adapter root, a 5-second poll for
-// WSL roots, since fsnotify cannot watch a \\wsl.localhost path on Windows
-// at all (confirmed on this laptop, SESSION_LOG.md, v0.1 Step 3: adding a
-// watch on a live \\wsl.localhost folder fails immediately with
-// "ReadDirectoryChanges: Incorrect function", not merely late).
+// rescan ticks: a recursive watch on every native adapter root (one open
+// directory handle per root on Windows, watch_windows.go; fsnotify,
+// one watch per directory, everywhere else, watch_other.go), plus a
+// 5-second poll for WSL roots, since fsnotify cannot watch a
+// \\wsl.localhost path on Windows at all (confirmed on this laptop,
+// SESSION_LOG.md, v0.1 Step 3: adding a watch on a live \\wsl.localhost
+// folder fails immediately with "ReadDirectoryChanges: Incorrect
+// function", not merely late).
 package watch
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/fsnotify/fsnotify"
 )
 
 // pollInterval is how often a WSL root's .jsonl files are re-stat'd, per the
@@ -27,14 +27,41 @@ const pollInterval = 5 * time.Second
 // ingest methods already serialise on the store).
 type OnChange func(path string)
 
+// nativeBackend is the OS-specific mechanism that watches every native
+// (non-WSL) adapter root for new or changed .jsonl files, recursively.
+// Windows (watch_windows.go): one recursive ReadDirectoryChangesW handle
+// per root, added once and never touched again, since the recursion itself
+// covers every subdirectory created under it from then on, at any depth.
+// This replaced a one-fsnotify-watch-per-subdirectory design (WS3,
+// 02_roadmap\2026-09-26_ws3_shared_ingest_performance.md, hypothesis 1):
+// step 0 profiling found 13,125 of a real process's 13,541 open handles
+// were exactly these per-directory watches, against roughly 12,700 Cowork
+// session folders on Wilco's laptop. Everywhere else (watch_other.go, B1's
+// browser-mode darwin/linux build, untested on real hardware and with no
+// live app window to make the handle count visible): fsnotify, one watch
+// per directory, unchanged from before WS3.
+type nativeBackend interface {
+	// AddRoot registers root (and, on the fsnotify backend, every
+	// subdirectory under it) for live notifications. Called only at
+	// construction, once per configured native root; a directory created
+	// later under an already-added root is picked up without a further
+	// call (the recursive backend, structurally; the fsnotify backend,
+	// by watching for the Create event itself and adding the new
+	// subdirectory in response, self-contained inside watch_other.go).
+	AddRoot(root string) error
+	// WatchCount is the number of OS-level watch handles currently open,
+	// logged by cmd/burnmon's step 0 profiling switch.
+	WatchCount() int
+	// Close releases every handle this backend opened and blocks until its
+	// own background goroutine(s) have exited.
+	Close()
+}
+
 // Watcher watches every adapter root for new or changed .jsonl files.
 // Zero value is not usable; construct with New.
 type Watcher struct {
-	onChange OnChange
-
-	fsw       *fsnotify.Watcher
-	watchedMu sync.Mutex
-	watched   map[string]bool // directories already added to fsw
+	native   nativeBackend
+	onChange OnChange // used directly by the WSL poll loop; the native backend gets its own copy at construction
 
 	wslMu      sync.Mutex
 	wslRoots   []string
@@ -45,19 +72,19 @@ type Watcher struct {
 	wg   sync.WaitGroup
 }
 
-// New creates a Watcher over nativeRoots (watched live via fsnotify,
-// recursively) and wslRoots (polled every 5 seconds; nil or empty is fine,
-// e.g. when wsl_scan is off or no distro was found). onChange fires once per
-// detected write, debounced only by fsnotify's own event coalescing.
+// New creates a Watcher over nativeRoots (watched live, recursively, via
+// this OS's nativeBackend) and wslRoots (polled every 5 seconds; nil or
+// empty is fine, e.g. when wsl_scan is off or no distro was found).
+// onChange fires once per detected write, debounced only by the backend's
+// own event coalescing.
 func New(nativeRoots, wslRoots []string, onChange OnChange) (*Watcher, error) {
-	fsw, err := fsnotify.NewWatcher()
+	native, err := newNativeBackend(onChange)
 	if err != nil {
 		return nil, err
 	}
 	w := &Watcher{
+		native:   native,
 		onChange: onChange,
-		fsw:      fsw,
-		watched:  map[string]bool{},
 		wslRoots: append([]string(nil), wslRoots...),
 		wslMtime: map[string]time.Time{},
 		stop:     make(chan struct{}),
@@ -65,73 +92,23 @@ func New(nativeRoots, wslRoots []string, onChange OnChange) (*Watcher, error) {
 	for _, root := range nativeRoots {
 		// Startup only: the initial full backfill (cmd/burnmon's
 		// a.rebuild, run right after this) ingests every existing file
-		// under these roots itself, so addTree here only needs to set up
-		// watches, not fire onChange for files it finds along the way.
-		w.addTree(root, false)
+		// under these roots itself, so this only needs to set up the
+		// watch, not fire onChange for files it finds along the way.
+		if err := native.AddRoot(root); err != nil {
+			// Logged by the backend itself (a root missing, or a
+			// permission-denied folder); a folder that cannot be watched
+			// simply falls back to being caught by the 15-minute full
+			// rescan, same as before this package existed.
+			_ = err
+		}
 	}
 	return w, nil
 }
 
-// addTree adds root and every subdirectory under it to the fsnotify watcher.
-// Errors (root missing, a permission-denied subfolder) are logged and
-// otherwise ignored: a folder that cannot be watched simply falls back to
-// being caught by the 15-minute full rescan, same as before this package
-// existed.
-//
-// notifyExisting, when true, also calls onChange for every .jsonl file
-// already present under root (root's own watch is skipped if already
-// registered, but each subdirectory found is walked and watched exactly as
-// during startup). This closes the race behind F7 (SESSION_LOG.md, v0.1.2,
-// confirmed by TestWatcher_NewNestedDayFolderRace): a rollout writer that
-// creates a whole new nested folder (Codex's YYYY/MM/DD) and its first file
-// back to back can have the file's own Create event fire, and be silently
-// dropped by Windows ReadDirectoryChanges, before fsw.Add on the brand-new
-// leaf directory has run. Re-listing the directory right after the watch is
-// added catches any file that raced past that window; onChange is safe to
-// call again for a file the live watcher (or the full rescan) already saw,
-// since dataset.Cache.IngestFile ingests by cursor and a repeat call is a
-// no-op. handleFsnotifyEvent always passes true: every directory it sees is
-// one fsnotify just told it about, i.e. new since startup, so nothing here
-// duplicates the initial backfill.
-func (w *Watcher) addTree(root string, notifyExisting bool) {
-	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !d.IsDir() {
-			if notifyExisting && strings.HasSuffix(strings.ToLower(p), ".jsonl") {
-				w.onChange(p)
-			}
-			return nil
-		}
-		w.watchedMu.Lock()
-		already := w.watched[p]
-		w.watchedMu.Unlock()
-		if already {
-			return nil
-		}
-		if err := w.fsw.Add(p); err != nil {
-			log.Printf("watch: could not watch %s: %v", p, err)
-			return nil
-		}
-		w.watchedMu.Lock()
-		w.watched[p] = true
-		w.watchedMu.Unlock()
-		return nil
-	})
-	if err != nil {
-		log.Printf("watch: could not walk %s: %v", root, err)
-	}
-}
-
-// Start runs the fsnotify event loop and the WSL poll loop in the
-// background. Safe to call once; call Stop to end both.
+// Start runs the WSL poll loop in the background, if any WSL roots were
+// given. The native backend's own event loop is already running by the
+// time New returns. Safe to call once; call Stop to end both.
 func (w *Watcher) Start() {
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
-		w.runFsnotify()
-	}()
 	w.wslMu.Lock()
 	hasWSLRoots := len(w.wslRoots) > 0
 	if hasWSLRoots {
@@ -147,12 +124,20 @@ func (w *Watcher) Start() {
 	}
 }
 
-// Stop closes the fsnotify watcher and stops the WSL poll loop, then waits
-// for both goroutines to exit.
+// Stop closes the native backend and stops the WSL poll loop, then waits
+// for both to fully exit.
 func (w *Watcher) Stop() {
 	close(w.stop)
-	w.fsw.Close()
+	w.native.Close()
 	w.wg.Wait()
+}
+
+// WatchCount returns the number of OS-level watch handles the native
+// backend currently holds open (one per root on Windows, one per directory
+// elsewhere). Step 0 profiling (BURNMON_PPROF=1, cmd\burnmon\profiling.go)
+// logs this alongside the process's total handle count.
+func (w *Watcher) WatchCount() int {
+	return w.native.WatchCount()
 }
 
 // AddWSLRoots extends an already-Started watcher with more WSL roots,
@@ -182,48 +167,6 @@ func (w *Watcher) AddWSLRoots(roots []string) {
 			defer w.wg.Done()
 			w.runWSLPoll()
 		}()
-	}
-}
-
-func (w *Watcher) runFsnotify() {
-	for {
-		select {
-		case ev, ok := <-w.fsw.Events:
-			if !ok {
-				return
-			}
-			w.handleFsnotifyEvent(ev)
-		case err, ok := <-w.fsw.Errors:
-			if !ok {
-				return
-			}
-			log.Printf("watch: fsnotify error: %v", err)
-		}
-	}
-}
-
-func (w *Watcher) handleFsnotifyEvent(ev fsnotify.Event) {
-	if ev.Op&(fsnotify.Create|fsnotify.Write) == 0 {
-		return
-	}
-	fi, err := os.Stat(ev.Name)
-	if err != nil {
-		return // gone already, or a rename/remove we don't care about
-	}
-	if fi.IsDir() {
-		if ev.Op&fsnotify.Create != 0 {
-			// A new project or session folder: watch it (and anything under
-			// it) too, so files written inside it are seen from here on. Pass
-			// notifyExisting=true (F7 fix): this directory is new since
-			// startup, so any .jsonl already inside it raced its own Create
-			// event past the watch not existing yet and must be picked up
-			// here instead.
-			w.addTree(ev.Name, true)
-		}
-		return
-	}
-	if strings.HasSuffix(strings.ToLower(ev.Name), ".jsonl") {
-		w.onChange(ev.Name)
 	}
 }
 

@@ -153,13 +153,15 @@ func buildSession(events []schema.Event, cfg *pricing.Config) *scan.Session {
 		pm.Cost += c
 		pm.CostSub += cs
 
-		ts := e.At.Format("2006-01-02T15:04:05.000Z")
-		if e.At.IsZero() {
-			ts = stamps[0]
-		}
-		day := ts
-		if len(day) >= 10 {
-			day = day[:10]
+		// day (local calendar day, Wilco's decision, 2026-09-26: local time
+		// everywhere) keys scan.Session.Daily, which feeds internal/agg's
+		// Days/Weeks/Months aggregation: a bare e.At.Format(...) with no
+		// explicit .In(time.Local) silently renders e.At's own carried
+		// Location, UTC for every event this store ever loads, which is
+		// exactly the bug this line used to have.
+		day := stamps[0][:10]
+		if !e.At.IsZero() {
+			day = e.At.In(time.Local).Format("2006-01-02")
 		}
 		d := daily[day]
 		if d == nil {

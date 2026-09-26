@@ -2,6 +2,7 @@ package history
 
 import (
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,6 +12,98 @@ import (
 )
 
 func ptr[T any](v T) *T { return &v }
+
+// TestBuild_LocalDayBucketing_DST is extra item 5's spec'd check (Wilco,
+// 2026-09-26: local time everywhere): a turn near each 2026 Europe/Amsterdam
+// DST transition must bucket into its own local calendar day, via day-period
+// Build's own bucketKey(f.Period, e.At.In(time.Local)) call. Before that fix
+// bucketKey took e.At.UTC() instead, which is wrong specifically for an
+// early-local-morning turn: CEST/CET both run ahead of UTC, so a turn at
+// (say) 00:30 local is still the previous UTC day, one day short of Wilco's
+// own calendar. Late-evening local turns do not distinguish the bug (an
+// ahead-of-UTC offset only ever pulls a small local hour back into the
+// previous UTC day, never pushes a large one forward into the next), so the
+// cases below are all early-morning; two additional after-the-gap cases just
+// confirm the transition's own short/long day is still bucketed as one
+// single, correct local day. Skips itself if this machine's time.Local does
+// not actually agree with Europe/Amsterdam at the tested instants: this
+// codebase otherwise assumes Wilco's own laptop, which does.
+func TestBuild_LocalDayBucketing_DST(t *testing.T) {
+	ams, err := time.LoadLocation("Europe/Amsterdam")
+	if err != nil {
+		t.Skip("Europe/Amsterdam tzdata not available:", err)
+	}
+
+	cases := []struct {
+		name      string
+		localWall time.Time // wall-clock instant, Europe/Amsterdam
+		wantDay   string
+	}{
+		// Spring forward, 2026-03-29: 02:00 CET (UTC+1) jumps straight to
+		// 03:00 CEST (UTC+2); the day is 23 hours long.
+		// 00:30 CET (UTC+1) = 2026-03-28 23:30 UTC: the distinguishing
+		// case. A bare .UTC() bucketing call would file this turn under
+		// 2026-03-28, a full day before Wilco's own calendar.
+		{"spring forward, early morning (still CET, the distinguishing case)", time.Date(2026, 3, 29, 0, 30, 0, 0, ams), "2026-03-29"},
+		// 03:30 CEST (UTC+2, just after the 02:00->03:00 gap) = 2026-03-29
+		// 01:30 UTC: not distinguishing on its own, but confirms the
+		// 23-hour day's post-gap hours still land on the same local day as
+		// the pre-gap case above.
+		{"spring forward, just after the gap (CEST)", time.Date(2026, 3, 29, 3, 30, 0, 0, ams), "2026-03-29"},
+		// Fall back, 2026-10-25: 03:00 CEST becomes 02:00 CET, so the day is
+		// 25 hours long.
+		// 00:30 CEST (UTC+2, before the fold) = 2026-10-24 22:30 UTC: the
+		// distinguishing case for this date.
+		{"fall back, early morning (still CEST, the distinguishing case)", time.Date(2026, 10, 25, 0, 30, 0, 0, ams), "2026-10-25"},
+		// 23:30 CET (UTC+1, the day's last hour, well past the fold) =
+		// 2026-10-25 22:30 UTC: confirms the 25-hour day's very end is
+		// still bucketed as 2026-10-25, not spilling into the 26th.
+		{"fall back, late in the 25-hour day (CET)", time.Date(2026, 10, 25, 23, 30, 0, 0, ams), "2026-10-25"},
+	}
+
+	for _, c := range cases {
+		_, offAms := c.localWall.Zone()
+		_, offLocal := c.localWall.In(time.Local).Zone()
+		if offAms != offLocal {
+			t.Skipf("this machine's time.Local does not match Europe/Amsterdam at %s (offset %ds vs %ds); skipping a DST test that assumes it does",
+				c.localWall, offLocal, offAms)
+		}
+	}
+
+	var events []schema.Event
+	for i, c := range cases {
+		events = append(events, schema.Event{
+			Vendor: "anthropic", Agent: "claude-code", Surface: "cli",
+			SessionID: "s" + strconv.Itoa(i), RequestID: "r" + strconv.Itoa(i),
+			At: c.localWall, Model: "claude-sonnet-5", Input: 100, Output: 10,
+			CacheWrite: ptr(int64(0)), CacheRead: ptr(int64(0)),
+		})
+	}
+
+	cfg := pricing.Defaults()
+	payload := Build(events, &cfg, Filter{Period: "day"})
+	byKey := map[string]Row{}
+	for _, r := range payload.Rows {
+		byKey[r.Key] = r
+	}
+	for _, c := range cases {
+		r, ok := byKey[c.wantDay]
+		if !ok {
+			t.Errorf("%s: no bucket for %s among rows %+v", c.name, c.wantDay, payload.Rows)
+			continue
+		}
+		if r.Tokens == 0 {
+			t.Errorf("%s: bucket %s has zero tokens", c.name, c.wantDay)
+		}
+	}
+	// Every case above lands on one of two calendar days (2026-03-29,
+	// 2026-10-25); a bucketKey bug that fell back to UTC days would
+	// instead scatter these across three or four days (a UTC day earlier
+	// for the evening cases).
+	if len(payload.Rows) != 2 {
+		t.Errorf("len(Rows) = %d, want 2 (2026-03-29 and 2026-10-25 only); got %+v", len(payload.Rows), payload.Rows)
+	}
+}
 
 // TestBuildWeekAndMonth is 41A's spec'd test: a store fixture with two
 // vendors (Claude Code/anthropic, Codex/openai) over three weeks, bmHistory

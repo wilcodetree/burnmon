@@ -23,7 +23,7 @@ const Schema = 1
 // directly off the bucket's own events (K2's algorithm, not a whole-session
 // figure, since one session's events can span more than one row here).
 type Row struct {
-	Day    string `json:"day"` // YYYY-MM-DD, UTC
+	Day    string `json:"day"` // YYYY-MM-DD, local calendar day (Wilco's decision, 2026-09-26: local time everywhere)
 	Owner  string `json:"owner,omitempty"`
 	Client string `json:"client,omitempty"`
 	Vendor string `json:"vendor"`
@@ -81,7 +81,7 @@ type rowKey struct {
 	day, owner, client, vendor, model string
 }
 
-// Build groups events into K4's rows: day (UTC calendar day), owner, client,
+// Build groups events into K4's rows: day (local calendar day), owner, client,
 // vendor, model. Only real turns are counted (isTurn), matching every other
 // aggregation in this codebase. label and exportedAt are carried through to
 // Doc unchanged; cfg supplies both the cost function (C2) and the active-time
@@ -98,7 +98,7 @@ func Build(events []schema.Event, cfg *pricing.Config, label string, exportedAt 
 			continue
 		}
 		k := rowKey{
-			day:    e.At.UTC().Format("2006-01-02"),
+			day:    e.At.In(time.Local).Format("2006-01-02"),
 			owner:  e.Owner,
 			client: e.Client,
 			vendor: e.Vendor,

@@ -29,7 +29,8 @@ var AgentLabel = map[string]string{
 }
 
 // Filter is what the History page's controls send bmHistory. From and To are
-// "YYYY-MM-DD", inclusive on both ends. Vendor is an agent key (empty means
+// "YYYY-MM-DD", local calendar days (Wilco's decision, 2026-09-26: local
+// time everywhere), inclusive on both ends. Vendor is an agent key (empty means
 // every agent); Owner and Client are empty for "all" or when no owner/client
 // rules are configured. Client (K3) narrows the totals/rows the same way
 // Owner does; the per-client table (Payload.ClientRows) ignores it, so
@@ -111,6 +112,9 @@ type Payload struct {
 	ClientRows []ClientRow `json:"client_rows,omitempty"`
 }
 
+// bucketKey groups by local calendar day/week/month (Wilco's decision,
+// 2026-09-26: local time everywhere); d must already be converted via
+// e.At.In(time.Local), not the raw UTC-stored instant.
 func bucketKey(period string, d time.Time) string {
 	switch period {
 	case "month":
@@ -194,7 +198,7 @@ func Build(events []schema.Event, cfg *pricing.Config, f Filter) Payload {
 		if e.Client != "" {
 			clientSeen[e.Client] = true
 		}
-		day := e.At.UTC().Format("2006-01-02")
+		day := e.At.In(time.Local).Format("2006-01-02")
 		inDateRange := f.From == "" || f.To == "" || inRange(day, f.From, f.To)
 		vendorOK := f.Vendor == "" || e.Agent == f.Vendor
 		ownerOK := f.Owner == "" || e.Owner == f.Owner
@@ -210,7 +214,7 @@ func Build(events []schema.Event, cfg *pricing.Config, f Filter) Payload {
 			continue
 		}
 
-		key := bucketKey(f.Period, e.At.UTC())
+		key := bucketKey(f.Period, e.At.In(time.Local))
 		b := buckets[key]
 		if b == nil {
 			b = &Totals{}

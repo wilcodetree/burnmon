@@ -55,14 +55,20 @@ type Payload struct {
 	CopilotCreditsLeft *CreditsLeft `json:"copilot_credits_left,omitempty"`
 }
 
-// dayStart, weekStart and monthStart are UTC calendar boundaries: dayStart is
-// midnight today, weekStart is Monday 00:00 of the current ISO week (same
-// week convention as internal/agg's weekKey and internal/history's "week"
-// period), monthStart is the 1st of the current month 00:00, all matching
-// the UTC timestamps every stored event already carries.
+// dayStart, weekStart and monthStart are LOCAL calendar boundaries (Wilco's
+// decision, 2026-09-26: local time everywhere): dayStart is local midnight
+// today, weekStart is local Monday 00:00 of the current ISO week (same week
+// convention as internal/agg's weekKey and internal/history's "week"
+// period), monthStart is the 1st of the current month, local 00:00.
+// time.Date with time.Local resolves to the correct UTC instant for that
+// specific local calendar date on its own, DST included (a 23h or 25h day
+// around the spring/autumn transition changes what instant "local midnight"
+// is, not this arithmetic), so no separate DST handling is needed here; the
+// result is converted back to UTC only where it is compared against the
+// UTC-stored at column (store.VendorStripTotals below).
 func dayStart(now time.Time) time.Time {
-	now = now.UTC()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	now = now.In(time.Local)
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 }
 
 func weekStart(now time.Time) time.Time {
@@ -73,8 +79,8 @@ func weekStart(now time.Time) time.Time {
 }
 
 func monthStart(now time.Time) time.Time {
-	now = now.UTC()
-	return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	now = now.In(time.Local)
+	return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local)
 }
 
 // Build runs store.VendorStripTotals (one SQL query, grouped by agent) and
@@ -114,6 +120,20 @@ func Build(st *store.Store, cfg *pricing.Config, now time.Time) (Payload, error)
 	return p, nil
 }
 
+// utcMonthStart is GitHub's own Copilot premium-request allowance reset
+// boundary (creditsLeftForMonth below), deliberately kept separate from
+// monthStart's local calendar: that reset happens on GitHub's own UTC
+// calendar, a third-party billing boundary Wilco's own local time zone has
+// no bearing on, not a display convention this session's "local time
+// everywhere" decision was ever about. A fresh review caught that sharing
+// monthStart (switched to time.Local for the display totals above) here
+// too would have silently shifted the last one to two hours of every UTC
+// month into the wrong month's credits count.
+func utcMonthStart(now time.Time) time.Time {
+	now = now.UTC()
+	return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+}
+
 // creditsLeftForMonth re-reads this calendar month's events (a second query
 // beyond VendorStripTotals: the credits calculation needs cache-write/read
 // splits per event, which the token-sum SQL aggregate above does not carry)
@@ -124,7 +144,7 @@ func creditsLeftForMonth(st *store.Store, cfg *pricing.Config, now time.Time) (C
 	if cfg == nil || cfg.CopilotPlan == "" {
 		return CreditsLeft{}, false
 	}
-	events, err := st.EventsSince(monthStart(now))
+	events, err := st.EventsSince(utcMonthStart(now))
 	if err != nil {
 		return CreditsLeft{}, false
 	}

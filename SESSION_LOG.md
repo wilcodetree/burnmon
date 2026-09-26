@@ -2,6 +2,187 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-26, WS3: shared ingest performance, local time everywhere, v0.3.2
+
+Read first: `02_roadmap\2026-09-26_ws3_shared_ingest_performance.md` (decisions already
+taken: profile before changing anything, test the four listed hypotheses in order, fix
+only what the profile confirms; local time everywhere per Wilco's own extra item 5), the
+WS2 phase 5 hub brief (baseline: 1.89-2.22% avg CPU, 937 MB peak RAM, ~13.9k peak handles,
+both exes running). Ran on `main`, after WS2 phase 5 finished; WS2 rebases onto this
+afterward.
+
+**Step 0, profiling.** New opt-in switch, `BURNMON_PPROF=1` (`cmd\burnmon\profiling.go`,
+`profiling_windows.go` for `GetProcessHandleCount` via a manual `kernel32.dll` proc since
+`x/sys/windows` does not bind it, `profiling_other.go` a stub): a heap profile
+immediately, a 60s CPU profile, a second heap profile once that ends, and a
+MemStats/handle-count/`internal\watch`-watch-count line every 10s for the process's
+life. `internal\watch.Watcher` gained `WatchCount()` for this. Run for real against
+Wilco's own store (54,855 events): 13,541 open handles, 870 MB live heap (Sys 992 MB),
+`GCCPUFraction` 1.3-1.4%. Cross-checked against the real filesystem, not left as a
+correlation: `find -type d` under the four native roots found 12,732 subdirectories
+under the Cowork root alone (`AppData\Local\Packages\Claude_*\LocalCache\Roaming\Claude\local-agent-mode-sessions`,
+11,756 `.jsonl` files, one folder per session), and the profiling log's own
+`fsnotify_watches=13125` matches that almost exactly: 97% of the process's handles were
+one-fsnotify-watch-per-subdirectory. Full report, every number,
+`04_assets\2026-09-26_ws3_profile_before_after.md`.
+
+**Hypothesis 1 (one watch per folder): CONFIRMED, fixed.** Checked, not assumed, whether
+the vendored fsnotify (v1.10.1) supports recursive watching on Windows: its own doc
+comment says "Recursive watching is not currently enabled through fsnotify's public
+API; the recursive code path is gated and only exercised by fsnotify's own tests."
+Tried the undocumented `path + "\..."` convention directly anyway, in a throwaway
+program reproducing the exact F7 race (a new nested folder plus its first file, back to
+back): it reported only one event, for the top-level folder, with the literal "..."
+segment left in the reported path, and never delivered the nested file's own event at
+all. Confirmed unusable, not merely undocumented. `internal\watch` refactored behind a
+new `nativeBackend` interface (`AddRoot`/`WatchCount`/`Close`): `watch_windows.go` is a
+small hand-rolled recursive watcher (one `ReadDirectoryChangesW` call per native root,
+`recurse=true`, IOCP, overlapped I/O, `windows.FileNotifyInformation` buffer decode,
+added once at construction and never touched again since the recursion covers every
+subdirectory created under it from then on); `watch_other.go` keeps the old
+per-directory fsnotify design, moved verbatim, for B1's untested darwin/linux
+browser-mode build. One real shutdown race found and fixed while building this:
+`CancelIo`/`CloseHandle` on a root's handle can complete with `err==nil, n==0`,
+indistinguishable from a real buffer overflow, rather than reliably
+`ERROR_OPERATION_ABORTED`; fixed with a per-root `closed atomic.Bool` set before
+cancelling, checked before trusting any completion. `TestWatcher_NewNestedDayFolderRace`
+stays green, now because the race is structurally impossible rather than merely
+untriggered; new `TestWatcher_WatchCountStaysOneAcrossManySubdirectories` proves
+`WatchCount()` stays at 1 across 50 newly created, several-levels-deep subdirectories.
+Measured for real: peak RAM 957MB to 87MB, peak handles 13,541 to 371, alone; 85.5MB/379
+handles/~0.09% avg CPU with `burnmon-dev.exe` (unfixed, pre-built, read-only) running
+alongside, statistically the same as alone.
+
+**Hypothesis 2 (memory cap causing GC burn): NOT an independent cause.** Live heap sat
+above the 400MB cap (~870MB), but `GCCPUFraction` never exceeded ~6%, not the
+hypothesis's own "runs almost continuously" framing; after hypothesis 1's fix, live
+heap sits at 3-6MB (Sys ~140MB), confirming the ~870MB was itself mostly hypothesis 1's
+own bookkeeping. `debug.SetMemoryLimit(400 << 20)` left unchanged: still ~65x the new
+live heap, a cheap safety net for a genuine rebuild burst, no reason to retune it.
+
+**Hypothesis 3 (whole-table loads): real cost, not the reported symptom's driver, not
+fixed.** `store.AllEvents()` measured at 3.02s for 54,855 rows, feeding `Collect` (every
+15 minutes) and `bmHistory` (every History tab filter change). Periodic, not sustained:
+does not explain the reported "climbs within a minute and stays there", already pinned
+on hypothesis 1. Both 10-minute measurements already clear both Done-when targets with
+hypothesis 1 alone. Per the spec's own "fixing only what the profile confirms", the
+SQL-aggregate/daily-summary-table rewrite this hypothesis proposed was not built.
+Flagged in `STATUS.md`'s Known gaps for a future pass, not silently dropped: `bmHistory`
+still costs ~3s per History tab filter change on Wilco's real store size.
+
+**Hypothesis 4 (double ingest): real, not confirmed as needing a fix.** Confirmed by
+reading both entry points, not assumed: `cmd\burnmon-dev\main.go` and `cmd\burnmon\main.go`
+both call `store.DefaultPath()`/`store.Open()`, i.e. share the exact same `burnmon.db`.
+`store.Open`'s existing WAL mode plus `busy_timeout=5000` plus idempotent upsert already
+make two independent writers safe (no `SQLITE_BUSY`/lock errors in either log across the
+full 10-minute dual-instance run). `burnmon.exe`'s own footprint measured statistically
+unchanged whether `burnmon-dev.exe` runs alongside or not. A named-mutex
+single-ingest-owner was not built: real correctness-risk surface (handover logic, crash
+detection) for a benefit the profile does not show is needed.
+
+**Extra item 5, local time everywhere (Wilco's decision).** Storage stays UTC (no
+migration of raw events); every day/week/month boundary now uses `time.Local`:
+`internal\vendorstrip`'s and `internal\forecast`'s `dayStart`/`weekStart`/`monthStart`,
+`internal\dataset\dataset.go`'s payload cutoff `monthStart`, `internal\history.go`'s
+`bucketKey` and date-range filter, `internal\export.go`'s row-key day, `cmd\burnmon-cli\main.go`'s
+export `--since`/`--until` filter (flag help text updated to say "local day";
+`Doc.ExportedAt` already carried `time.Now()`'s own local Location and needed no change,
+confirmed it already gives the export its real UTC offset). `store.DailyTokenTotals`
+rewritten from a SQL `substr(at,1,10)` UTC-day `GROUP BY` into a bounded Go-side read
+(still `WHERE at >= ?` at the SQL layer, still only F1's own 4-5 week plan/live window,
+not the whole table) bucketed via `at.In(time.Local)`: SQLite has no IANA timezone
+database, so it cannot bucket correctly across a DST transition, only a fixed offset,
+which is wrong specifically on the transition's own 23h/25h day. Two genuine,
+previously-hidden bugs found this way, neither caught by a literal `.UTC()` grep since
+both were a bare `.Format(...)` silently rendering whatever Location the `time.Time`
+already carried: `internal\dataset\fromstore.go`'s per-session daily bucket (fed
+`scan.Session.Daily`, `internal\agg`'s Days/Weeks/Months aggregation, the Now page's own
+view) used a bare `e.At.Format(...)`, wrong for an early-local-morning turn whenever the
+store had already given it a UTC Location; `internal\forecast\forecast.go`'s `dateKey`
+broke `TestBuildOneScoredWeekShowsBand` outright once dayStart/weekStart switched to
+local: a `WeekStart` round-tripped through `store.ForecastScores` comes back UTC-located
+even though the instant it names is a local midnight, and the old bare `t.Format(...)`
+trusted that stale Location instead of converting. Every kept `.UTC()` call (parsing at
+every adapter's own timestamp field, every SQL storage/comparison parameter in
+`store.go`, every display-only `GeneratedAt`/session `Start`/`End`/turn `At` value the
+frontend's own `localStamp()`/`localHMS()` already renders in local time via plain JS
+`Date` accessors, confirmed by reading `template.html`, not assumed) was left exactly as
+it was. DST verified against both 2026 Europe/Amsterdam transition dates (29 March
+spring-forward/23h day, 25 October fall-back/25h day) with three dedicated tests
+(`internal\history`, `internal\store`, `internal\dataset`), each temporarily reverted
+and re-verified to actually fail without its corresponding fix, not merely asserted to
+pass; all three skip themselves if the running machine's `time.Local` does not actually
+agree with Europe/Amsterdam at the tested instants.
+
+**Verify.** `go vet ./...`, `go test ./... -count=1` (every package green, including the
+five new tests above), `.\build.ps1`, `node --check` on both of `template.html`'s
+extracted `<script>` blocks (untouched this session, checked anyway),
+`.\scripts\uicheck.ps1`: `w1` failed once then passed clean on an immediate retry (the
+same known, pre-existing first-paint-budget flake earlier sessions already documented,
+not a regression), `w0`/`w2`-`w8` all passed clean including `w8` (STATUS.md's own open
+question about it, unresolved, re-ran clean a second time with no cost-axis code
+touched). A real-app live-ingest check (a new `.jsonl` dropped into a brand-new folder
+under a running `burnmon.exe`) showed ingestion in the same log-timestamp second as the
+write; the first attempt at this check grepped the log for the file's own name and
+found nothing, which is a log-verbosity gap (the terse `stage ingest` line never
+includes the path), not a real ingest miss, confirmed by the timestamp match and by
+`TestWatcher_NativeRootSeesNewFile`/`TestWatcher_NewNestedDayFolderRace` both passing.
+**Review, two passes.** Fresh read-only Opus review over the full diff found four real
+bugs beyond confirming the watch rewrite's Win32/IOCP mechanics and the profiling switch
+sound: (1) `EnsureScored`/`actualTokensForWeek`'s `sc.WeekStart.AddDate(0, 0, 7)` ran on a
+value still UTC-located after the store round-trip (the same class the `dateKey` fix
+addressed, but that fix alone did not cover `AddDate` itself), adding UTC calendar days
+instead of local ones and dropping the whole of Sunday from the 2026-10-25 fall-back
+week's recorded actual; fixed at the source, `store.scanForecastScore` now converts
+`WeekStart` to `time.Local` right after parsing it back, with new test
+`TestActualTokensForWeek_DSTFallBackIncludesSunday`. (2) `template.html`'s `isoDate` (the
+History tab's default date-range builder) used `toISOString()` (UTC), now local
+`getFullYear()/getMonth()/getDate()`, matching `history.Filter.From/To`'s own local-day
+convention. (3) `internal\agg\agg.go`'s `Build` compared a local-midnight `cutoff`
+against UTC-anchored `parseDay(s.End[:10])`/`parseDay(daystr)` via `.Before()`, silently
+dropping a session whose last real activity fell in the early local morning hours right
+at a retention cutoff; fixed with a plain string comparison against the session's own
+(correctly local) `Daily` keys, new test `TestBuild_CutoffComparesLocalDaysNotUTCInstant`.
+(4) `vendorstrip.go`'s Copilot credits calculation had picked up the local `monthStart`
+meant for display totals, when GitHub's own billing-cycle reset is a third-party UTC
+boundary; fixed with a separate `utcMonthStart` used only there. Also hardened, not
+correctness bugs: `store.DailyTokenTotals` split into an unbounded form and
+`DailyTokenTotalsUntil`, the latter used by `actualTokensForWeek` to avoid an unbounded
+rescan after a backlog of unscored weeks; and five Win32/concurrency fixes in
+`internal\watch\watch_windows.go` (`CancelIoEx` not the no-op `CancelIo`, a per-root mutex
+closing the re-arm-vs-Close race, decode-then-rearm-then-dispatch to shrink a kernel
+buffer overflow's blast radius, closing the handle on a failed first read instead of
+leaving it registered, bounds checks in `decode`). A second, focused review over these
+six fixes confirmed four clean and caught two real problems in the other two: the new
+DST test's own skip guard checked `monday.Zone()` (always +2h, since `monday` was built
+with that Location) instead of the actual machine's `time.Local`, so it could never
+self-skip on a non-Amsterdam machine, fixed to check `monday.In(time.Local).Zone()`
+matching every other DST test's own pattern; and `watch_windows.go`'s error branch never
+re-armed a failed read at all, permanently killing that root's live watching on any
+transient error, fixed to retry once, matching the success path, with `Close` reworked to
+wait (`b.draining`, a `sync.WaitGroup`) for every genuinely outstanding read's real
+completion before posting its own shutdown signal, since closing a handle unblocks a
+pending read without guaranteeing that completion has already been delivered through the
+port (a theoretical GC-safety gap in the test suite's own repeated Watcher construction,
+not a production risk: the real app never calls `Stop`). Two smaller items from the
+second pass were flagged rather than fixed, both pre-existing patterns, not regressions:
+a `forecast_scores` row written before this session keeps a UTC-Monday `week_start`
+(affects at most the one week that was unscored at upgrade), and `store.go`'s `at >= ?`/
+`at < ?` bounds compare RFC3339Nano strings lexically, which can misplace an event by one
+row at an exact sub-second boundary (the same pattern the pre-existing lower bound
+already used, now also on the new upper bound); both noted in STATUS.md's Known gaps.
+Every fix re-verified: `go vet`, `go test ./... -count=1` clean, `go test` on
+`internal/watch`, `internal/forecast` and `internal/agg` specifically repeated 10x clean,
+`node --check` re-run on the two `template.html` blocks after the `isoDate`/
+`histRangeDates` edits, `.\build.ps1` and `.\scripts\uicheck.ps1` (`w1` retry-flake and
+`w8` behaviour unchanged from the first pass) both re-run clean.
+
+Version 0.3.2 (`cmd\burnmon\app.go`, `cmd\burnmon-cli\main.go`). README's Status line and
+STATUS.md updated. Committed on `main`, not pushed or tagged (Wilco's own manual step,
+commands in the hub brief). Hub brief:
+`04_assets\hub_agent_update_2026-09-26_ws3_shared_ingest_performance.md`.
+
+
 ## 2026-09-24, WS1 cleanup: dev-only mode, Sessions harness fix, History stacked chart, v0.3.1
 
 Read `02_roadmap\2026-09-24_ws1_burnmon_cleanup.md` (three tasks, decisions already taken:

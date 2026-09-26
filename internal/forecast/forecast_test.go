@@ -49,6 +49,75 @@ func TestPlanLineFourWeeksWeekdayAware(t *testing.T) {
 	}
 }
 
+// TestActualTokensForWeek_DSTFallBackIncludesSunday guards a bug a fresh
+// review caught before this landed: sc.WeekStart, read back from
+// store.ForecastScore, used to carry a UTC Location even though the
+// instant it names is a local midnight (Wilco's decision, 2026-09-26:
+// local time everywhere). AddDate on a UTC-located Time adds UTC calendar
+// days (always exactly 24h), not local ones (23h/25h on a DST transition's
+// own day), so on the 2026-10-25 fall-back week (25 hours long) the
+// computed week-end landed one hour short of the real Monday 00:00 local
+// boundary, silently dropping the whole of Sunday from the recorded
+// actual. Fixed at the source: store.scanForecastScore now converts
+// WeekStart to time.Local right after parsing it back, so this and every
+// other AddDate/Format call on it downstream is correct without each call
+// site needing to remember its own conversion.
+func TestActualTokensForWeek_DSTFallBackIncludesSunday(t *testing.T) {
+	ams, err := time.LoadLocation("Europe/Amsterdam")
+	if err != nil {
+		t.Skip("Europe/Amsterdam tzdata not available:", err)
+	}
+	monday := time.Date(2026, 10, 19, 0, 0, 0, 0, ams) // the week containing the Oct 25 fall-back
+	// monday.Zone() always reads +2h: it was constructed with ams as its
+	// own Location. The real machine's time.Local, which weekStart(monday)
+	// below actually uses, is what needs checking (a second review caught
+	// this test comparing the wrong clock, which meant it could never
+	// self-skip on a non-Amsterdam machine).
+	if _, off := monday.In(time.Local).Zone(); off != 2*3600 {
+		t.Skipf("this machine's Europe/Amsterdam offset at %s is not CEST (+2h); skipping a DST test that assumes it", monday)
+	}
+
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	ws := weekStart(monday) // local Monday 00:00, matching what EnsureScored itself computes
+	isoYear, isoWeek := ws.ISOWeek()
+	if err := st.InsertForecastPlan(isoYear, isoWeek, ws, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	sunday20h := time.Date(2026, 10, 25, 20, 0, 0, 0, ams) // well after the 03:00->02:00 fold
+	if err := st.UpsertEvents([]schema.Event{
+		mkEvent("anthropic", "claude-code", "mon", ws.Add(9*time.Hour), 700),
+		mkEvent("anthropic", "claude-code", "sun", sunday20h, 1000),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sc, ok, err := st.ForecastScore(isoYear, isoWeek)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("ForecastScore: row not found after insert")
+	}
+	if sc.WeekStart.Location() != time.Local {
+		t.Errorf("sc.WeekStart's Location = %v, want time.Local", sc.WeekStart.Location())
+	}
+
+	actual, err := actualTokensForWeek(st, sc.WeekStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(700 + 1000); actual != want {
+		t.Errorf("actualTokensForWeek = %d, want %d (Sunday's own 1000 tokens must not be dropped)", actual, want)
+	}
+}
+
 // TestBuildLockedWithZeroScoredWeeks is F1's spec'd gate test: a store with
 // events but no scored week yet must show the gate, history only.
 func TestBuildLockedWithZeroScoredWeeks(t *testing.T) {

@@ -36,7 +36,7 @@ import (
 	"burnmon/internal/store"
 )
 
-const version = "0.3.1"
+const version = "0.3.2"
 
 type multiFlag []string
 
@@ -381,8 +381,8 @@ func runInsight(args []string) int {
 func runExport(args []string) int {
 	fs := flag.NewFlagSet("export", flag.ExitOnError)
 	cfgPath := fs.String("config", "", "config file (default: burnmon.json next to the exe, if present)")
-	since := fs.String("since", "", "earliest UTC day to include, YYYY-MM-DD (default: no lower bound)")
-	until := fs.String("until", "", "latest UTC day to include, YYYY-MM-DD, inclusive (default: no upper bound)")
+	since := fs.String("since", "", "earliest local day to include, YYYY-MM-DD (default: no lower bound)")
+	until := fs.String("until", "", "latest local day to include, YYYY-MM-DD, inclusive (default: no upper bound)")
 	label := fs.String("label", export.DefaultLabel, "this machine's label in the export; never the hostname")
 	out := fs.String("out", "", "output file path")
 	var owners multiFlag
@@ -440,7 +440,7 @@ func runExport(args []string) int {
 	}
 	var filtered []schema.Event
 	for _, e := range events {
-		day := e.At.UTC().Format("2006-01-02")
+		day := e.At.In(time.Local).Format("2006-01-02")
 		if *since != "" && day < *since {
 			continue
 		}

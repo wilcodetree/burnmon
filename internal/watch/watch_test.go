@@ -3,6 +3,7 @@ package watch
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -109,6 +110,48 @@ func TestWatcher_NewNestedDayFolderRace(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.waitFor(t, path, 2*time.Second)
+}
+
+// TestWatcher_WatchCountStaysOneAcrossManySubdirectories is WS3 hypothesis 1
+// (02_roadmap\2026-09-26_ws3_shared_ingest_performance.md): the old design
+// opened one fsnotify watch per subdirectory (13,125 of a real process's
+// 13,541 handles, measured against ~12,700 Cowork session folders). A
+// recursive watch on the root alone must still see a file created inside a
+// brand-new, several-levels-deep subdirectory, without WatchCount ever
+// growing past 1. Windows-specific by nature (watch_windows.go's one
+// handle per root); on the !windows fsnotify backend (B1, untested on real
+// hardware, out of WS3's scope) WatchCount grows with subdirectory count as
+// it always did, so this assertion only actually runs meaningfully on the
+// Windows binary go test ./... -count=1 builds and executes on this laptop.
+func TestWatcher_WatchCountStaysOneAcrossManySubdirectories(t *testing.T) {
+	dir := t.TempDir()
+	c := &changeCollector{}
+	w, err := New([]string{dir}, nil, c.onChange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Start()
+	defer w.Stop()
+
+	if got := w.WatchCount(); got != 1 {
+		t.Fatalf("WatchCount right after New: want 1, got %d", got)
+	}
+
+	for i := 0; i < 50; i++ {
+		sub := filepath.Join(dir, "proj", "2026", "09", "26", "session-"+strconv.Itoa(i))
+		if err := os.MkdirAll(sub, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(sub, "session.jsonl")
+		if err := os.WriteFile(path, []byte(`{"a":1}`+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		c.waitFor(t, path, 2*time.Second)
+	}
+
+	if got := w.WatchCount(); got != 1 {
+		t.Fatalf("WatchCount after 50 new nested subdirectories: want 1, got %d", got)
+	}
 }
 
 func TestWatcher_PollsWSLRootOnAppend(t *testing.T) {
