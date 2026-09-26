@@ -573,7 +573,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
   // TWEEN_MS (section 5): one shared tween duration for every animated
   // number on the page, shorter than the render tick itself (refresh_ms,
-  // default 2000) so a tween always finishes well before the next tick's
+  // default 1000) so a tween always finishes well before the next tick's
   // value replaces it, rather than the previous 400ms/1000ms split.
   var TWEEN_MS = 600;
 
@@ -1258,6 +1258,21 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
   var lastSysmonHistory = [];
 
+  // lastCoreCount (2026-09-26 phase 5 fix): gopsutil's per-process Percent
+  // (internal/sysmon/process.go, ProcessGroupSample.CPUPct) is unnormalized
+  // by core count - 100% means one full logical core saturated, so a
+  // multi-threaded process can read past 100%. Every other "%" in this UI
+  // (the header, the CPU box, the pressure score) is normalized against the
+  // whole machine (cpu.Percent(0, false), sysmon.Sample.CPUPct), so showing
+  // ProcessGroupSample.CPUPct directly as "%" read as if it meant the same
+  // thing - Wilco saw "BurnMon Dev 47%" and could not tell whether that was
+  // 47% of one core (unremarkable) or 47% of a 20-core machine (alarming).
+  // renderSysmonPanels keeps this in step with sm.Cores.length every tick;
+  // renderProcessGroups and renderHarnessHeatmap divide by it before
+  // display, so every process-groups "%" now means the same whole-machine
+  // share as the rest of the header.
+  var lastCoreCount = 1;
+
   // recentBuckets returns the chart's last N seconds' worth of buckets,
   // for a rate that reflects a short trailing window rather than only the
   // current, still-filling bucket (which reads low right after a bucket
@@ -1456,6 +1471,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // fed from the shared snapshot's own sm field instead of its own poll.
   function renderSysmonPanels(sm){
     if(!sm) return;
+    if(sm.Cores && sm.Cores.length) lastCoreCount = sm.Cores.length;
     var hdrCPU = document.getElementById('hdrCPU');
     if(hdrCPU) hdrCPU.textContent = Math.round(sm.CPUPct) + '%';
     var hdrRAM = document.getElementById('hdrRAM');
@@ -1508,7 +1524,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       }).join(' ');
       return '<tr><td><span class="dot" style="background:' + harnessColor(row.Harness) + '"></span>' +
         (HARNESS_LABEL[row.Harness] || row.Harness) + '</td>' +
-        '<td class="num">' + row.CPUPct.toFixed(0) + '%</td>' +
+        '<td class="num">' + (row.CPUPct / lastCoreCount).toFixed(0) + '%</td>' +
         '<td class="num">' + (row.MemMB / 1024).toFixed(1) + 'G</td>' +
         '<td class="num">' + fmtBytes(row.IOBps) + '</td>' +
         '<td><svg class="trendsvg" viewBox="0 0 100 12" preserveAspectRatio="none">' +
@@ -1640,9 +1656,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         // count, not the raw sum op/max use for colour intensity - the sum
         // can honestly run past 100% (several busy processes at once), but
         // labelling it "% CPU" without averaging first would misread as a
-        // single core pinned at an impossible value.
+        // single core pinned at an impossible value. Also divided by
+        // lastCoreCount (2026-09-26 fix): CPUPct's own unit is unnormalized
+        // per-process percent (100% = one full core), not the whole-machine
+        // percent every other "%" on this page means.
         var cnt = (countByHarness[h] && countByHarness[h][m]) || 1;
-        var avgPct = v / cnt;
+        var avgPct = v / cnt / lastCoreCount;
         var tok = (tokensByHarness[h] && tokensByHarness[h][m]) || 0;
         var title = label + ', ' + fmtHM(new Date(m * 60000)) +
           (v > 0 ? ': ' + Math.round(avgPct) + '% CPU' + (tok > 0 ? ', ' + fmtTokens(tok) + ' tok' : '') : ': no activity');
@@ -1786,7 +1805,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
   // ---------- The one shared render tick (no-scroll patch section 5)
   // ----------
-  // One render tick every refresh_ms (default 2000ms, floored at 1000ms by
+  // One render tick every refresh_ms (default 1000ms, floored at 1000ms by
   // loadDevConfig, app.go), driven from this one place: every other
   // setInterval/setTimeout loop that used to poll and paint its own panel
   // independently is gone, replaced by one bdevSnapshotNow call per tick
@@ -1798,7 +1817,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // up normally.
   var tickInFlight = false;
   var tickTimer = null;
-  var tickRefreshMs = 2000;
+  var tickRefreshMs = 1000;
 
   function scheduleTick(ms){
     if(tickTimer) clearInterval(tickTimer);

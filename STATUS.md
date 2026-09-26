@@ -272,6 +272,41 @@ ignored), it just no longer does anything.
   needs a scratch `owners`/`client` config dropped next to the exe and reverted after,
   same as V3-6's own Done-when check 2, and this session did not repeat that live pass.
 
+## BurnMon Dev (branch `burnmon-dev`, not yet merged to `main`)
+
+`v0.4.0-alpha.1`: a second, developer-facing window (`cmd\burnmon-dev`, `burnmon-dev.exe`)
+showing token/cost burn and system load on one time axis, following
+`02_roadmap\2026-09-24_ws2_burnmon_dev.md`'s phases 0 through 4, three UI patches
+(`2026-09-25_ws2_ui_review_patch.md`, `_burn_chart_no_scroll_patch.md`,
+`_ticker_headline_patch.md`), and this session's phase 5 (verify and release). Reuses
+`burnmon.exe`'s own `internal\` packages and store; system samples go to a separate
+`burnmon-dev.db`. See README's own "BurnMon Dev" section for what it does and how to run
+it; `04_assets\2026-09-24_burnmon_dev_design.md` for the design.
+
+Phase 5 fixes this session: the headline total now adds tokens ingested since
+`vendor_strip`'s own 60s cache refresh on every 2s tick (`cmd\burnmon-dev\headline.go`),
+instead of only moving once a minute; `tools\uicheck`'s window sizing now reads
+`GetDpiForWindow`/`AdjustWindowRectExForDpi` so a requested viewport size means real CSS
+pixels regardless of display scaling, capped to the screen with a log line when it does
+not fit; the process-groups panel's CPU percent is now normalized against the whole
+machine (divided by core count client-side) instead of gopsutil's own unnormalized
+per-process convention (100% meant one full core), which is what every other "%" on this
+page already means; sampling now runs on three independent cadences instead of one
+(paint/cheap system sample on `refresh_ms`, the process walk fixed at 3s, persistence to
+`burnmon-dev.db` fixed at 10s wall clock), so a faster paint refresh no longer multiplies
+process-scan or disk-write cost.
+
+Known, not fixed on this branch (WS3 scope, shared `internal\` ingest code, out of scope
+per the design doc's own "do not fix shared ingest code on this branch"): both
+`burnmon.exe` and `burnmon-dev.exe` climb toward roughly 900 MB and 13k handles in their
+first minute through the shared live-watch/store path. Reproduced again this session's
+own measurement.
+
+Rebased onto `main`'s `v0.3.1` (`1291ef9`) this session; one conflict, in `SESSION_LOG.md`
+(both branches prepend entries to the same file), resolved by keeping both entries in
+newest-on-top order. Not pushed, tagged or merged; see the hub brief and the commands
+handed to Wilco for the exact next steps.
+
 ## Next
 
 Decision 2026-12-19: continue to a paid team line, keep free, or stop. Out of scope,

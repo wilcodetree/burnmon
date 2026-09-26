@@ -71,8 +71,8 @@ func init() {
 		// one frame budget to execute on real hardware without ever
 		// violating "the same tick" - what this threshold actually needs to
 		// catch is a panel painting on a LATER tick entirely, which would
-		// show up roughly refresh_ms (~2000ms) later, three orders of
-		// magnitude past this tolerance either way.
+		// show up roughly refresh_ms (~1000ms default as of phase 5b)
+		// later, three orders of magnitude past this tolerance either way.
 		const frameToleranceMs = 250.0
 
 		for i, t := range ticks {
@@ -96,7 +96,7 @@ func init() {
 		}
 
 		// Consecutive ticks should land close to refresh_ms apart (default
-		// 2000ms). Using each tick's own tickEnd timestamp as its instant.
+		// 1000ms as of phase 5b). Using each tick's own tickEnd timestamp as its instant.
 		var tickEndTimes []float64
 		for _, t := range ticks {
 			for _, m := range t {
@@ -106,7 +106,7 @@ func init() {
 			}
 		}
 		var refreshMs float64
-		if err := evalInto(`window.__bdevRefreshMs || 2000`, &refreshMs); err != nil {
+		if err := evalInto(`window.__bdevRefreshMs || 1000`, &refreshMs); err != nil {
 			refreshMs = 2000
 		}
 		for i := 1; i < len(tickEndTimes); i++ {
