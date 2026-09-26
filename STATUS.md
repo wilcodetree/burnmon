@@ -232,9 +232,28 @@ ignored), it just no longer does anything.
   `store.DefaultPath()`/`store.Open()`), so both independently watch, parse and ingest
   the same source files when both run (WS3 hypothesis 4: measured safe, SQLite's WAL
   mode plus `busy_timeout=5000` plus idempotent upsert already cover it, no fix built).
-  `burnmon-dev.exe`'s own high RAM/handle numbers when run alongside the now-fixed
-  `burnmon.exe` are its pre-rebase build still carrying the old per-directory watcher,
-  not a new problem; resolves automatically once WS2 rebases onto this commit.
+  `burnmon-dev.exe`'s own RAM/handle numbers, previously high from its pre-rebase build
+  still carrying the old per-directory watcher, are fixed now that WS2 has rebased onto
+  this commit (`02_roadmap\2026-09-26_ws2_performance_patch.md`): peak handles 763-781
+  across before/after measurement, no longer the ~13.9k WS2 phase 5 measured.
+- WS2's own performance patch (below) could not set WebView2's own memory usage target to
+  low while `burnmon-dev.exe` is minimized: `ICoreWebView2Controller4` (the interface that
+  carries it) is not vendored in `go-webview2`, and hand-deriving its COM vtable layout
+  without the official WebView2 SDK header risks a wrong method-slot offset, a crash risk
+  in a tool run daily, for a soft (RAM-only) win. Not built; flagged rather than silently
+  dropped. WebView2's own automatic memory management still measured a real drop while
+  minimized (peak WebView2 RAM 499MB vs 671MB shown active, peak WebView2 CPU 0.11% vs
+  1.36% active), just not as low as an explicit "Low" target might additionally buy.
+- The Microsoft To Do panel's own due-date comparison (`internal\todo\todo.go`) was not
+  brought in line with WS2 item 5's "local time everywhere", even though the spec's own
+  item 5 names "To Do": it compares `dueDateTime.DateTime[:10]` against the local date,
+  and no `Prefer: outlook.timezone` header is sent, so Microsoft Graph's own reply is
+  presumed UTC - a due date set in local time could read one day early or late near
+  midnight. Not fixed: this depends on Graph's actual, undocumented-here response
+  behaviour, which needs a live, signed-in To Do panel to confirm (Wilco's own device-code
+  sign-in, per the still-open item in the phase 5 brief); a fix built against a guess
+  about that behaviour risks getting it backwards. A future session with a live sign-in
+  should confirm and fix if real.
 - GitHub Copilot Business and Copilot Enterprise: their AI-credit allotments are now
   confirmed live (1,900/user/month and 3,900/user/month respectively, pooled at the
   billing entity, `docs.github.com/en/copilot/concepts/billing-and-usage/organizations-
@@ -271,6 +290,114 @@ ignored), it just no longer does anything.
   (`TestBuildClientFilterAndRows`), not by a fresh real-window click-through: doing that
   needs a scratch `owners`/`client` config dropped next to the exe and reverted after,
   same as V3-6's own Done-when check 2, and this session did not repeat that live pass.
+
+## BurnMon Dev (branch `burnmon-dev`, not yet merged to `main`)
+
+`v0.4.0-alpha.2`: a second, developer-facing window (`cmd\burnmon-dev`, `burnmon-dev.exe`)
+showing token/cost burn and system load on one time axis, following
+`02_roadmap\2026-09-24_ws2_burnmon_dev.md`'s phases 0 through 4, three UI patches
+(`2026-09-25_ws2_ui_review_patch.md`, `_burn_chart_no_scroll_patch.md`,
+`_ticker_headline_patch.md`), phase 5 (verify and release), and this session's own
+performance patch (`02_roadmap\2026-09-26_ws2_performance_patch.md`). Reuses
+`burnmon.exe`'s own `internal\` packages and store; system samples go to a separate
+`burnmon-dev.db`. See README's own "BurnMon Dev" section for what it does and how to run
+it; `04_assets\2026-09-24_burnmon_dev_design.md` for the design.
+
+Phase 5 fixes this session: the headline total now adds tokens ingested since
+`vendor_strip`'s own 60s cache refresh on every 2s tick (`cmd\burnmon-dev\headline.go`),
+instead of only moving once a minute; `tools\uicheck`'s window sizing now reads
+`GetDpiForWindow`/`AdjustWindowRectExForDpi` so a requested viewport size means real CSS
+pixels regardless of display scaling, capped to the screen with a log line when it does
+not fit; the process-groups panel's CPU percent is now normalized against the whole
+machine (divided by core count client-side) instead of gopsutil's own unnormalized
+per-process convention (100% meant one full core), which is what every other "%" on this
+page already means; sampling now runs on three independent cadences instead of one
+(paint/cheap system sample on `refresh_ms`, the process walk fixed at 3s, persistence to
+`burnmon-dev.db` fixed at 10s wall clock), so a faster paint refresh no longer multiplies
+process-scan or disk-write cost.
+
+Rebased onto `main`'s `v0.3.2` (`69a071e`, WS3's shared-ingest watcher fix and local time
+everywhere) this session; one conflict, in `SESSION_LOG.md` (both branches prepend entries
+to the same file, four separate conflict points across the rebase), resolved by keeping
+every entry in newest-on-top order by real commit timestamp, no other file conflicted.
+The shared-ingest climb WS2 phase 5 flagged as out of scope is gone now that this
+rebase brings in WS3's fix: post-rebase, pre-anything-else 10-minute baseline (Go process)
+0.89% avg / 1.95% peak CPU, 252.5 MB peak RAM, 763 peak handles.
+
+This session's own performance patch (items 1-6,
+`02_roadmap\2026-09-26_ws2_performance_patch.md`): a single `NtQuerySystemInformation`
+system-wide snapshot per process-walk tick replaces the old one-gopsutil-call-per-process
+sampler (`internal\sysmon\process_windows.go`, new; `process_other.go` keeps the old
+gopsutil path for the untested darwin/linux build), caching each process's command line
+once per pid rather than every tick; the window pauses painting and slows its own system
+sample to 10s while minimized (`document.visibilitychange`, which WebView2 already ties to
+the host window's own minimize state, plus a new `hidden` flag app.go's sampler reads),
+restoring with one immediate fresh tick on un-hide; the burn chart, session cards, ticker
+and process-groups panels now update existing DOM nodes/rows in place instead of
+rebuilding their whole HTML every tick (vendor strip already did this); the process-groups
+"BurnMon Dev" row is split into "BurnMon Dev (Go)" and "BurnMon Dev (WebView2)"
+(`internal\sysmon\harness.go`'s new `HarnessSelfWebview`, keyed off a webview2 process's
+own parent-chain classification), and its CPU header now states the percent is of the
+whole machine, matching the header/CPU box's own convention; `headline.go`'s
+`headlineDayStart` (missed when vendorstrip's own switched, WS3) plus `app.go`'s
+`closedDayRows` (the activity heatmap), `main.go`'s `bdevCacheBreakdown` (the vendor
+strip's own click-through detail) and `export_run.go`'s `parseExportTime`
+(`--since`/`--until` bare-day parsing, `endOfDay`'s `AddDate`) now use local time, along
+with the activity heatmap's own JS-side grid math (`page.html`'s `mondayOnOrBefore`/
+`renderHeatmap`, `toISOString()` replaced with a local `fmtLocalDateKey`); every `.UTC()`
+call in `cmd\burnmon-dev` is now gone (two were removed - the heatmap and vendor-strip
+breakdown day boundaries - beyond headline.go's own single fix the spec named directly;
+`internal\devexport`'s own `.UTC()` calls on the exported bundle's `GeneratedAt`/`Since`/
+`Until`/event `At` are kept, deliberately, matching WS3's own established convention that
+a portable, machine-readable export stays UTC while the page's own display converts to
+local at render time). Watched 30s during this session's own active Claude Code session:
+9 headline changes out of 30 render ticks (measured span 29.0s).
+
+Post-patch 10-minute measurement (active, `burnmon.exe` co-running): Go process 0.28% avg
+/ 0.59% peak CPU (was 0.89%/1.95%), 195.4 MB peak RAM (was 252.5 MB, under the 250 MB
+target), 781 peak handles (was 763, essentially unchanged - item 1 is a CPU fix, not a
+handle-count one); WebView2 tree 0.51% avg / 1.36% peak CPU (was 0.71%/1.58%), 671.1 MB
+peak RAM (was 680.9 MB), 6 processes peak, both runs. Minimized for 5 minutes: Go process
+0.15% avg / 0.80% peak CPU, 297.2 MB peak RAM (handles 734); WebView2 tree 0.03% avg /
+0.11% peak CPU, 499.0 MB peak RAM - CPU on both drops sharply versus the active run,
+confirming the pause actually holds.
+
+A fresh, independent Opus review over the full diff before committing found five real
+issues, all fixed with a failing test (or a `node` repro for the JS-only one) confirmed
+first: the heatmap's own week count silently dropped a whole week - including today's own
+column - on any Monday whose 182-day lookback crossed a DST transition (a raw ms/604800000
+division, now day-counted first); the process-groups crop's "-1 row" headroom guess hid
+one row that actually fit whenever the real thead was shorter than a data row, now
+measured against the thead's real height; `internal\advisor`'s `evalSelfOverhead` still
+only read `HarnessSelf` after item 4's split, silently missing WebView2's own (larger)
+share of this app's overhead, now sums both; `internal\devexport`'s `dailyRows` bucketed
+by `t.At`'s own UTC calendar day even though `--since`/`--until` now select a local window
+(the same class of bug item 5 was meant to close, in a file the spec did not name
+directly), now buckets by local day, and summary.md's top-turns table gets the same local
+-time fix; the process-registry cache (item 1) had no way to notice a pid reused by a
+different process within one 3s walk, now guarded by the snapshot's own `CreateTime`. The
+hand-derived `systemProcessInfoT` struct layout, the harness-split ordering, the DOM-reuse
+reconciliation and the `hidden` atomic.Bool concurrency were all independently checked and
+found correct. Not addressed: the Microsoft To Do panel's own due-date comparison against
+Microsoft Graph's `dueDateTime` (named under item 5's "To Do"; correctness depends on an
+undocumented Graph timezone behaviour this sandbox cannot verify live, so left unfixed
+rather than guessed at) - a future session with a live, signed-in To Do panel should
+confirm whether a due date set in local time reads correctly.
+
+Full verify pass green after the review's own fixes: `go vet ./...`, `go test
+./... -count=1`, `.\build.ps1`, `node --check` on both page JS files, `uicheck d0`-`d12`
+re-run in full (one `d9` failure at 1920x1080 only, confirmed unrelated: a pre-existing
+`.heatmonth{overflow:visible}` CSS from 2026-09-24 that `check_d9.go`'s own sweep
+misreads as a scrollbar risk, today is not a Monday so the DST fix could not have changed
+this day's rendering, and `d9` passed clean at the other four sizes and on an earlier
+pass at a different display scale). `w0`/`w2`-`w8` against `burnmon.exe` all green; `w1`
+(a fixed 1500ms WebView2 warm-up budget, unrelated to anything in this diff) passed once
+earlier in the session but could not get a clean run against the final build - real
+desktop contention (a screenshot from one attempt captured an entirely different,
+unrelated foreground window, confirmed via `GetForegroundWindow`), the same category of
+limitation `d7`'s own comment already documents for a locked screen, not a code
+regression. Wilco should re-run `w1` alone once the desktop is idle. Not pushed, tagged or
+merged; see the hub brief and the commands handed to Wilco for the exact next steps.
 
 ## Next
 

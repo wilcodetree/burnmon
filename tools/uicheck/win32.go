@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,21 +31,35 @@ var (
 	procGetWindowTextW      = user32.NewProc("GetWindowTextW")
 	procIsWindow            = user32.NewProc("IsWindow")
 	procSetProcessDPIAware  = user32.NewProc("SetProcessDPIAware")
+	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
+	procAttachThreadInput   = user32.NewProc("AttachThreadInput")
 
 	procSetWindowPos = user32.NewProc("SetWindowPos")
 	procShowWindow   = user32.NewProc("ShowWindow")
 
+	procGetDpiForWindow          = user32.NewProc("GetDpiForWindow")
+	procAdjustWindowRectExForDpi = user32.NewProc("AdjustWindowRectExForDpi")
+	procGetWindowLongW           = user32.NewProc("GetWindowLongW")
+	procMonitorFromWindow        = user32.NewProc("MonitorFromWindow")
+	procGetMonitorInfoW          = user32.NewProc("GetMonitorInfoW")
+
 	gdi32               = windows.NewLazySystemDLL("gdi32.dll")
-	procCreateCompatDC   = gdi32.NewProc("CreateCompatibleDC")
-	procCreateCompatBmp  = gdi32.NewProc("CreateCompatibleBitmap")
-	procSelectObject     = gdi32.NewProc("SelectObject")
-	procDeleteDC         = gdi32.NewProc("DeleteDC")
-	procDeleteObject     = gdi32.NewProc("DeleteObject")
-	procGetDIBits        = gdi32.NewProc("GetDIBits")
-	procBitBlt           = gdi32.NewProc("BitBlt")
+	procCreateCompatDC  = gdi32.NewProc("CreateCompatibleDC")
+	procCreateCompatBmp = gdi32.NewProc("CreateCompatibleBitmap")
+	procSelectObject    = gdi32.NewProc("SelectObject")
+	procDeleteDC        = gdi32.NewProc("DeleteDC")
+	procDeleteObject    = gdi32.NewProc("DeleteObject")
+	procGetDIBits       = gdi32.NewProc("GetDIBits")
+	procBitBlt          = gdi32.NewProc("BitBlt")
 )
 
 const windowTitle = "BurnMon"
+
+// windowTitleDev is burnmon-dev.exe's own window title (cmd\burnmon-dev
+// app.go's windowTitle constant), distinct from "BurnMon" so FindWindowW's
+// exact-match lookup never confuses the two exes when both run at once
+// (the design doc's own normal-case scenario).
+const windowTitleDev = "BurnMon Dev"
 
 // Without this, GetWindowRect/ClientToScreen/PrintWindow all return
 // DPI-virtualized coordinates and a scaled-down bitmap for a DPI-aware
@@ -84,6 +99,20 @@ func findBurnmonWindowFast() uintptr {
 	}
 	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
 	return hwnd
+}
+
+// findBurnmonDevWindow is findBurnmonWindow for burnmon-dev.exe's own
+// window title.
+func findBurnmonDevWindow() (uintptr, error) {
+	title, err := windows.UTF16PtrFromString(windowTitleDev)
+	if err != nil {
+		return 0, err
+	}
+	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
+	if hwnd == 0 {
+		return 0, fmt.Errorf("no window titled %q found; is burnmon-dev.exe running?", windowTitleDev)
+	}
+	return hwnd, nil
 }
 
 func isWindow(hwnd uintptr) bool {
@@ -136,8 +165,36 @@ func windowTitleText(hwnd uintptr) string {
 // previous run or manual resize. Every check calls this first so results
 // are deterministic and comparable across runs.
 func ensureWindowSize(hwnd uintptr) error {
+	return ensureWindowSizeWH(hwnd, 1280, 860)
+}
+
+// ensureWindowSizeWH is ensureWindowSize with an explicit size, for
+// burnmon-dev.exe's own two viewports (1152x2048 primary, 1024x1152
+// secondary, design doc "Viewports") rather than burnmon.exe's fixed
+// 1280x860. width/height are CSS pixels, the unit every design doc and
+// spec actually means by "1152x2048": on a scaled display (this laptop
+// runs its sandboxed sessions at ~200%) a plain SetWindowPos in physical
+// pixels lands the page's real CSS viewport at roughly half the intended
+// size, which is what SESSION_LOG's 2026-09-26 entry found. This converts
+// the requested CSS size to physical window pixels using the target
+// monitor's real DPI, then caps to that monitor so a too-small screen
+// gets a real (logged) window instead of an off-screen or clipped one.
+const hwndTopmost = ^uintptr(0) // -1
+const swpShowWindow = 0x0040
+
+func ensureWindowSizeWH(hwnd uintptr, cssWidth, cssHeight int32) error {
 	const swRestore = 9
 	procShowWindow.Call(hwnd, swRestore)
+
+	// Position first, size untouched, so GetDpiForWindow/MonitorFromWindow
+	// below read the monitor the window is actually about to sit on
+	// (matters on a multi-monitor, mixed-DPI setup) rather than wherever a
+	// previous check happened to leave it.
+	const swpNoSize = 0x0001
+	ret, _, err := procSetWindowPos.Call(hwnd, hwndTopmost, 100, 100, 0, 0, swpShowWindow|swpNoSize)
+	if ret == 0 {
+		return fmt.Errorf("SetWindowPos (position): %w", err)
+	}
 	// BitBlt-based screenshot (screenshot, win32.go) samples whatever DWM
 	// has actually composited on screen at these coordinates, not this HWND
 	// specifically, so another ordinary window merely occupying the same
@@ -146,14 +203,92 @@ func ensureWindowSize(hwnd uintptr) error {
 	// to a window the user is actively working in (Windows' own
 	// foreground-lock behaviour); toggling this window TOPMOST and back
 	// forces it to the front regardless, the standard trick for that.
-	const hwndTopmost = ^uintptr(0) // -1
-	const swpShowWindow = 0x0040
-	ret, _, err := procSetWindowPos.Call(hwnd, hwndTopmost, 100, 100, 1280, 860, swpShowWindow)
+	bringToFront(hwnd)
+
+	dpi, _, _ := procGetDpiForWindow.Call(hwnd)
+	if dpi == 0 {
+		dpi = 96
+	}
+	scale := float64(dpi) / 96.0
+
+	clientW := int32(math.Round(float64(cssWidth) * scale))
+	clientH := int32(math.Round(float64(cssHeight) * scale))
+
+	outerW, outerH := clientW, clientH
+	if adjW, adjH, err := outerSizeForClient(hwnd, clientW, clientH, uint32(dpi)); err == nil {
+		outerW, outerH = adjW, adjH
+	} else {
+		fmt.Printf("uicheck: could not compute window chrome size (%v); using client size %dx%d physical px directly\n", err, clientW, clientH)
+	}
+
+	requestedW, requestedH := outerW, outerH
+	if scr, err := screenRect(hwnd); err == nil {
+		const margin = 100 // matches the fixed (100,100) window position
+		maxW := scr.Right - scr.Left - margin
+		maxH := scr.Bottom - scr.Top - margin
+		if outerW > maxW {
+			outerW = maxW
+		}
+		if outerH > maxH {
+			outerH = maxH
+		}
+	} else {
+		fmt.Printf("uicheck: could not read screen bounds to cap window size (%v)\n", err)
+	}
+	if outerW != requestedW || outerH != requestedH {
+		fmt.Printf("uicheck: %dx%d CSS px at %.0f%% scale needs %dx%d physical px, which does not fit this screen; capping the window to %dx%d physical px\n",
+			cssWidth, cssHeight, scale*100, requestedW, requestedH, outerW, outerH)
+	}
+
+	ret, _, err = procSetWindowPos.Call(hwnd, hwndTopmost, 100, 100, uintptr(outerW), uintptr(outerH), swpShowWindow)
 	if ret == 0 {
 		return fmt.Errorf("SetWindowPos: %w", err)
 	}
 	bringToFront(hwnd)
 	return nil
+}
+
+// outerSizeForClient returns the window (outer) size needed for hwnd's
+// current style/exstyle to have a client area of clientW x clientH
+// physical pixels at dpi, via AdjustWindowRectExForDpi (Windows 10 1607+,
+// same release GetDpiForWindow needs).
+func outerSizeForClient(hwnd uintptr, clientW, clientH int32, dpi uint32) (int32, int32, error) {
+	gwlStyle := int32(-16)
+	gwlExStyle := int32(-20)
+	style, _, _ := procGetWindowLongW.Call(hwnd, uintptr(gwlStyle))
+	exStyle, _, _ := procGetWindowLongW.Call(hwnd, uintptr(gwlExStyle))
+
+	r := rect{0, 0, clientW, clientH}
+	ret, _, err := procAdjustWindowRectExForDpi.Call(uintptr(unsafe.Pointer(&r)), style, 0, exStyle, uintptr(dpi))
+	if ret == 0 {
+		return 0, 0, fmt.Errorf("AdjustWindowRectExForDpi: %w", err)
+	}
+	return r.Right - r.Left, r.Bottom - r.Top, nil
+}
+
+// monitorInfo mirrors Win32's MONITORINFO.
+type monitorInfo struct {
+	cbSize    uint32
+	rcMonitor rect
+	rcWork    rect
+	dwFlags   uint32
+}
+
+// screenRect returns the full bounds (not just the work area, matching
+// "capped at the screen") of the monitor hwnd currently sits on.
+func screenRect(hwnd uintptr) (rect, error) {
+	const monitorDefaultToNearest = 2
+	hMon, _, _ := procMonitorFromWindow.Call(hwnd, monitorDefaultToNearest)
+	if hMon == 0 {
+		return rect{}, fmt.Errorf("MonitorFromWindow returned no monitor")
+	}
+	var mi monitorInfo
+	mi.cbSize = uint32(unsafe.Sizeof(mi))
+	ret, _, err := procGetMonitorInfoW.Call(hMon, uintptr(unsafe.Pointer(&mi)))
+	if ret == 0 {
+		return rect{}, fmt.Errorf("GetMonitorInfoW: %w", err)
+	}
+	return mi.rcMonitor, nil
 }
 
 func getWindowRect(hwnd uintptr) (rect, error) {
@@ -177,9 +312,35 @@ func clientOrigin(hwnd uintptr) (point, error) {
 // bringToFront activates the window (needed before a key press: keyboard
 // input goes to whichever window has focus, unlike a mouse click, which
 // lands on whatever window is physically under the cursor regardless of
-// focus).
+// focus). Windows restricts a background process calling
+// SetForegroundWindow on its own (the "foreground lock" behavior) unless it
+// shares input state with whatever currently owns the foreground; since
+// uicheck.exe is exactly such an unrelated background process, that call
+// can silently do nothing on its own (ensureWindowSizeWH's own HWND_TOPMOST
+// toggle only affects z-order, not this). AttachThreadInput briefly shares
+// input state with the current foreground thread so SetForegroundWindow
+// actually takes effect, the standard workaround for this restriction; this
+// only started mattering once windowstate.go's F11 hook began gating on
+// GetForegroundWindow()==hwnd for real F11 safety (found by review,
+// 2026-09-25: check_d7.go started failing because this window was never
+// actually foreground, despite every other check's clicks/keypresses
+// working fine without needing true foreground status).
 func bringToFront(hwnd uintptr) {
+	var targetPID uint32
+	targetTID, _, _ := procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&targetPID)))
+
+	fgHwnd, _, _ := procGetForegroundWindow.Call()
+	var fgPID uint32
+	fgTID, _, _ := procGetWindowThreadProcessId.Call(fgHwnd, uintptr(unsafe.Pointer(&fgPID)))
+
+	attached := fgTID != 0 && fgTID != targetTID
+	if attached {
+		procAttachThreadInput.Call(fgTID, targetTID, 1)
+	}
 	procSetForegroundWindow.Call(hwnd)
+	if attached {
+		procAttachThreadInput.Call(fgTID, targetTID, 0)
+	}
 	time.Sleep(150 * time.Millisecond)
 }
 
@@ -207,9 +368,9 @@ const (
 	inputMouse    = 0
 	inputKeyboard = 1
 
-	mouseeventfMove      = 0x0001
-	mouseeventfLeftDown  = 0x0002
-	mouseeventfLeftUp    = 0x0004
+	mouseeventfMove     = 0x0001
+	mouseeventfLeftDown = 0x0002
+	mouseeventfLeftUp   = 0x0004
 
 	keyeventfKeyUp = 0x0002
 )
@@ -236,9 +397,9 @@ type keybdInput struct {
 // padding (the union that follows is 8-byte aligned on x64), then the
 // largest union member (MOUSEINPUT, 32 bytes) sized to fit either variant.
 type input struct {
-	typ     uint32
-	_       uint32
-	data    [32]byte
+	typ  uint32
+	_    uint32
+	data [32]byte
 }
 
 func mouseInputRecord(flags uint32) input {
@@ -292,8 +453,11 @@ func clickAt(x, y int32) error {
 	})
 }
 
-// VK_ESCAPE, the only key code W2's check needs today.
-const vkEscape = 0x1B
+// VK_ESCAPE and VK_F11 (d7's fullscreen toggle, UI review patch section 10).
+const (
+	vkEscape = 0x1B
+	vkF11    = 0x7A
+)
 
 func pressKey(vk uint16) error {
 	return sendInputs([]input{

@@ -1,4 +1,5 @@
-# Builds burnmon-cli.exe (console CLI) and burnmon.exe (windowed app).
+# Builds burnmon-cli.exe (console CLI), burnmon.exe (windowed app) and
+# burnmon-dev.exe (the BurnMon Dev monitor, Windows-only).
 # Naming convention flipped 2026-08-31: burnmon.exe is now the app. Both
 # binaries check for burnmon.json next to the exe first, then fall back
 # to %LOCALAPPDATA%\burnmon\burnmon.json (see cmd/burnmon/main.go
@@ -28,6 +29,8 @@ if (-not (Get-Command go-winres -ErrorAction SilentlyContinue)) {
 if ($LASTEXITCODE -ne 0) { Write-Host "go-winres failed for CLI; building without icon." }
 & $goWinres make --in winres\app.json --out cmd\burnmon\rsrc
 if ($LASTEXITCODE -ne 0) { Write-Host "go-winres failed for app; building without icon." }
+& $goWinres make --in winres\burnmon-dev.json --out cmd\burnmon-dev\rsrc
+if ($LASTEXITCODE -ne 0) { Write-Host "go-winres failed for burnmon-dev; building without icon." }
 go mod tidy
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
@@ -35,7 +38,9 @@ go build -trimpath -ldflags "-s -w" -o burnmon-cli.exe .\cmd\burnmon-cli
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 go build -trimpath -ldflags "-s -w -H windowsgui" -o burnmon.exe .\cmd\burnmon
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-Write-Host "Built burnmon-cli.exe (CLI) and burnmon.exe (app)"
+go build -trimpath -ldflags "-s -w -H windowsgui" -o burnmon-dev.exe .\cmd\burnmon-dev
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "Built burnmon-cli.exe (CLI), burnmon.exe (app) and burnmon-dev.exe (BurnMon Dev)"
 $localHook = Join-Path $PSScriptRoot "build.local.ps1"
 if (Test-Path $localHook) {
     & $localHook

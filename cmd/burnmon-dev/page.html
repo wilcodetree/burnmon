@@ -1,0 +1,2241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BurnMon Dev</title>
+<style>
+:root{
+  --bg:#04060a; --panel:#0a0e14; --panel2:#10151d; --bd:#1c2532;
+  --amber:#ffa028; --amber2:#ffc46b;
+  --txt:#cfd8e3; --dim:#66788c;
+  --grn:#00d26a; --red:#ff4b4b; --blu:#4da6ff; --cyn:#38d3e3; --mag:#d68cf0; --yel:#ffd75f;
+  --mono:Consolas,"Cascadia Mono","IBM Plex Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg); color:var(--txt); overflow:hidden;
+  font:13px/1.45 var(--mono);
+  display:flex; flex-direction:column;
+}
+/* no-scroll patch section 3: no visible scrollbar in any panel or on the
+   page, at any window size. Every list/grid that used to scroll internally
+   (harness heatmap, activity heatmap, To Do, turn popup) now crops to whole
+   items instead (see cropToFit/renderProcessGroups' own row crop/the two
+   heatmaps' column math below), so nothing here is ever meant to overflow;
+   overflow:hidden on each of those containers is the hard backstop. The turn ticker is the
+   one deliberate exception (headline patch section 1): it scrolls instead
+   of cropping, .ticker's own overflow-y:auto below and check_d9.go's own
+   exclusion for #turnTicker both reflect that. */
+.fit-dropped{display:none !important}
+
+/* loading screen, section 11 steps 2-3: shown from first paint, hidden once
+   the page's own first poll cycle renders (see the Promise.all near the
+   bottom of this file's script); house style, same wordmark and colors as
+   the header. */
+.loadingoverlay{
+  position:fixed; inset:0; z-index:2000; background:var(--bg);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+}
+.loadingoverlay.hidden{display:none}
+.loadingoverlay .logo{font-size:20px}
+#loadingStepText{font-size:12px; color:var(--dim)}
+.loadingbar{width:280px; height:4px; background:#10151d; border:1px solid var(--bd)}
+.loadingbar i{display:block; height:100%; background:var(--amber); transition:width .3s ease-out}
+
+/* header, UI review patch section 1: smaller, quieter, no boxed chips.
+   Headline patch section 4: gap widened (14_topbar.png showed "3 sessions"
+   clipped against its left neighbour) now that hltotal reserves its own
+   fixed width below rather than sizing exactly to its own text. */
+header{
+  flex:0 0 auto; min-height:32px; background:#000; border-bottom:2px solid var(--amber);
+  display:flex; align-items:center; flex-wrap:wrap; gap:6px 24px; padding:5px 14px;
+}
+.brand{display:flex; flex-direction:column; gap:0; flex:0 0 auto; line-height:1.15}
+.logo{font-size:13px; font-weight:700; color:#fff; letter-spacing:1px; white-space:nowrap}
+.logo span{color:var(--amber)}
+.pressuretext{font-size:10px; font-weight:700; letter-spacing:.06em; white-space:nowrap}
+/* hltotal, headline patch section 4: whole number with thousands separators
+   (fmtTokensFull), no K/M/B - bigger, and min-width reserves room for 12
+   digits plus their thousands separators (e.g. 999,999,999,999) so the
+   header never reflows/shifts as the true value grows digit by digit.
+   flex:1 1 auto plus centered text (Wilco, 2026-09-26): the header's own
+   free space splits between this box and .hdrspacer further right (both
+   flex:1 1 auto in the same row), so this one grows in place rather than
+   taking all of it; centering its own text inside that grown box is what
+   actually reads as "between the brand and the stat cluster" rather than
+   hugging the brand, checked by screenshot at five widths (review,
+   2026-09-26: an earlier version of this comment overstated the box as
+   consuming the header's whole free span on its own). */
+.hltotal{font-size:36px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; white-space:nowrap; min-width:15ch; flex:1 1 auto; text-align:center}
+@media (min-width: 1152px){
+  .hltotal{font-size:48px}
+}
+/* max-width+ellipsis (no-scroll patch section 3 backstop): every .hstat
+   here is normally a short readout, but #exportStatus can hold a full
+   absolute export path, long enough on its own (nowrap, so header's own
+   flex-wrap cannot break it onto a shorter line) to overflow a genuinely
+   tiny window on its own (found via uicheck d9, 2026-09-25); a header
+   stat is a readout, not something worth reading in full at 11.5px
+   either way, so clipping it is the right behaviour, not just the safe one. */
+.hstat{font-size:11.5px; color:var(--dim); white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis}
+.hstat b{color:var(--txt); font-weight:600; font-variant-numeric:tabular-nums}
+.hdrspacer{flex:1 1 auto; min-width:4px}
+.textbtn{background:none; border:none; color:var(--blu); font:700 11.5px/1 var(--mono);
+  letter-spacing:.06em; text-transform:uppercase; cursor:pointer; padding:2px 0}
+.textbtn:hover{text-decoration:underline}
+.textbtn:disabled{opacity:.5; cursor:default; text-decoration:none}
+
+main{flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; padding:4px; gap:4px}
+.zone{display:flex; flex-direction:column; min-height:0; min-width:0}
+.zone.burn{flex:45}
+.zone.system{flex:55; border-top:2px solid var(--bd); padding-top:4px}
+
+/* section 10, responsive: below 900px one compact column; 900-1599px one
+   column (the portrait design, the two rules above); from 1600px two
+   columns, burn left and system right, each stretching to the window's
+   full height instead of splitting it 45/55 vertically (main becomes a
+   row, so flex:45/55 above now sizes each column's width instead). */
+@media (min-width: 1600px){
+  main{flex-direction:row}
+  .zone.burn{border-right:2px solid var(--bd); padding-right:4px}
+  .zone.system{border-top:none; padding-top:0}
+}
+@media (max-width: 899px){
+  main{padding:2px; gap:2px}
+  .zonebody{padding:2px; gap:2px}
+  .cards{gap:4px}
+  .sysbottom{flex-direction:column}
+}
+.zonelabel{
+  flex:0 0 auto; background:var(--panel2); border-bottom:1px solid var(--bd); color:var(--amber);
+  font:700 12px/1 var(--mono); letter-spacing:.1em; padding:6px 10px; text-transform:uppercase;
+}
+.zonebody{flex:1; min-height:0; padding:4px; display:flex; flex-direction:column; gap:4px; overflow:hidden}
+/* overflow:hidden is a blanket no-scroll patch section 3 backstop: any
+   panel squeezed below its own content's natural size (a genuinely tiny
+   window, after every droppable panel is already gone) clips silently
+   instead of spilling its content over neighbours - never a scrollbar,
+   which this class never opts into either way. */
+.panel{background:var(--panel); border:1px solid var(--bd); display:flex; flex-direction:column; min-height:0; overflow:hidden}
+.panelhead{font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--amber); text-transform:uppercase;
+  padding:6px 10px; border-bottom:1px solid var(--bd); background:var(--panel2); flex:0 0 auto}
+.placeholder{flex:1; display:flex; align-items:center; justify-content:center; color:var(--dim);
+  font-size:12px; padding:20px; text-align:center}
+
+/* burn zone, no-scroll patch section 1: bars only (no turn markers, no CPU
+   overlay), per-session stacking, HH:mm axis */
+.burnchart{position:relative; flex:0 0 24%; padding:6px 6px 0; overflow:hidden; display:flex; flex-direction:column}
+.bars{position:relative; flex:1; display:flex; gap:2px; min-height:0}
+.bars .bar{flex:1; display:flex; flex-direction:column-reverse; min-width:0}
+.bars .bar i{display:block; min-height:2px}
+.burnaxis{display:flex; gap:2px; padding:2px 0 4px; flex:0 0 auto}
+.axistick{flex:1; font-size:9px; color:var(--dim); white-space:nowrap; overflow:visible}
+/* per-session legend, section 2: colour chip, harness, short label, tokens
+   in the window; capped to two lines and cropped (cropToFit) rather than
+   scrolled, dropping the smallest sessions first (list is pre-sorted
+   descending by tokens, so trimming from the end drops the smallest). */
+.burnlegend{display:flex; flex-wrap:wrap; gap:3px 10px; max-height:40px; overflow:hidden; padding:2px 6px; flex:0 0 auto}
+.legenditem{display:inline-flex; align-items:center; font-size:10px; color:var(--dim); white-space:nowrap}
+.legenditem b{color:#fff; font-weight:600; margin-left:4px}
+.cards{display:flex; gap:6px; flex-wrap:wrap; flex:0 0 auto}
+.card{flex:1 1 140px; background:var(--panel); border:1px solid var(--bd); padding:8px 10px; min-width:0}
+.card h4{margin:0 0 4px; font:12px/1 var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ctxbar{height:5px; background:#1a2330; margin:4px 0}
+.ctxbar i{display:block; height:100%}
+.card small{display:block; font:11px/1.4 var(--mono); color:var(--dim)}
+.card small b{color:var(--txt); font-weight:600}
+
+table{width:100%; border-collapse:collapse; font:11.5px/1.3 var(--mono)}
+th{color:var(--dim); font-weight:400; text-align:right; letter-spacing:.05em; font-size:10px; padding:4px 8px; text-transform:uppercase}
+th:first-child{text-align:left}
+td{padding:4px 8px; color:var(--txt); white-space:nowrap}
+td.num{text-align:right; font-variant-numeric:tabular-nums}
+.dot{display:inline-block; width:8px; height:8px; border-radius:1px; margin-right:5px; vertical-align:middle}
+
+/* vendor strip totals row, section 3 */
+tr.totalrow td{font-weight:700; color:#fff; border-bottom:1px solid var(--bd)}
+
+/* turn ticker, section 5: dense lines, amber outline tag, white tokens, hover, click.
+   Headline patch section 1: the ticker is the one exception to "no scrollbars" - rows
+   get a fixed height instead of being squeezed by flexbox's default shrink (the exact
+   11_ticker_broken.png bug: cropToFit's own scrollHeight<=clientHeight check never
+   trips because flex children shrink to fit instead of overflowing), and the box
+   scrolls vertically with a thin scrollbar in the house style instead. */
+.ticker{display:flex; flex-direction:column; gap:2px; flex:1; min-height:0; overflow-y:auto; overflow-x:hidden;
+  padding:4px 10px; scrollbar-width:thin; scrollbar-color:#8a7245 var(--panel2)}
+.ticker::-webkit-scrollbar{width:8px}
+.ticker::-webkit-scrollbar-track{background:var(--panel2)}
+.ticker::-webkit-scrollbar-thumb{background:#8a7245}
+.ticker::-webkit-scrollbar-thumb:hover{background:#a68753}
+.trow{display:flex; gap:8px; align-items:baseline; font:11.5px/1.35 var(--mono); white-space:nowrap; overflow:hidden;
+  padding:1px 4px; cursor:default; flex:0 0 22px}
+.trow.clickable{cursor:pointer}
+.trow.clickable:hover{background:var(--panel2)}
+.trow .t{color:var(--dim)}
+.trow .h{font-weight:700}
+.trow .m{color:#fff; overflow:hidden; text-overflow:ellipsis}
+.tag{font:10px/1 var(--mono); padding:1px 5px; border:1px solid var(--amber); color:var(--amber);
+  text-transform:uppercase; letter-spacing:.03em}
+
+/* turn detail popup, section 5 */
+#turnPopupOverlay{position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center}
+#turnPopupOverlay.hidden{display:none}
+#turnPopupOverlay:not(.hidden){display:flex}
+#turnPopup{position:relative; background:var(--panel); border:1px solid var(--amber); color:var(--txt);
+  padding:18px 20px; width:480px; max-width:92vw; max-height:84vh; overflow:hidden; font-size:12px}
+#turnPopup h3{margin:0 0 2px; color:#fff; font-size:14px}
+#turnPopup h4{margin:14px 0 5px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--amber)}
+#turnPopupClose{position:absolute; top:10px; right:12px; background:none; border:none; color:var(--dim);
+  font-size:18px; line-height:1; cursor:pointer}
+#turnPopupClose:hover{color:var(--txt)}
+#turnPopup table{font-size:11px}
+#turnPopup ul.tight{margin:0; padding-left:18px}
+
+/* vendor strip row expand */
+tbody tr.vrow{cursor:pointer}
+tbody tr.vrow:hover{background:var(--panel2)}
+tr.vexpand td{padding:6px 8px 8px 24px; color:var(--txt); font-size:11px; background:#0d1219; border-top:1px dashed var(--bd)}
+tr.vexpand b{font-variant-numeric:tabular-nums}
+
+/* activity + harness heatmap, section 4: side by side */
+.splitrow{display:flex; gap:4px; flex:0 0 auto}
+.splitrow > .panel:first-child{flex:0 0 40%; min-width:0}
+.splitrow > .panel:last-child{flex:1; min-width:0}
+@media (max-width: 899px){
+  .splitrow{flex-direction:column}
+  .splitrow > .panel:first-child{flex:0 0 auto}
+}
+
+/* activity heatmap, phase 2b */
+.phead-sub{float:right; color:var(--dim); font-weight:400; text-transform:none; letter-spacing:0}
+.heatmapwrap{padding:8px 10px; overflow:hidden}
+.heatgrid{display:flex; gap:2px}
+.heatcol{display:flex; flex-direction:column; gap:2px}
+.heatcell{width:9px; height:9px; background:var(--bd); border-radius:1px}
+.heatcell.active{background:var(--grn)}
+.heatcell.empty{background:transparent}
+.heatmonths{display:flex; gap:2px; margin-top:3px}
+.heatmonth{width:9px; font-size:8px; color:var(--dim); overflow:visible; white-space:nowrap}
+
+/* harness x minute heatmap, phase 3 */
+.heatrow{display:flex; align-items:center; gap:6px; margin-bottom:2px}
+.heatrow-label{width:110px; flex:0 0 auto; font-size:11px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.heatrow-cells{display:flex; gap:1px; flex-wrap:nowrap}
+
+/* system panel, section 6: perfadvisor layout, smoother and a little smaller */
+.cpubox{padding:8px 10px; flex:0 0 auto}
+.cpubox h4{margin:0 0 6px; font:11px/1 var(--mono); color:var(--dim); letter-spacing:.05em; text-transform:uppercase; font-weight:400}
+.cpubar{position:relative; height:16px; background:#10151d; border:1px solid var(--bd); margin-bottom:2px; overflow:hidden}
+.cpubar i{display:block; height:100%; background:var(--grn)}
+.cpubar span{position:absolute; right:6px; top:0; line-height:16px; font-size:11px; color:#fff; font-variant-numeric:tabular-nums}
+.cpumeta{font-size:10px; color:var(--dim); margin-bottom:6px}
+.coregrid{display:grid; grid-template-columns:repeat(5,1fr); gap:3px 6px}
+.coreitem{display:flex; align-items:center; gap:4px; font-size:10px; color:var(--dim); min-width:0}
+.corebar{position:relative; flex:1; height:8px; background:#10151d; border:1px solid var(--bd); min-width:0}
+.corebar i{display:block; height:100%}
+.corelabel{flex:0 0 auto; white-space:nowrap; font-variant-numeric:tabular-nums}
+
+.histwrap{flex:1; min-height:60px; padding:6px 10px; display:flex; flex-direction:column}
+.histlegend{display:flex; gap:12px; flex-wrap:wrap; font-size:10px; color:var(--dim); margin-bottom:4px}
+.histlegend b{font-weight:700}
+.histlegend .note{margin-left:auto; color:var(--dim); font-style:italic}
+.histcanvaswrap{flex:1; min-height:0}
+#histCanvas{width:100%; height:100%; display:block}
+
+.sysbottom{display:flex; gap:4px; flex:0 0 auto}
+.sysbox{flex:1; background:var(--panel); border:1px solid var(--bd); padding:8px 10px; min-width:0}
+.sysbox h4{margin:0 0 6px; font:10px/1 var(--mono); color:var(--dim); letter-spacing:.05em; text-transform:uppercase; font-weight:400}
+.sysbar{position:relative; height:10px; background:#10151d; border:1px solid var(--bd); margin-bottom:4px}
+.sysbar i{display:block; height:100%}
+.sysbox .line{font-size:11px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.sysbox .line b{color:#fff; font-variant-numeric:tabular-nums}
+.sysbox .dim{color:var(--dim)}
+
+/* process groups, section 7: name/CPU/RAM/IO-per-second share the left half,
+   the trend column takes at most the other half (headline patch section 2:
+   12_process_groups.png showed the trend eating most of the panel, name and
+   numbers squeezed into a sliver on the left) - table-layout:fixed plus the
+   colgroup on the table itself (page markup below) is what actually holds
+   these percentages, since an auto-layout table ignores a width hint on one
+   cell once its content wants more room. No-scroll patch section 3: capped
+   to the same 200px budget the To Do panel already uses, cropped to whole
+   rows (renderProcessGroups' own row-height crop, WS2 item 3), busiest
+   first (already the render order), rather than growing with content or
+   scrolling. */
+/* Column widths come entirely from the table's own colgroup (page markup
+   below), which sizes thead and tbody alike under table-layout:fixed - a
+   width rule on a cell here would be redundant at best (found by review,
+   2026-09-26: an earlier version of this had one on td:last-child, plus a
+   #processGroupsHead th:... pair that matched nothing at all, since that id
+   belongs to the .panelhead title div above the table, not its own thead). */
+#processGroupsWrap table{table-layout:fixed}
+#processGroups td:first-child{overflow:hidden; text-overflow:ellipsis}
+.trendsvg{display:block; width:100%; height:14px}
+#processGroupsWrap{max-height:200px; overflow:hidden}
+
+/* Microsoft To Do panel, section 9: off by default, full width, sits below
+   the two-column layout too (a sibling of main, not inside either zone). */
+.todopanel{flex:0 1 auto; max-height:200px; margin:0 4px 4px; display:none; flex-direction:column}
+.todobody{flex:1; min-height:0; overflow:hidden; padding:6px 10px; display:flex; flex-direction:column; gap:3px}
+.todorow{display:flex; gap:8px; align-items:baseline; font:11.5px/1.4 var(--mono); white-space:nowrap; overflow:hidden}
+.todorow .due{color:var(--dim); flex:0 0 auto}
+.todorow .due.overdue{color:var(--red)}
+.todorow .title{color:var(--txt); overflow:hidden; text-overflow:ellipsis}
+.todorow .list{color:var(--dim); flex:0 0 auto}
+.tododevicecode{font-size:20px; font-weight:700; color:var(--amber); letter-spacing:.1em; margin:4px 0}
+
+@media (max-aspect-ratio: 4/5){
+  header{min-height:40px}
+}
+</style>
+</head>
+<body>
+<div class="loadingoverlay" id="loadingOverlay">
+  <div class="logo">BURN<span>MON</span> DEV</div>
+  <div class="dim" id="loadingStepText">Starting&hellip;</div>
+  <div class="loadingbar"><i id="loadingBarFill" style="width:0%"></i></div>
+</div>
+<header>
+  <div class="brand">
+    <div class="logo">BURN<span>MON</span> DEV</div>
+    <div class="pressuretext" id="pressureChip">PRESSURE -</div>
+  </div>
+  <div class="hltotal" id="hlToday">-</div>
+  <div class="hstat" id="hdrSessions">- sessions</div>
+  <div class="hstat">$<b id="hdrBurnRate">-</b>/min</div>
+  <div class="hstat"><b id="hdrTokMin">-</b> tok/min</div>
+  <div class="hstat">CPU <b id="hdrCPU">-</b></div>
+  <div class="hstat">RAM <b id="hdrRAM">-</b></div>
+  <div class="hstat" id="hdrClock">-</div>
+  <div class="hstat" id="hdrBackfillStatus" style="display:none"></div>
+  <div class="hdrspacer"></div>
+  <button class="textbtn" id="exportBtn" title="Export the last 24 hours to an AI-ready bundle">EXPORT</button>
+  <div class="hstat" id="exportStatus"></div>
+</header>
+<main>
+  <section class="zone burn">
+    <div class="zonelabel">Burn, last 30 min</div>
+    <div class="zonebody">
+      <div class="burnchart panel">
+        <div class="bars" id="burnBars"></div>
+        <div class="burnaxis" id="burnAxis"></div>
+      </div>
+      <div class="burnlegend" id="burnLegend"></div>
+      <div class="cards" id="sessionCards"></div>
+      <!-- max-height (no-scroll patch section 4 fix, found by real-window
+           testing at the app's own default 1280x860 launch size): this
+           table's own row count is unbounded (one row per vendor ever
+           seen), and "vendor strip... always stay" is not in the droppable
+           list, so without a cap it could grow enough on its own to push
+           the turn ticker (also "always stay") entirely out of the burn
+           zone's own budget, well before that zone even reads as
+           overflowing at the .zonebody level. .panel's own overflow:hidden
+           still applies, so a genuinely long vendor list clips silently at
+           this budget rather than ever showing a scrollbar; it does not
+           crop to whole rows the way process groups does (that would mean
+           hiding some of vendorRowEls' own persistent, animateNumber
+           -tweened rows on a tick where they no longer fit, and un-hiding
+           them again later, ensureVendorRow's own doc comment) - accepted
+           as a lesser problem than an "always stay" panel disappearing
+           outright. -->
+      <div class="panel" style="flex:0 0 auto; max-height:180px">
+        <div class="panelhead">Vendor strip</div>
+        <table>
+          <thead><tr><th></th><th>Today</th><th>Week</th><th>Month</th></tr></thead>
+          <tbody id="vendorStrip"></tbody>
+        </table>
+      </div>
+      <div class="splitrow" id="activityHeatmapRow">
+        <div class="panel">
+          <div class="panelhead">Activity <span id="heatmapActiveDays" class="phead-sub"></span></div>
+          <div class="heatmapwrap"><div id="heatmapGrid"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panelhead">Heatmap, harness &times; minute (CPU-weighted)</div>
+          <div class="heatmapwrap"><div id="harnessHeatmap"></div></div>
+        </div>
+      </div>
+      <div class="panel" style="flex:1; min-height:80px">
+        <div class="panelhead">Turn ticker</div>
+        <div class="ticker" id="turnTicker"></div>
+      </div>
+    </div>
+  </section>
+  <section class="zone system">
+    <div class="zonelabel">System</div>
+    <div class="zonebody">
+      <div class="panel cpubox">
+        <h4>CPU, <span id="cpuThreads">-</span> threads</h4>
+        <div class="cpubar"><i id="cpuTotalBar" style="width:0%"></i><span id="cpuTotal">-</span></div>
+        <div class="cpumeta" id="cpuBaseClock"></div>
+        <div class="coregrid" id="coreGrid"></div>
+      </div>
+      <div class="panel histwrap">
+        <div class="histlegend" id="histLegend"></div>
+        <div class="histcanvaswrap"><canvas id="histCanvas"></canvas></div>
+      </div>
+      <div class="panel" id="processGroupsPanel" style="flex:0 0 auto">
+        <div class="panelhead" id="processGroupsHead">Process groups</div>
+        <div id="processGroupsWrap">
+          <table>
+            <colgroup><col style="width:22%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:50%"></colgroup>
+            <thead><tr><th></th><th id="processGroupsCPUHead" title="percent of the whole machine, not one core - same convention as the header and the CPU box above">CPU %mach</th><th>RAM</th><th>IO/s</th><th>Trend</th></tr></thead>
+            <tbody id="processGroups"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sysbottom">
+        <div class="sysbox" id="boxMemory">
+          <h4>Memory</h4>
+          <div class="sysbar"><i style="background:var(--blu)"></i></div>
+          <div class="line" id="memLine1">-</div>
+          <div class="line dim" id="memLine2">-</div>
+          <div class="line dim" id="memLine3">-</div>
+        </div>
+        <div class="sysbox" id="boxDisks">
+          <h4>Disks</h4>
+          <div id="disksBody"></div>
+        </div>
+        <div class="sysbox" id="boxNetwork">
+          <h4>Network</h4>
+          <div class="line" id="netDown">-</div>
+          <div class="line" id="netUp">-</div>
+          <div class="line dim" id="netWifi">-</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<section class="panel todopanel" id="todoPanel">
+  <div class="panelhead">Microsoft To Do</div>
+  <div class="todobody" id="todoBody"></div>
+</section>
+<div id="turnPopupOverlay" class="hidden">
+  <div id="turnPopup">
+    <button id="turnPopupClose" type="button" title="Close" aria-label="Close">&times;</button>
+    <div id="turnPopupBody"></div>
+  </div>
+</div>
+<script>
+(function(){
+  // HARNESS_HUE (no-scroll patch section 2) is the one fixed categorical
+  // palette every harness colour in this page draws from, so the same real
+  // tool always gets the same hue everywhere (burn chart, vendor strip,
+  // ticker, process groups, harness heatmap) and no two harnesses share one
+  // (Wilco's own finding: Claude Code and Cowork used to both read as
+  // orange). AGENT_COLOR (schema.Event's own vocabulary: claude-code,
+  // cowork, ...) and HARNESS_COLOR (internal/sysmon's own vocabulary:
+  // claude, wsl, ...) are two separate label sets for mostly the same real
+  // tools; both are built from this one map rather than picking colours
+  // independently.
+  var HARNESS_HUE = {
+    claudeCode: '#ffa028', cowork: '#4da6ff', codex: '#a78bfa',
+    copilotCli: '#38d3e3', copilotVscode: '#4ade80', hermes: '#e879f9',
+    burnmonDev: '#ffd83d', wsl: '#ff6fae', other: '#66788c'
+  };
+  var AGENT_COLOR = {
+    'claude-code': HARNESS_HUE.claudeCode,
+    'cowork': HARNESS_HUE.cowork,
+    'codex': HARNESS_HUE.codex,
+    'hermes': HARNESS_HUE.hermes,
+    'copilot-cli': HARNESS_HUE.copilotCli,
+    'copilot-vscode': HARNESS_HUE.copilotVscode
+  };
+  function agentColor(agent){ return AGENT_COLOR[agent] || HARNESS_HUE.other; }
+
+  // rotateHue shifts hex's hue by degrees, keeping its saturation/lightness
+  // (used only for a wrapped-around session colour, sessionColor below,
+  // once more sessions have ever appeared in one run than SESSION_PALETTE
+  // has distinct hues for): a hue rotation stays readable on black the way
+  // repeatedly lightening/darkening a small fixed set of offsets does not,
+  // and 47 (sessionColor's own rotation step) shares no common factor with
+  // 360, so successive wraps keep landing on genuinely new hues for a long
+  // time (fixed after review, 2026-09-25: the previous 4-offset
+  // lighten/darken scheme produced two colours pixel-identical to each
+  // other after only 8 wrapped sessions).
+  function rotateHue(hex, degrees){
+    hex = hex.replace('#', '');
+    var num = parseInt(hex, 16);
+    var r = ((num >> 16) & 255) / 255, g = ((num >> 8) & 255) / 255, b = (num & 255) / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, h = 0, s = 0;
+    if(max !== min){
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if(max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if(max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h /= 6;
+    }
+    h = (((h * 360 + degrees) % 360) + 360) % 360 / 360;
+    function hue2rgb(p, q, t){
+      if(t < 0) t += 1;
+      if(t > 1) t -= 1;
+      if(t < 1 / 6) return p + (q - p) * 6 * t;
+      if(t < 1 / 2) return q;
+      if(t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    }
+    var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    var p = 2 * l - q;
+    function to255(v){ return Math.round(v * 255); }
+    return '#' + ((1 << 24) + (to255(hue2rgb(p, q, h + 1 / 3)) << 16) +
+      (to255(hue2rgb(p, q, h)) << 8) + to255(hue2rgb(p, q, h - 1 / 3))).toString(16).slice(1);
+  }
+
+  // HARNESS_COLOR: internal/sysmon's own vocabulary (process groups, harness
+  // heatmap), the same nine hues as AGENT_COLOR above for the tools both
+  // vocabularies name. "claude-desktop" is Cowork's own process-classified
+  // harness key here (internal/sysmon/harness.go's own "claude desktop" /
+  // "anthropic-cowork" match, internal/advisor's own harness-to-vendor map
+  // confirms it), not a separate tenth harness, so it gets Cowork's hue,
+  // not a shade of Claude Code's (fixed after review, 2026-09-25: the
+  // first version shaded Claude Code's own hue here, reproducing the exact
+  // "Claude Code and Cowork both orange" complaint this section exists to
+  // fix, just in the process-groups/harness-heatmap panels instead of the
+  // burn chart).
+  var HARNESS_COLOR = {
+    'claude': HARNESS_HUE.claudeCode,
+    'claude-desktop': HARNESS_HUE.cowork,
+    'codex': HARNESS_HUE.codex,
+    'copilot-cli': HARNESS_HUE.copilotCli,
+    'copilot-vscode': HARNESS_HUE.copilotVscode,
+    'hermes': HARNESS_HUE.hermes,
+    'wsl': HARNESS_HUE.wsl,
+    // Same hue for both self rows (WS2 item 4's split is a label/data
+    // change, not a new design colour): the two rows are still visually
+    // "this app", just no longer summed together.
+    'burnmon-dev': HARNESS_HUE.burnmonDev,
+    'burnmon-dev-webview2': HARNESS_HUE.burnmonDev,
+    'node': HARNESS_HUE.other
+  };
+  function harnessColor(h){ return HARNESS_COLOR[h] || HARNESS_HUE.other; }
+
+  // SESSION_PALETTE (section 2): each session in the burn chart's 30-minute
+  // window gets its own colour from this one fixed set (>=8 clearly
+  // different hues, readable on black), assigned by first appearance and
+  // kept stable for the life of the session (sessionColor below), not
+  // shaded per-harness the way the old per-harness stacking used to. The
+  // eight HARNESS_HUE values (excluding the neutral "other" grey, which
+  // stays reserved for genuinely unclassified work) plus four more,
+  // deliberately spaced away from every HARNESS_HUE and from each other
+  // (evenly around the rest of the hue wheel) so none of the twelve reads
+  // as a near-duplicate of another. If a run somehow has more sessions
+  // ever appear than that in one launch, sessionColor wraps back through
+  // the palette with a rotateHue offset rather than ever reusing a hue
+  // outright.
+  var SESSION_PALETTE = [
+    HARNESS_HUE.claudeCode, HARNESS_HUE.cowork, HARNESS_HUE.codex, HARNESS_HUE.copilotCli,
+    HARNESS_HUE.copilotVscode, HARNESS_HUE.hermes, HARNESS_HUE.burnmonDev, HARNESS_HUE.wsl,
+    '#ff6b3d', '#8cffb0', '#3d5eff', '#ffe14d'
+  ];
+  var sessionColorMap = {};
+  var sessionRankMap = {};
+  var sessionColorOrder = 0;
+  function sessionColor(sid){
+    if(sessionColorMap[sid]) return sessionColorMap[sid];
+    var idx = sessionColorOrder++;
+    sessionRankMap[sid] = idx;
+    var base = SESSION_PALETTE[idx % SESSION_PALETTE.length];
+    var wraps = Math.floor(idx / SESSION_PALETTE.length);
+    var color = wraps === 0 ? base : rotateHue(base, wraps * 47);
+    sessionColorMap[sid] = color;
+    return color;
+  }
+
+  // cropToFit renders itemHtml (already ordered so the items to drop first
+  // are last) into el, trimming from the end until el's own content no
+  // longer overflows el's own box - no-scroll patch section 3, "crop to
+  // whole items instead of scrolling or clipping a partial one". Runs
+  // synchronously before the browser ever paints the intermediate
+  // (possibly overflowing) state, so nothing ever flashes a scrollbar.
+  // footerFn(remainingCount), when given, renders a final "+N more" line in
+  // place of the last slot once the array no longer fully fits.
+  function cropToFit(el, itemHtml, footerFn){
+    if(!el) return;
+    var n = itemHtml.length;
+    el.innerHTML = itemHtml.join('');
+    if(n === 0 || el.scrollHeight <= el.clientHeight + 1) return;
+    while(n > 1){
+      n--;
+      var html = itemHtml.slice(0, n).join('') + (footerFn ? footerFn(itemHtml.length - n) : '');
+      el.innerHTML = html;
+      if(el.scrollHeight <= el.clientHeight + 1) return;
+    }
+  }
+
+  var REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // TWEEN_MS (section 5): one shared tween duration for every animated
+  // number on the page, shorter than the render tick itself (refresh_ms,
+  // default 1000) so a tween always finishes well before the next tick's
+  // value replaces it, rather than the previous 400ms/1000ms split.
+  var TWEEN_MS = 600;
+
+  // easeOutQuart is animateNumber's own default easing; headline patch
+  // section 4 passes a linear ease instead for the one shared-tween
+  // exception (renderHeadline below).
+  function easeOutQuart(t){ return 1 - Math.pow(1 - t, 4); }
+
+  // animateNumber (token-monitor's own recipe, reimplemented): one RAF tween
+  // per element, easeOutQuart by default, cancelling any tween already
+  // running on that element so a fast poll cadence never lets an old loop
+  // overwrite a newer value. State (_animVal, _animRAF) lives on the
+  // element itself, so callers must reuse the same DOM node across polls
+  // rather than rebuilding it each time (see ensureVendorRow). easeFn is
+  // optional (defaults to easeOutQuart); renderHeadline is the one caller
+  // that passes a linear ease over the tick's own duration instead of the
+  // shared 600ms (headline patch section 4).
+  function animateNumber(el, newVal, duration, formatFn, easeFn){
+    if(!el || newVal == null) return;
+    if(REDUCED_MOTION){
+      el.textContent = formatFn(newVal);
+      el._animVal = newVal;
+      return;
+    }
+    easeFn = easeFn || easeOutQuart;
+    var from = el._animVal != null ? el._animVal : newVal;
+    if(el._animRAF) cancelAnimationFrame(el._animRAF);
+    if(from === newVal){ el.textContent = formatFn(newVal); el._animVal = newVal; return; }
+    var start = performance.now();
+    function tick(now){
+      var t = Math.min(1, (now - start) / duration);
+      var val = from + (newVal - from) * easeFn(t);
+      el.textContent = formatFn(val);
+      // _animVal tracks the in-flight value on every frame, not only at
+      // t=1 (found by review, 2026-09-26): a tween cancelled mid-flight by
+      // a new call (the next line's own cancelAnimationFrame) would
+      // otherwise leave _animVal at the OLD start value, so the next
+      // animateNumber call computes `from` as that stale value and the
+      // number visibly snaps backward before counting up again. Matters
+      // most for renderHeadline, whose duration (tickRefreshMs) is close
+      // to the tick cadence itself, so an early tick routinely cancels the
+      // previous tween before it finishes.
+      el._animVal = val;
+      if(t < 1){
+        el._animRAF = requestAnimationFrame(tick);
+      } else {
+        el._animRAF = null;
+      }
+    }
+    el._animRAF = requestAnimationFrame(tick);
+  }
+
+  function fmtTokens(n){
+    if(n == null) return '-';
+    if(n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if(n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+    return String(n);
+  }
+  // fmtTokensFull, headline patch section 4: the headline total's own whole
+  // number with thousands separators, no K/M/B, the one exception to
+  // fmtTokens' abbreviated form used everywhere else on the page.
+  function fmtTokensFull(n){
+    if(n == null) return '-';
+    return Math.round(n).toLocaleString('en-US');
+  }
+  function fmtCost(c){ return '$' + (c || 0).toFixed(2); }
+
+  function fmtBytes(bps){
+    if(bps == null) return '-';
+    var units = ['B/s','KB/s','MB/s','GB/s'];
+    var v = bps, i = 0;
+    while(v >= 1024 && i < units.length - 1){ v /= 1024; i++; }
+    return v.toFixed(v < 10 ? 1 : 0) + ' ' + units[i];
+  }
+  function fmtBytesPlain(n){
+    if(n == null) return '-';
+    var units = ['B','KB','MB'];
+    var v = n, i = 0;
+    while(v >= 1024 && i < units.length - 1){ v /= 1024; i++; }
+    return v.toFixed(v < 10 && i > 0 ? 1 : 0) + ' ' + units[i];
+  }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  // pad2/fmtHMS/fmtHM: 24-hour time everywhere, no AM/PM anywhere (decision
+  // taken with Wilco). toLocaleTimeString on this laptop's own locale would
+  // print 12-hour AM/PM, so every clock/timestamp on this page formats its
+  // own local time instead of relying on it.
+  function pad2(n){ return (n < 10 ? '0' : '') + n; }
+  function fmtHMS(d){ return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
+  function fmtHM(d){ return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  // fmtLocalDateKey (WS2 item 5): the activity heatmap's own "YYYY-MM-DD"
+  // day key, built from local y/m/d - not toISOString(), which converts to
+  // UTC first and would disagree with the Go side's own local-day row keys
+  // (internal/history, WS3's "local time everywhere") for the early local
+  // -morning window each day where the UTC calendar date is still
+  // yesterday's.
+  function fmtLocalDateKey(d){
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  // renderClock (section 5): shows the shared render tick's own snapshot
+  // time, not the wall clock - it steps once per tick (refresh_ms, default
+  // 2s), not once a second, so the header visibly moves in lockstep with
+  // every other panel instead of ticking on its own separate 1s timer.
+  function renderClock(d){
+    var el = document.getElementById('hdrClock');
+    if(el) el.textContent = fmtHMS(d);
+  }
+
+  // ---------- Loading screen (section 11 steps 2-3) ----------
+  // startBackgroundIngest (main.go) pushes step text and a percentage as
+  // the native-root scan and startup backfill progress; neither of these
+  // is a bound function the page calls, only something main.go's own
+  // w.Eval delivers into, the same way every async bdev* resolver already
+  // works in this file.
+  function hideLoadingOverlay(){
+    var overlay = document.getElementById('loadingOverlay');
+    if(overlay) overlay.classList.add('hidden');
+  }
+  window.__bdevLoadingStep = function(text, pct){
+    var stepText = document.getElementById('loadingStepText');
+    if(stepText) stepText.textContent = text;
+    var bar = document.getElementById('loadingBarFill');
+    if(bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  };
+  window.__bdevHeaderStatus = function(text){
+    var el = document.getElementById('hdrBackfillStatus');
+    if(!el) return;
+    el.textContent = text || '';
+    el.style.display = text ? '' : 'none';
+  };
+
+  // agentBySessionMap must cover every session_id the chart's by_session
+  // buckets can name, not just the top-level running sessions: a session
+  // that stopped within the 30-min chart window is gone from snap.sessions
+  // but still has bars, and a subagent never appears at the top level at
+  // all (it nests under its parent's Subagents). Walking sessions
+  // recursively covers the first case only while it is still running;
+  // snap.turns (every real turn in the chart window, running or not) is
+  // the fallback that covers both, so it is applied first and the
+  // recursive walk fills in anything turns missed (e.g. a session with no
+  // turn yet).
+  function agentBySessionMap(sessions, turns){
+    var m = {};
+    (turns || []).forEach(function(t){ m[t.session_id] = t.agent; });
+    (function walk(list){
+      (list || []).forEach(function(s){
+        m[s.session_id] = s.agent;
+        walk(s.subagents);
+      });
+    })(sessions);
+    return m;
+  }
+
+  // projectBySessionMap: same recursive walk as agentBySessionMap, for the
+  // legend's short session label (live.Session.Project).
+  function projectBySessionMap(sessions){
+    var m = {};
+    (function walk(list){
+      (list || []).forEach(function(s){
+        m[s.session_id] = s.project || '';
+        walk(s.subagents);
+      });
+    })(sessions);
+    return m;
+  }
+
+  // renderBars (no-scroll patch section 1: bars only, no turn markers, no
+  // CPU overlay): bars per session per time bucket, stacked, each session
+  // coloured from sessionColor (section 2) rather than a per-harness shade.
+  // WS2 item 3 ("no per-tick DOM rebuilds"): the bucket count is fixed for
+  // a given burn-zone window (live.buildChart's own "every slot present"
+  // contract), so bar/segment <div>s are created once per index and their
+  // style/height updated in place on every later tick, rather than the
+  // whole innerHTML being torn down and rebuilt every refresh_ms as this
+  // used to (the older "rebuilt wholesale on every refresh" decision this
+  // comment used to record). A bucket count change (a window-length
+  // config change, never observed at runtime today) is handled by
+  // dropping any now-excess bar elements and growing to add new ones,
+  // same as the segment reconciliation within each bar.
+  var burnBarEls = [];
+  function renderBars(chart){
+    var el = document.getElementById('burnBars');
+    if(!el) return;
+    chart = chart || [];
+
+    // Assign (or confirm) every session's own stable colour/rank before
+    // sorting, including a bucket where it has 0 tokens, so rank stays
+    // consistent even for a session that briefly drops out of the visible
+    // totals. sessionRankMap holds each session's OWN first-appearance
+    // index (fixed after review, 2026-09-25: sorting by the live
+    // sessionColorOrder counter itself, read fresh for every session,
+    // returned whatever value the counter happened to be at after this
+    // sweep finished, not that session's own index, so every bar's
+    // segments sorted identically regardless of which sessions they held,
+    // and could visibly reorder between polls).
+    chart.forEach(function(bucket){
+      Object.keys(bucket.by_session || {}).forEach(sessionColor);
+    });
+
+    var perBucket = chart.map(function(bucket){
+      var bySession = bucket.by_session || {};
+      return Object.keys(bySession).map(function(sid){
+        var c = bySession[sid];
+        var tok = (c.fresh || 0) + (c.cache_write || 0) + (c.cache_read || 0) + (c.output || 0);
+        return { sid: sid, tok: tok };
+      }).filter(function(s){ return s.tok > 0; }).sort(function(a, b){ return sessionRankMap[a.sid] - sessionRankMap[b.sid]; });
+    });
+    var max = 1;
+    perBucket.forEach(function(list){
+      var sum = list.reduce(function(a, s){ return a + s.tok; }, 0);
+      if(sum > max) max = sum;
+    });
+
+    while(burnBarEls.length > perBucket.length){
+      el.removeChild(burnBarEls.pop());
+    }
+    while(burnBarEls.length < perBucket.length){
+      var bar = document.createElement('div');
+      bar.className = 'bar';
+      el.appendChild(bar);
+      burnBarEls.push(bar);
+    }
+    perBucket.forEach(function(list, bi){
+      var bar = burnBarEls[bi];
+      while(bar.children.length > list.length){
+        bar.removeChild(bar.lastChild);
+      }
+      while(bar.children.length < list.length){
+        bar.appendChild(document.createElement('i'));
+      }
+      list.forEach(function(s, si){
+        var pct = 100 * s.tok / max;
+        pct = Math.max(pct, 1.5); // a real but tiny bucket still shows a sliver
+        var seg = bar.children[si];
+        seg.style.height = pct.toFixed(1) + '%';
+        seg.style.background = sessionColor(s.sid);
+      });
+    });
+  }
+
+  // renderBurnAxis draws the x-axis labels every 5 minutes (section 2),
+  // aligned one label slot per chart bucket so it never drifts out of sync
+  // with the bars above it. Chart always has a full window's worth of
+  // buckets even with no sessions running (live.buildChart's own "every
+  // slot present" contract), so the axis still draws with nothing to show
+  // above it (section 2: "with no sessions, still draw the empty axis").
+  function renderBurnAxis(chart, bucketSeconds){
+    var axisEl = document.getElementById('burnAxis');
+    if(!axisEl) return;
+    if(!chart || !chart.length){ axisEl.innerHTML = ''; return; }
+    var everyN = Math.max(1, Math.round(300 / (bucketSeconds || 60)));
+    var html = '';
+    chart.forEach(function(bucket, i){
+      var label = '';
+      if(i % everyN === 0) label = fmtHM(new Date(bucket.at));
+      html += '<div class="axistick">' + label + '</div>';
+    });
+    axisEl.innerHTML = html;
+  }
+
+  // shortSessionLabel: a session's project folder's own last path segment
+  // (schema.Event.Project, carried onto live.Session), falling back to a
+  // truncated session id when a session has no project recorded yet.
+  function shortSessionLabel(project, sid){
+    var p = (project || '').replace(/[\\/]+$/, '');
+    var base = p ? p.split(/[\\/]/).pop() : '';
+    var label = base || sid.slice(0, 8);
+    return label.length > 16 ? label.slice(0, 15) + '…' : label;
+  }
+
+  // renderBurnLegend (section 2): one chip per session with tokens in the
+  // current 30-minute window, sorted biggest first so cropToFit's own
+  // end-trim drops the smallest sessions first when the legend's two-line
+  // budget (CSS max-height) does not fit them all.
+  function renderBurnLegend(chart, agentBySession, projectBySession){
+    var el = document.getElementById('burnLegend');
+    if(!el) return;
+    var totals = {};
+    (chart || []).forEach(function(bucket){
+      var bySession = bucket.by_session || {};
+      Object.keys(bySession).forEach(function(sid){
+        var c = bySession[sid];
+        var tok = (c.fresh || 0) + (c.cache_write || 0) + (c.cache_read || 0) + (c.output || 0);
+        totals[sid] = (totals[sid] || 0) + tok;
+      });
+    });
+    var sids = Object.keys(totals).filter(function(sid){ return totals[sid] > 0; });
+    sids.sort(function(a, b){ return totals[b] - totals[a]; });
+
+    var items = sids.map(function(sid){
+      return '<span class="legenditem"><span class="dot" style="background:' + sessionColor(sid) + '"></span>' +
+        esc(agentBySession[sid] || 'other') + ' ' + esc(shortSessionLabel(projectBySession[sid], sid)) +
+        '<b>' + fmtTokens(totals[sid]) + '</b></span>';
+    });
+    cropToFit(el, items);
+  }
+
+  // Session cards, WS2 item 3: one <div class="card"> per session_id,
+  // created once and updated in place (same recipe as ensureVendorRow),
+  // rather than the whole panel's innerHTML being torn down and rebuilt
+  // every tick. Session identity (session_id) is stable across a
+  // session's life, so this keys on it directly instead of position.
+  var sessionCardEls = {};
+  function ensureSessionCard(el, sid){
+    var rec = sessionCardEls[sid];
+    if(rec) return rec;
+    var card = document.createElement('div');
+    card.className = 'card';
+    var h4 = document.createElement('h4');
+    var bar = document.createElement('div'); bar.className = 'ctxbar';
+    var barFill = document.createElement('i');
+    bar.appendChild(barFill);
+    var small = document.createElement('small');
+    card.appendChild(h4); card.appendChild(bar); card.appendChild(small);
+    el.appendChild(card);
+    rec = { card: card, h4: h4, barFill: barFill, small: small };
+    sessionCardEls[sid] = rec;
+    return rec;
+  }
+
+  function renderSessionCards(sessions){
+    var el = document.getElementById('sessionCards');
+    if(!el) return;
+    sessions = sessions || [];
+    if(!sessions.length){
+      Object.keys(sessionCardEls).forEach(function(sid){ delete sessionCardEls[sid]; });
+      el.innerHTML = '<div class="placeholder" style="flex:0 0 auto;padding:10px">No sessions running</div>';
+      return;
+    }
+    if(!Object.keys(sessionCardEls).length && el.firstChild) el.innerHTML = ''; // drop the placeholder
+    var seen = {};
+    var prevSibling = null;
+    sessions.forEach(function(s){
+      seen[s.session_id] = true;
+      var rec = ensureSessionCard(el, s.session_id);
+      var pct = s.context_window > 0 ? Math.min(100, 100 * s.context / s.context_window) : 0;
+      var color = agentColor(s.agent);
+      rec.h4.textContent = s.agent || s.vendor;
+      rec.h4.style.color = color;
+      rec.barFill.style.width = pct.toFixed(0) + '%';
+      rec.barFill.style.background = color;
+      rec.small.textContent = 'turn ' + s.turn_count + ' · ' + fmtTokens(s.tokens) + ' tok · ' + fmtCost(s.cost);
+      // Keep DOM order in sync with the incoming order (only moves a card
+      // when it is actually out of place, not on every tick).
+      var wantAfter = prevSibling ? prevSibling.nextSibling : el.firstChild;
+      if(rec.card !== wantAfter) el.insertBefore(rec.card, wantAfter);
+      prevSibling = rec.card;
+    });
+    Object.keys(sessionCardEls).forEach(function(sid){
+      if(seen[sid]) return;
+      sessionCardEls[sid].card.remove();
+      delete sessionCardEls[sid];
+    });
+  }
+
+  // Vendor strip rows are created once per agent and updated in place on
+  // every poll (rather than rebuilt via innerHTML), so animateNumber's
+  // per-element tween state survives across polls and a row's expanded
+  // cache-breakdown detail is not wiped out from under an open click.
+  var vendorRowEls = {};
+  var expandedVendor = null;
+  var expandRowEl = null;
+
+  function collapseVendorExpand(){
+    if(expandRowEl){ expandRowEl.remove(); expandRowEl = null; }
+    expandedVendor = null;
+  }
+
+  function toggleVendorExpand(agent){
+    if(expandedVendor === agent){ collapseVendorExpand(); return; }
+    collapseVendorExpand();
+    var rec = vendorRowEls[agent];
+    if(!rec) return;
+    expandedVendor = agent;
+    var tr = document.createElement('tr');
+    tr.className = 'vexpand';
+    var td = document.createElement('td');
+    td.colSpan = 4;
+    td.textContent = 'Loading cache breakdown…';
+    tr.appendChild(td);
+    rec.tr.parentNode.insertBefore(tr, rec.tr.nextSibling);
+    expandRowEl = tr;
+    if(!window.bdevCacheBreakdown) return;
+    window.bdevCacheBreakdown(agent).then(function(t){
+      if(expandedVendor !== agent) return; // collapsed, or another row opened, while this was in flight
+      t = t || {};
+      var miss = (t.fresh || 0) + (t.cache_w || 0);
+      var hit = t.cache_r || 0;
+      var denom = miss + hit;
+      var rate = denom > 0 ? (100 * hit / denom) : 0;
+      td.innerHTML = 'Input today: <b>' + fmtTokens(miss) + '</b> miss / <b style="color:var(--grn)">' +
+        fmtTokens(hit) + '</b> hit &middot; Output: <b>' + fmtTokens(t.out || 0) +
+        '</b> &middot; Hit rate: <b>' + rate.toFixed(0) + '%</b>';
+    }).catch(function(err){
+      console.error('bdevCacheBreakdown failed', err);
+      if(expandedVendor === agent) td.textContent = 'Cache breakdown unavailable';
+    });
+  }
+
+  function ensureVendorRow(tbody, agent, label){
+    var rec = vendorRowEls[agent];
+    if(rec) return rec;
+    var tr = document.createElement('tr');
+    tr.className = 'vrow';
+    var tdName = document.createElement('td');
+    tdName.innerHTML = '<span class="dot" style="background:' + agentColor(agent) + '"></span>' + label;
+    var tdToday = document.createElement('td'); tdToday.className = 'num';
+    var tdWeek = document.createElement('td'); tdWeek.className = 'num';
+    var tdMonth = document.createElement('td'); tdMonth.className = 'num';
+    tr.appendChild(tdName); tr.appendChild(tdToday); tr.appendChild(tdWeek); tr.appendChild(tdMonth);
+    tr.addEventListener('click', function(){ toggleVendorExpand(agent); });
+    tbody.appendChild(tr);
+    rec = { tr: tr, today: tdToday, week: tdWeek, month: tdMonth };
+    vendorRowEls[agent] = rec;
+    return rec;
+  }
+
+  // renderTotalRow (section 3): bold totals row, pinned to the top of the
+  // vendor strip table, created once and updated in place like the other
+  // rows.
+  var totalRowEls = null;
+  function ensureTotalRow(tbody){
+    if(totalRowEls) return totalRowEls;
+    var tr = document.createElement('tr');
+    tr.className = 'totalrow';
+    var tdName = document.createElement('td'); tdName.textContent = 'Total';
+    var tdToday = document.createElement('td'); tdToday.className = 'num';
+    var tdWeek = document.createElement('td'); tdWeek.className = 'num';
+    var tdMonth = document.createElement('td'); tdMonth.className = 'num';
+    tr.appendChild(tdName); tr.appendChild(tdToday); tr.appendChild(tdWeek); tr.appendChild(tdMonth);
+    tbody.appendChild(tr);
+    totalRowEls = { tr: tr, today: tdToday, week: tdWeek, month: tdMonth };
+    return totalRowEls;
+  }
+
+  function renderVendorStrip(payload){
+    var tbody = document.getElementById('vendorStrip');
+    if(!tbody) return;
+    var rows = (payload && payload.rows) || [];
+    var seen = {};
+    rows.forEach(function(r){
+      seen[r.agent] = true;
+      var rec = ensureVendorRow(tbody, r.agent, r.agent_label);
+      animateNumber(rec.today, r.today, TWEEN_MS, fmtTokens);
+      animateNumber(rec.week, r.week, TWEEN_MS, fmtTokens);
+      animateNumber(rec.month, r.month, TWEEN_MS, fmtTokens);
+    });
+    Object.keys(vendorRowEls).forEach(function(agent){
+      if(seen[agent]) return;
+      if(expandedVendor === agent) collapseVendorExpand();
+      vendorRowEls[agent].tr.remove();
+      delete vendorRowEls[agent];
+    });
+    // Totals row goes to the top of the table (section 3), bold, kept in
+    // sync with the same tween the per-vendor rows use.
+    var total = ensureTotalRow(tbody);
+    tbody.insertBefore(total.tr, tbody.firstChild);
+    animateNumber(total.today, (payload && payload.total && payload.total.today) || 0, TWEEN_MS, fmtTokens);
+    animateNumber(total.week, (payload && payload.total && payload.total.week) || 0, TWEEN_MS, fmtTokens);
+    animateNumber(total.month, (payload && payload.total && payload.total.month) || 0, TWEEN_MS, fmtTokens);
+  }
+
+  // renderHeadline, section 4: the one exception to the shared 600ms tween
+  // (TWEEN_MS) - runs over the whole current tick interval with linear
+  // easing instead of the shared easeOutQuart, so the digits roll smoothly
+  // and land on the true value right as that tick's snapshot paints, rather
+  // than darting to it and stopping early the way the shared 600ms ease-out
+  // would on a big jump. todayTokens is snap.headline_today (2026-09-26
+  // phase 5 fix): the Go side now adds tokens ingested since vendor_strip's
+  // own last 60s cache refresh (bdevSnapshotNow/headline.go), so this
+  // genuinely moves most ticks instead of only once a minute; a tick with
+  // no new tokens still calls this with the same value, and animateNumber's
+  // own from===newVal check makes that a no-op rather than a tween.
+  // __bdevHeadlineLog: WS2 item 6's own evidence ("watch 30s during an
+  // active session, report the exact number of headline changes out of
+  // the number of ticks") - this page never reads it itself, only a
+  // uicheck-style read through the dev eval channel does, the same
+  // pattern paintMark/__bdevPaintLog already established.
+  var lastHeadlineVal = null;
+  function renderHeadline(todayTokens){
+    var v = todayTokens || 0;
+    var log = window.__bdevHeadlineLog || (window.__bdevHeadlineLog = []);
+    log.push({ t: performance.now(), value: v, changed: v !== lastHeadlineVal });
+    if(log.length > 4000) log.splice(0, log.length - 4000);
+    lastHeadlineVal = v;
+    animateNumber(document.getElementById('hlToday'), v, tickRefreshMs, fmtTokensFull, function(t){ return t; });
+  }
+
+  var MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function mondayOnOrBefore(d){
+    var m = new Date(d.getTime());
+    var diff = (d.getDay() + 6) % 7; // 0=Monday .. 6=Sunday
+    m.setDate(d.getDate() - diff);
+    return m;
+  }
+
+  // renderHeatmap lays internal/history's own per-day rows out as a
+  // GitHub-style grid: Monday-start weeks (this codebase's own ISO-week
+  // convention, used elsewhere for the same "week" concept), one column
+  // per week, oldest first, 182 days (26 weeks) ending today.
+  var lastHeatmapPayload = null;
+
+  // renderHeatmap: no-scroll patch section 3 crops to as many whole weeks
+  // as the panel's own width fits (newest on the right, oldest cropped on
+  // the left), rather than the old horizontal scroll; "N active days"
+  // still counts every one of the full 182 days regardless of how many
+  // weeks are actually drawn (activeDays is computed below before any
+  // cropping). Cell math (9px cell + 2px column gap, .heatgrid/.heatcell)
+  // is analytical rather than measure-then-trim: a few px of slop either
+  // way just means one fewer/extra column or a little unused margin,
+  // never a scrollbar (heatmapwrap is overflow:hidden regardless).
+  function renderHeatmap(payload){
+    lastHeatmapPayload = payload;
+    var grid = document.getElementById('heatmapGrid');
+    var activeEl = document.getElementById('heatmapActiveDays');
+    if(!grid) return;
+    var byDate = {};
+    ((payload && payload.rows) || []).forEach(function(r){ byDate[r.key] = r; });
+
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var start = new Date(today.getTime());
+    start.setDate(start.getDate() - 181);
+    var gridStart = mondayOnOrBefore(start);
+    // Days first, rounded, then weeks - not a raw ms/604800000 division
+    // (found by review, 2026-09-26): gridStart and today are local
+    // midnights, so the ms between them is not always a multiple of 7
+    // real days whenever a DST transition falls inside the range (a
+    // 23h/25h day loses/gains an hour); floor-dividing that raw
+    // difference by one week's worth of ms then silently drops a whole
+    // week - including today's own column - on any Monday whose 182-day
+    // lookback crosses 29 March or 25 October. Math.round on the ms/day
+    // division absorbs the DST hour (at most 1/24 of a day) back to the
+    // correct whole-day count before weeks are ever computed.
+    var days = Math.round((today.getTime() - gridStart.getTime()) / 86400000);
+    var weeks = Math.floor(days / 7) + 1;
+
+    var cols = [];
+    var activeDays = 0;
+    for(var w = 0; w < weeks; w++){
+      var col = [];
+      for(var d = 0; d < 7; d++){
+        var day = new Date(gridStart.getTime());
+        day.setDate(gridStart.getDate() + w * 7 + d);
+        if(day < start || day > today){ col.push(null); continue; }
+        var key = fmtLocalDateKey(day);
+        var row = byDate[key];
+        var tokens = row ? row.tokens : 0;
+        var cost = row && row.cost_usd != null ? row.cost_usd : null;
+        if(tokens > 0) activeDays++;
+        col.push({ date: key, tokens: tokens, cost: cost });
+      }
+      cols.push(col);
+    }
+    if(activeEl) activeEl.textContent = activeDays + ' active days';
+
+    var fitWeeks = Math.max(1, Math.floor(grid.clientWidth / 11));
+    if(cols.length > fitWeeks) cols = cols.slice(-fitWeeks);
+
+    var max = 1;
+    cols.forEach(function(col){ col.forEach(function(c){ if(c && c.tokens > max) max = c.tokens; }); });
+
+    var html = '<div class="heatgrid">';
+    cols.forEach(function(col){
+      html += '<div class="heatcol">';
+      col.forEach(function(c){
+        if(!c){ html += '<i class="heatcell empty"></i>'; return; }
+        var active = c.tokens > 0;
+        var op = active ? (0.15 + 0.85 * Math.min(1, c.tokens / max)) : 0;
+        var title = c.date + ': ' + fmtTokens(c.tokens) + ' tok' + (c.cost != null ? ', ' + fmtCost(c.cost) : '');
+        html += '<i class="heatcell' + (active ? ' active' : '') + '" style="opacity:' + op.toFixed(2) + '" title="' + title + '"></i>';
+      });
+      html += '</div>';
+    });
+    html += '</div><div class="heatmonths">';
+    var lastMonth = null;
+    cols.forEach(function(col){
+      var first = null;
+      for(var i = 0; i < col.length; i++){ if(col[i]){ first = col[i]; break; } }
+      var m = first ? new Date(first.date + 'T00:00:00Z').getUTCMonth() : null;
+      var label = (m !== null && m !== lastMonth) ? MONTH_ABBR[m] : '';
+      if(m !== null) lastMonth = m;
+      html += '<div class="heatmonth">' + label + '</div>';
+    });
+    html += '</div>';
+    grid.innerHTML = html;
+  }
+
+  // renderTicker (section 5): one dense line per turn, newest first, click
+  // opens the turn detail popup. Headline patch section 1: the ticker is
+  // the one exception to "no scrollbars" (see .ticker/.trow above), so this
+  // just renders every row and lets the box scroll, rather than cropToFit.
+  // WS2 item 3: rows are keyed by "session_id:turn" (a turn's own content
+  // never changes once it exists) and created once, reused by later ticks -
+  // in the ordinary case (only new turns at the front, per d12's own row
+  // -height check) this reduces to prepending the new rows and trimming
+  // the tail, not a full teardown-and-rebuild every refresh_ms.
+  var tickerRowEls = {};
+  function ensureTickerRow(t){
+    var key = t.session_id + ':' + t.turn;
+    var row = tickerRowEls[key];
+    if(row) return row;
+    row = document.createElement('div');
+    row.className = 'trow clickable';
+    row.dataset.session = t.session_id;
+    row.dataset.turn = t.turn;
+    var tEl = document.createElement('span'); tEl.className = 't';
+    var hEl = document.createElement('span'); hEl.className = 'h';
+    var tagEl = document.createElement('span'); tagEl.className = 'tag';
+    var mEl = document.createElement('span'); mEl.className = 'm';
+    row.appendChild(tEl); row.appendChild(hEl); row.appendChild(tagEl); row.appendChild(mEl);
+    tickerRowEls[key] = row;
+    row._t = tEl; row._h = hEl; row._tag = tagEl; row._m = mEl;
+    return row;
+  }
+
+  function renderTicker(turns){
+    var el = document.getElementById('turnTicker');
+    if(!el) return;
+    turns = (turns || []).slice(0, 50);
+    if(!turns.length){
+      tickerRowEls = {};
+      el.innerHTML = '<div class="placeholder" style="padding:10px">No turns in the last 30 minutes</div>';
+      return;
+    }
+    // Skip the repaint while the user has scrolled away from the top
+    // (found by review, 2026-09-26): newest-first plus inserting new rows
+    // above whatever they're reading would otherwise drift a scrolled
+    // -down reading position (scrollTop is a raw pixel offset that does
+    // not follow inserted content) and drop the row's own :hover state.
+    // Catches back up to live the moment they scroll back to the top.
+    if(el.scrollTop > 2 && el.children.length) return;
+    if(el.firstChild && el.firstChild.className === 'placeholder') el.innerHTML = '';
+
+    var seen = {};
+    var prevSibling = null;
+    turns.forEach(function(t){
+      var key = t.session_id + ':' + t.turn;
+      seen[key] = true;
+      var row = ensureTickerRow(t);
+      row._t.textContent = fmtHMS(new Date(t.at));
+      row._h.textContent = t.agent;
+      row._h.style.color = agentColor(t.agent);
+      row._tag.textContent = t.finding ? t.finding.Kind : '';
+      row._tag.style.display = t.finding ? '' : 'none';
+      var tok = (t.fresh || 0) + (t.cache_write || 0) + (t.cache_read || 0) + (t.output || 0);
+      row._m.textContent = fmtTokens(tok) + ' tok';
+      var wantAfter = prevSibling ? prevSibling.nextSibling : el.firstChild;
+      if(row !== wantAfter) el.insertBefore(row, wantAfter);
+      prevSibling = row;
+    });
+    Object.keys(tickerRowEls).forEach(function(key){
+      if(seen[key]) return;
+      tickerRowEls[key].remove();
+      delete tickerRowEls[key];
+    });
+  }
+
+  // ---------- Turn detail popup (section 5) ----------
+  // Keyed by "sessionID:turn" since a fast second click before the first
+  // resolves can have more than one bdevTurnDetail call in flight.
+  // currentTurnKey additionally guards against a stale response actually
+  // being drawn once it lands: click turn A then turn B before A resolves,
+  // and without this check A's later resolve would overwrite B's already
+  // -rendered content (found by review, 2026-09-25; the keyed-pending map
+  // alone only routes each response to its own call, it does not stop an
+  // old one from still painting after a newer click has moved on).
+  var TURN_DETAIL_PENDING = {};
+  var currentTurnKey = null;
+  window.__bdevTurnDetailResolve = function(key, detail){
+    var p = TURN_DETAIL_PENDING[key];
+    if(p){ delete TURN_DETAIL_PENDING[key]; p.resolve(detail); }
+  };
+
+  function openTurnPopup(sessionID, turn){
+    var overlay = document.getElementById('turnPopupOverlay');
+    var body = document.getElementById('turnPopupBody');
+    if(!overlay || !body || !sessionID || !turn) return;
+    overlay.classList.remove('hidden');
+    var key = sessionID + ':' + turn;
+    currentTurnKey = key;
+    if(typeof window.bdevTurnDetail !== 'function'){
+      body.innerHTML = '<p>Turn detail is not available.</p>';
+      return;
+    }
+    body.innerHTML = '<p>Loading turn detail&hellip;</p>';
+    new Promise(function(resolve){
+      TURN_DETAIL_PENDING[key] = { resolve: resolve };
+      window.bdevTurnDetail(sessionID, turn);
+    }).then(function(d){
+      if(currentTurnKey !== key) return; // superseded by a later click
+      if(d && d.error){
+        body.innerHTML = '<p>Could not load turn detail: ' + esc(d.error) + '</p>';
+        return;
+      }
+      renderTurnPopup(d);
+    }).catch(function(e){
+      if(currentTurnKey !== key) return;
+      body.innerHTML = '<p>Could not load turn detail: ' + esc(e && e.message ? e.message : String(e)) + '</p>';
+    });
+  }
+
+  function closeTurnPopup(){
+    var overlay = document.getElementById('turnPopupOverlay');
+    if(overlay) overlay.classList.add('hidden');
+    currentTurnKey = null;
+  }
+
+  // renderTurnPopup: model, token split, cache hit, cost, tools, findings
+  // (section 5), the burnmon-dev equivalent of burnmon.exe's own turn
+  // drawer (internal/report/template.html's renderTurnDrawer), restyled to
+  // this page's dark amber theme rather than ported verbatim.
+  function renderTurnPopup(d){
+    var body = document.getElementById('turnPopupBody');
+    if(!body || !d) return;
+
+    var gapText = d.has_gap ? (Math.round(d.gap_seconds) + 's since the previous turn') : 'first turn seen for this session';
+    var miss = (d.fresh || 0) + (d.cache_write || 0);
+    var hit = d.cache_read || 0;
+    var hitRate = (miss + hit) > 0 ? (100 * hit / (miss + hit)) : 0;
+
+    var findingsHtml = (d.findings && d.findings.length)
+      ? d.findings.map(function(f){
+          return '<div>' + esc(f.Kind) + ', confidence ' + Math.round((f.Confidence || 0) * 100) +
+            '%: ' + esc(f.Cause) + '</div>';
+        }).join('')
+      : '<div class="dim">No findings on this turn.</div>';
+
+    var toolRowList = (d.tool_calls || []).map(function(c){
+      return '<tr><td>' + esc(c.tool) + '</td><td>' + esc(c.path || '') + '</td>' +
+        '<td class="num">' + fmtTokens(c.input_bytes) + '</td><td class="num">' +
+        (c.result_bytes != null ? fmtTokens(c.result_bytes) : '') + '</td></tr>';
+    });
+    var fileItemList = (d.files || []).map(function(p){ return '<li>' + esc(p) + '</li>'; });
+
+    // toolCallsHtml/filesHtml (no-scroll patch section 3: "crop long tool
+    // lists with '+N more'") take how many rows/files to show as an arg,
+    // rebuilt below by the measure-then-trim loop rather than always
+    // showing every one; #turnPopup has no scrollbar to fall back on
+    // (overflow:hidden), so the whole popup must actually fit within its
+    // own max-height, not just look like it does.
+    function toolCallsHtml(n){
+      if(!toolRowList.length) return '<div class="dim">No tool calls recorded for this turn.</div>';
+      var shown = toolRowList.slice(0, n);
+      var footer = n < toolRowList.length ? '<tr><td colspan="4" class="dim">+' + (toolRowList.length - n) + ' more</td></tr>' : '';
+      return '<table><thead><tr><th>Tool</th><th>Path</th><th>In</th><th>Out</th></tr></thead><tbody>' + shown.join('') + footer + '</tbody></table>';
+    }
+    function filesHtml(n){
+      if(!fileItemList.length) return '<div class="dim">No files recorded for this turn.</div>';
+      var shown = fileItemList.slice(0, n);
+      var footer = n < fileItemList.length ? '<li class="dim">+' + (fileItemList.length - n) + ' more</li>' : '';
+      return '<ul class="tight">' + shown.join('') + footer + '</ul>';
+    }
+
+    var head =
+      '<h3>Turn ' + d.turn + '</h3>' +
+      '<div class="dim">Session ' + esc(d.session_id) + ' &middot; ' + esc(d.model || 'model unknown') + '</div>' +
+      '<div class="dim">' + fmtHMS(new Date(d.at)) + ' &middot; ' + esc(gapText) + ' &middot; ' + fmtCost(d.cost) + '</div>' +
+      '<h4>Token classes</h4>' +
+      '<div>fresh ' + fmtTokens(d.fresh) + ', cache write ' + fmtTokens(d.cache_write) +
+        ', cache read ' + fmtTokens(d.cache_read) + ' (' + hitRate.toFixed(0) + '% hit), output ' + fmtTokens(d.output) + '</div>' +
+      '<h4>Findings</h4>' + findingsHtml + '<h4>Tool calls this turn</h4>';
+
+    // Measure-then-trim against the popup itself (#turnPopup, the
+    // max-height:84vh box), not #turnPopupBody, which has no height limit
+    // of its own. Tool calls trim first (the spec names them explicitly),
+    // then files, since a turn realistically has far more tool calls than
+    // files read.
+    var popup = document.getElementById('turnPopup');
+    var toolN = toolRowList.length, fileN = fileItemList.length;
+    body.innerHTML = head + toolCallsHtml(toolN) + '<h4>Files read</h4>' + filesHtml(fileN);
+    while(popup && popup.scrollHeight > popup.clientHeight + 1 && toolN > 0){
+      toolN--;
+      body.innerHTML = head + toolCallsHtml(toolN) + '<h4>Files read</h4>' + filesHtml(fileN);
+    }
+    while(popup && popup.scrollHeight > popup.clientHeight + 1 && fileN > 0){
+      fileN--;
+      body.innerHTML = head + toolCallsHtml(toolN) + '<h4>Files read</h4>' + filesHtml(fileN);
+    }
+  }
+
+  document.addEventListener('click', function(e){
+    var line = e.target && e.target.closest && e.target.closest('.trow.clickable');
+    if(line) openTurnPopup(line.getAttribute('data-session'), parseInt(line.getAttribute('data-turn'), 10));
+  });
+  document.getElementById('turnPopupClose').addEventListener('click', closeTurnPopup);
+  document.getElementById('turnPopupOverlay').addEventListener('click', function(e){
+    if(e.target === this) closeTurnPopup();
+  });
+  // Window, section 10: Esc also leaves fullscreen. F11 itself is not
+  // handled here: WebView2/Chromium reserves it as a default browser
+  // accelerator key and never lets the page's own keydown listener see it
+  // at all (confirmed empirically), so the Go side catches it directly with
+  // a global hotkey instead (installF11Hotkey, windowstate.go) rather than
+  // through this page. An open turn popup takes priority on Esc (closes the
+  // popup, does not also exit fullscreen in the same keypress);
+  // bdevExitFullscreen is always safe to call regardless, since it no-ops
+  // when the window is not fullscreen.
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Escape' && e.key !== 'Esc') return;
+    var overlay = document.getElementById('turnPopupOverlay');
+    if(overlay && !overlay.classList.contains('hidden')){
+      closeTurnPopup();
+      return;
+    }
+    if(window.bdevExitFullscreen) window.bdevExitFullscreen();
+  });
+
+  var lastSysmonHistory = [];
+
+  // lastCoreCount (2026-09-26 phase 5 fix): gopsutil's per-process Percent
+  // (internal/sysmon/process.go, ProcessGroupSample.CPUPct) is unnormalized
+  // by core count - 100% means one full logical core saturated, so a
+  // multi-threaded process can read past 100%. Every other "%" in this UI
+  // (the header, the CPU box, the pressure score) is normalized against the
+  // whole machine (cpu.Percent(0, false), sysmon.Sample.CPUPct), so showing
+  // ProcessGroupSample.CPUPct directly as "%" read as if it meant the same
+  // thing - Wilco saw "BurnMon Dev 47%" and could not tell whether that was
+  // 47% of one core (unremarkable) or 47% of a 20-core machine (alarming).
+  // renderSysmonPanels keeps this in step with sm.Cores.length every tick;
+  // renderProcessGroups and renderHarnessHeatmap divide by it before
+  // display, so every process-groups "%" now means the same whole-machine
+  // share as the rest of the header.
+  var lastCoreCount = 1;
+
+  // recentBuckets returns the chart's last N seconds' worth of buckets,
+  // for a rate that reflects a short trailing window rather than only the
+  // current, still-filling bucket (which reads low right after a bucket
+  // boundary and would otherwise make both the $/min chip and tok/min jump
+  // every tick).
+  function recentBuckets(chart, seconds, bucketSeconds){
+    var n = Math.max(1, Math.round(seconds / Math.max(bucketSeconds, 1)));
+    return chart.slice(-n);
+  }
+
+  function renderHeaderBurn(snap){
+    var sessionsEl = document.getElementById('hdrSessions');
+    if(sessionsEl) sessionsEl.textContent = (snap.sessions || []).length + ' sessions';
+    var chart = snap.chart || [];
+    var bucketSeconds = snap.bucket_seconds || 60;
+    var recent = recentBuckets(chart, 300, bucketSeconds);
+    var minutes = recent.length * bucketSeconds / 60;
+
+    var rateEl = document.getElementById('hdrBurnRate');
+    if(rateEl){
+      var cost = recent.reduce(function(sum, b){ return sum + (b.cost || 0); }, 0);
+      rateEl.textContent = (minutes > 0 ? cost / minutes : 0).toFixed(2);
+    }
+
+    var tokMinEl = document.getElementById('hdrTokMin');
+    if(tokMinEl){
+      var tokens = 0;
+      recent.forEach(function(bucket){
+        var bySession = bucket.by_session || {};
+        Object.keys(bySession).forEach(function(sid){
+          var c = bySession[sid];
+          tokens += (c.fresh || 0) + (c.cache_write || 0) + (c.cache_read || 0) + (c.output || 0);
+        });
+      });
+      tokMinEl.textContent = fmtTokens(minutes > 0 ? tokens / minutes : 0);
+    }
+  }
+
+  // renderBurnPanels (section 5): the burn zone's per-tick render, fed
+  // from the shared snapshot's own burn field instead of its own poll.
+  function renderBurnPanels(burn){
+    if(!burn) return;
+    var agentBySession = agentBySessionMap(burn.sessions, burn.turns);
+    var projectBySession = projectBySessionMap(burn.sessions);
+    renderBars(burn.chart);
+    renderBurnAxis(burn.chart, burn.bucket_seconds);
+    renderBurnLegend(burn.chart, agentBySession, projectBySession);
+    renderSessionCards(burn.sessions);
+    renderTicker(burn.turns);
+    renderHeaderBurn(burn);
+  }
+
+  // renderVendorPanels (section 5): fed from the shared snapshot's own
+  // vendor_strip field (startSlowRefreshers' own 60s cache, app.go)
+  // instead of its own poll.
+  function renderVendorPanels(payload){
+    renderVendorStrip(payload);
+  }
+
+  function renderPressureChip(score){
+    var el = document.getElementById('pressureChip');
+    if(!el) return;
+    el.textContent = 'PRESSURE ' + score;
+    var color = score < 45 ? 'var(--grn)' : score < 75 ? 'var(--yel)' : 'var(--red)';
+    el.style.color = color;
+  }
+
+  // ---------- System panel (section 6): perfadvisor layout ----------
+
+  function renderCPUBox(sm){
+    var threadsEl = document.getElementById('cpuThreads');
+    if(threadsEl) threadsEl.textContent = (sm.Cores || []).length;
+    var pct = Math.round(sm.CPUPct || 0);
+    var bar = document.getElementById('cpuTotalBar');
+    if(bar) bar.style.width = Math.min(100, pct) + '%';
+    var lbl = document.getElementById('cpuTotal');
+    if(lbl) lbl.textContent = pct + '%';
+    var metaEl = document.getElementById('cpuBaseClock');
+    if(metaEl) metaEl.textContent = sm.base_clock_ghz > 0 ? 'base ' + sm.base_clock_ghz.toFixed(1) + ' GHz' : '';
+
+    var grid = document.getElementById('coreGrid');
+    if(grid){
+      var html = '';
+      (sm.Cores || []).forEach(function(v, i){
+        var color = v < 45 ? 'var(--grn)' : v < 75 ? 'var(--yel)' : 'var(--red)';
+        html += '<div class="coreitem"><span class="corelabel">C' + i + '</span>' +
+          '<div class="corebar"><i style="width:' + Math.min(100, v).toFixed(0) + '%;background:' + color + '"></i></div>' +
+          '<span class="corelabel">' + Math.round(v) + '%</span></div>';
+      });
+      grid.innerHTML = html;
+    }
+  }
+
+  // renderHistoryChart draws cpu/ram/disk/net/gpu as smooth canvas lines,
+  // newest sample on the right (section 6). cpu/ram/gpu already share a
+  // natural 0-100 percent scale; disk and net (bytes/sec, no fixed
+  // ceiling) are each scaled to their own peak within the visible window,
+  // per the reference panel's own "disk and net scaled to own peak" note.
+  var HIST_SERIES = [
+    { key: 'CPUPct', label: 'cpu', color: '#00d26a', fmt: function(v){ return Math.round(v) + '%'; } },
+    { key: 'ram', label: 'ram', color: '#4da6ff', fmt: function(v){ return Math.round(v) + '%'; } },
+    { key: 'DiskReadBps', key2: 'DiskWriteBps', label: 'disk', color: '#ffd75f', ownPeak: true, fmt: fmtBytes },
+    { key: 'NetDownBps', key2: 'NetUpBps', label: 'net', color: '#d68cf0', ownPeak: true, fmt: fmtBytes },
+    { key: 'GPUPct', label: 'gpu', color: '#ff4b4b', fmt: function(v){ return Math.round(v) + '%'; } }
+  ];
+  function seriesValue(s, def){
+    var v = def.key2 != null ? (s[def.key] || 0) + (s[def.key2] || 0) : s[def.key];
+    return v == null || v < 0 ? 0 : v;
+  }
+  function renderHistoryChart(history){
+    var canvas = document.getElementById('histCanvas');
+    var legend = document.getElementById('histLegend');
+    if(!canvas || !legend) return;
+    var wrap = canvas.parentElement;
+    var w = wrap.clientWidth, h = wrap.clientHeight;
+    if(w <= 0 || h <= 0) return;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    var samples = (history || []).map(function(s){
+      return { CPUPct: s.CPUPct, ram: s.MemTotalMB > 0 ? 100 * s.MemUsedMB / s.MemTotalMB : 0,
+        DiskReadBps: s.DiskReadBps, DiskWriteBps: s.DiskWriteBps,
+        NetDownBps: s.NetDownBps, NetUpBps: s.NetUpBps, GPUPct: s.GPUPct };
+    });
+
+    var legendHtml = '';
+    if(!samples.length){
+      legend.innerHTML = '<span class="dim">No system history yet</span>';
+      return;
+    }
+    HIST_SERIES.forEach(function(def){
+      var vals = samples.map(function(s){ return seriesValue(s, def); });
+      var peak = def.ownPeak ? Math.max.apply(null, vals.concat([1])) : 100;
+      ctx.beginPath();
+      vals.forEach(function(v, i){
+        var x = vals.length > 1 ? (i / (vals.length - 1)) * w : 0;
+        var y = h - Math.min(1, v / peak) * h;
+        if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = def.color;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      var current = vals[vals.length - 1];
+      legendHtml += '<span><span class="dot" style="background:' + def.color + '"></span>' + def.label + ' <b>' + def.fmt(current) + '</b></span>';
+    });
+    legendHtml += '<span class="note">disk and net scaled to own peak</span>';
+    legend.innerHTML = legendHtml;
+  }
+
+  function renderMemoryBox(sm){
+    var bar = document.querySelector('#boxMemory .sysbar i');
+    var pct = sm.MemTotalMB > 0 ? 100 * sm.MemUsedMB / sm.MemTotalMB : 0;
+    if(bar) bar.style.width = Math.min(100, pct).toFixed(0) + '%';
+    var l1 = document.getElementById('memLine1');
+    if(l1) l1.innerHTML = pct.toFixed(0) + '% &middot; <b>' + (sm.MemUsedMB / 1024).toFixed(1) + '</b> / ' + (sm.MemTotalMB / 1024).toFixed(1) + ' GB used';
+    var l2 = document.getElementById('memLine2');
+    if(l2) l2.textContent = ((sm.MemTotalMB - sm.MemUsedMB) / 1024).toFixed(1) + ' GB available';
+    var l3 = document.getElementById('memLine3');
+    if(l3){
+      l3.textContent = sm.SwapTotalMB > 0
+        ? 'swap ' + (sm.SwapUsedMB / 1024).toFixed(1) + ' / ' + (sm.SwapTotalMB / 1024).toFixed(1) + ' GB'
+        : 'no swap';
+    }
+  }
+
+  function renderDisksBox(sm){
+    var el = document.getElementById('disksBody');
+    if(!el) return;
+    var disks = sm.Disks || [];
+    if(!disks.length){ el.innerHTML = '<div class="dim">No drives read</div>'; return; }
+    var html = '';
+    disks.forEach(function(d){
+      html += '<div class="line">' + esc(d.Mount) + ' <b>' + Math.round(d.UsedPercent) + '%</b></div>' +
+        '<div class="sysbar"><i style="width:' + Math.min(100, d.UsedPercent).toFixed(0) + '%;background:var(--yel)"></i></div>' +
+        '<div class="line dim">' + d.FreeGB.toFixed(0) + 'G free &middot; R ' + fmtBytes(d.ReadBps) + ', W ' + fmtBytes(d.WriteBps) + '</div>';
+    });
+    el.innerHTML = html;
+  }
+
+  function renderNetworkBox(sm){
+    var down = document.getElementById('netDown');
+    if(down) down.innerHTML = 'down <b>' + fmtBytes(sm.NetDownBps) + '</b>';
+    var up = document.getElementById('netUp');
+    if(up) up.innerHTML = 'up <b>' + fmtBytes(sm.NetUpBps) + '</b>';
+    var wifi = document.getElementById('netWifi');
+    if(wifi){
+      var w = sm.Wifi || {};
+      wifi.textContent = w.OK && w.Connected ? (w.SSID + ' · signal ' + w.SignalPct + '%') : (w.OK ? 'wifi disconnected' : '');
+    }
+  }
+
+  // renderSysmonPanels (section 5): the system zone's per-tick render,
+  // fed from the shared snapshot's own sm field instead of its own poll.
+  var lastCoreCountLabeled = 0;
+  function renderSysmonPanels(sm){
+    if(!sm) return;
+    if(sm.Cores && sm.Cores.length) lastCoreCount = sm.Cores.length;
+    if(lastCoreCount !== lastCoreCountLabeled){
+      lastCoreCountLabeled = lastCoreCount;
+      var cpuHead = document.getElementById('processGroupsCPUHead');
+      if(cpuHead) cpuHead.title = 'percent of the whole machine (' + lastCoreCount + ' cores), not one core - same convention as the header and the CPU box above';
+    }
+    var hdrCPU = document.getElementById('hdrCPU');
+    if(hdrCPU) hdrCPU.textContent = Math.round(sm.CPUPct) + '%';
+    var hdrRAM = document.getElementById('hdrRAM');
+    if(hdrRAM && sm.MemTotalMB > 0) hdrRAM.textContent = Math.round(100 * sm.MemUsedMB / sm.MemTotalMB) + '%';
+    renderCPUBox(sm);
+    renderMemoryBox(sm);
+    renderDisksBox(sm);
+    renderNetworkBox(sm);
+    renderPressureChip(sm.pressure_score);
+  }
+
+  var HARNESS_LABEL = {
+    'claude': 'Claude Code', 'claude-desktop': 'Claude Desktop', 'codex': 'Codex',
+    'copilot-cli': 'Copilot CLI', 'copilot-vscode': 'Copilot (VS Code)', 'hermes': 'Hermes',
+    'wsl': 'WSL',
+    // WS2 item 4 ("honest self row"): the Go process and its WebView2
+    // host used to sum into one "BurnMon Dev" row (internal/sysmon
+    // .Classify's own parent-chain inheritance folded webview2 into
+    // HarnessSelf); split labels for the harness split above.
+    'burnmon-dev': 'BurnMon Dev (Go)', 'burnmon-dev-webview2': 'BurnMon Dev (WebView2)',
+    'node': 'node (unclassified)'
+  };
+  // HARNESS_COLOR/harnessColor now live near AGENT_COLOR at the top of this
+  // file (HARNESS_HUE, the one shared categorical palette both maps draw
+  // from, no-scroll patch section 2).
+
+  // renderProcessGroups (section 7): headers right-aligned like the numbers
+  // (the shared `th` rule now does this by default), the trend column takes
+  // at most half the panel width (headline patch section 2, the page's own
+  // colgroup plus #processGroupsWrap table{table-layout:fixed}) and its
+  // sparkline stretches to fill it (trendsvg width:100% viewBox below),
+  // busiest first (order is already sorted descending by current CPU%).
+  // No-scroll patch section 3: cropped to as many whole rows as
+  // #processGroupsWrap's own 200px budget fits.
+  //
+  // WS2 item 3 ("no per-tick DOM rebuilds"): one <tr> per harness, created
+  // once and reused - cells' text/sparkline points update in place, and a
+  // row only actually moves in the DOM when its own rank among the (small,
+  // bounded) harness set changes, not on every tick regardless. Cropping
+  // no longer measures by repeatedly rebuilding smaller and smaller HTML
+  // strings (this panel's own former cropTableRows helper, removed along
+  // with this rewrite since it had no other caller): the fit is computed
+  // once from a real row's own offsetHeight, cheap enough to redo every
+  // tick since it is a read, not a rebuild, and simply hides whatever
+  // does not fit.
+  var processGroupRowEls = {};
+  function ensureProcessGroupRow(tbody, harness){
+    var rec = processGroupRowEls[harness];
+    if(rec) return rec;
+    var tr = document.createElement('tr');
+    var tdName = document.createElement('td');
+    var dot = document.createElement('span'); dot.className = 'dot';
+    var nameText = document.createTextNode('');
+    tdName.appendChild(dot); tdName.appendChild(nameText);
+    var tdCPU = document.createElement('td'); tdCPU.className = 'num';
+    var tdRAM = document.createElement('td'); tdRAM.className = 'num';
+    var tdIO = document.createElement('td'); tdIO.className = 'num';
+    var tdTrend = document.createElement('td');
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('class', 'trendsvg'); svg.setAttribute('viewBox', '0 0 100 12');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    var poly = document.createElementNS(svgNS, 'polyline');
+    poly.setAttribute('fill', 'none'); poly.setAttribute('stroke-width', '1.2');
+    poly.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(poly); tdTrend.appendChild(svg);
+    tr.appendChild(tdName); tr.appendChild(tdCPU); tr.appendChild(tdRAM); tr.appendChild(tdIO); tr.appendChild(tdTrend);
+    tbody.appendChild(tr);
+    rec = { tr: tr, dot: dot, nameText: nameText, cpu: tdCPU, ram: tdRAM, io: tdIO, poly: poly };
+    processGroupRowEls[harness] = rec;
+    return rec;
+  }
+
+  function renderProcessGroups(now, historyRows){
+    var tbody = document.getElementById('processGroups');
+    var wrap = document.getElementById('processGroupsWrap');
+    if(!tbody) return;
+    var byHarness = {};
+    (historyRows || []).forEach(function(r){
+      (byHarness[r.Harness] || (byHarness[r.Harness] = [])).push(r);
+    });
+    var order = (now || []).slice().sort(function(a, b){ return b.CPUPct - a.CPUPct; });
+    if(!order.length){
+      processGroupRowEls = {};
+      tbody.innerHTML = '<tr><td colspan="5" style="color:var(--dim);padding:8px">No classified processes yet</td></tr>';
+      return;
+    }
+    if(!Object.keys(processGroupRowEls).length && tbody.firstChild) tbody.innerHTML = ''; // drop the placeholder row
+
+    var seen = {};
+    var prevSibling = null;
+    order.forEach(function(row){
+      seen[row.Harness] = true;
+      var rec = ensureProcessGroupRow(tbody, row.Harness);
+      var color = harnessColor(row.Harness);
+      rec.dot.style.background = color;
+      rec.nameText.textContent = HARNESS_LABEL[row.Harness] || row.Harness;
+      rec.cpu.textContent = (row.CPUPct / lastCoreCount).toFixed(0) + '%';
+      rec.ram.textContent = (row.MemMB / 1024).toFixed(1) + 'G';
+      rec.io.textContent = fmtBytes(row.IOBps);
+      var series = (byHarness[row.Harness] || []).slice(-30);
+      var maxCPU = series.reduce(function(m, r){ return Math.max(m, r.CPUPct); }, 1);
+      var pts = series.map(function(r, i){
+        var x = series.length > 1 ? (i / (series.length - 1)) * 100 : 0;
+        var y = 12 - Math.min(12, 12 * r.CPUPct / maxCPU);
+        return x.toFixed(1) + ',' + y.toFixed(1);
+      }).join(' ');
+      rec.poly.setAttribute('points', pts);
+      rec.poly.setAttribute('stroke', color);
+      var wantAfter = prevSibling ? prevSibling.nextSibling : tbody.firstChild;
+      if(rec.tr !== wantAfter) tbody.insertBefore(rec.tr, wantAfter);
+      prevSibling = rec.tr;
+      rec.tr.style.display = '';
+    });
+    Object.keys(processGroupRowEls).forEach(function(h){
+      if(seen[h]) return;
+      processGroupRowEls[h].tr.remove();
+      delete processGroupRowEls[h];
+    });
+
+    // Crop to whatever whole-row count wrap's own budget fits, same effect
+    // cropTableRows had, from one real row's own rendered height instead of
+    // a rebuild-and-measure loop: every row is the same height (no
+    // per-harness variation in this table), so the first row already
+    // measured is representative of all of them.
+    var firstRow = tbody.firstChild;
+    if(firstRow && firstRow.offsetHeight > 0){
+      // Measured against the real thead height (found by review,
+      // 2026-09-26: a flat "-1 row" guess for the thead's own headroom
+      // hid one row that actually fit whenever the real thead was
+      // shorter than one data row, which it usually is - "CPU %MACH"
+      // only wraps to two lines at a handful of specific widths).
+      var theadEl = tbody.previousElementSibling;
+      var theadHeight = theadEl ? theadEl.offsetHeight : firstRow.offsetHeight;
+      var availableForRows = wrap.clientHeight - theadHeight;
+      var maxRows = Math.max(1, Math.floor(availableForRows / firstRow.offsetHeight));
+      var i = 0;
+      var node = tbody.firstChild;
+      while(node){
+        node.style.display = i < maxRows ? '' : 'none';
+        node = node.nextSibling;
+        i++;
+      }
+      // A crop that still overflows (the -1 headroom above proved too
+      // little, e.g. a taller thead this estimate did not fully account
+      // for) tightens by one row at a time, the same tail cropTableRows'
+      // own while-loop had, just against already-built rows instead of
+      // rebuilding HTML for each attempt.
+      while(maxRows > 1 && wrap.scrollHeight > wrap.clientHeight + 1){
+        maxRows--;
+        var j = 0; node = tbody.firstChild;
+        while(node){
+          if(j >= maxRows) node.style.display = 'none';
+          node = node.nextSibling; j++;
+        }
+      }
+    }
+  }
+
+  // lastProcessGroupsHistory: the shared snapshot's own process_groups_history
+  // field (startSlowRefreshers' own 10s cache, app.go), both renderProcessGroups'
+  // sparklines and this heatmap draw from, cached here so a resize can
+  // redraw either from the same last-fetched rows without waiting for the
+  // next tick.
+  var lastProcessGroupsHistory = [];
+
+  // renderHarnessHeatmap buckets the same history rows into one-minute
+  // columns per harness, CPU-weighted (design doc section 3): the sum of
+  // every sample's CPUPct for that harness inside that minute, so a
+  // harness with several processes each briefly busy still reads as a warm
+  // cell rather than diluted by however many 2s ticks landed in it.
+  // No-scroll patch section 3: crops to as many whole minutes as the row's
+  // own available width fits, newest on the right, the same analytical
+  // (clientWidth / per-cell px) approach renderHeatmap uses above -
+  // heatrow-label is a fixed 110px plus the row's own 6px gap
+  // (.heatrow/.heatrow-label), and each cell is 9px plus a 1px gap
+  // (.heatrow-cells). Headline patch section 3: each cell also carries a
+  // hover title in the same style as the Activity heatmap above (HARNESS_AGENTS
+  // below correlates burn.turns onto the same minute buckets for the token
+  // figure).
+  // lastHarnessHeatmapNow: the shared tick's own "now" (section 5, "all
+  // time-axis charts... use the same now from the snapshot"), so a resize
+  // or a panel un-hiding (rerenderFitCandidate) can redraw against a
+  // reasonable anchor even without a fresh snapshot in hand.
+  var lastHarnessHeatmapNow = Date.now();
+
+  // lastHarnessHeatmapTurns: the shared snapshot's own burn.turns (same cap
+  // and 30-minute window as the turn ticker), cached the same way as
+  // lastProcessGroupsHistory/lastHarnessHeatmapNow so a resize or panel
+  // un-hide can redraw the hover text below without a fresh snapshot.
+  var lastHarnessHeatmapTurns = [];
+
+  // HARNESS_AGENTS mirrors internal/advisor's own harnessAgents map (Go):
+  // which schema.Event.Agent value(s) a sysmon.Harness's turns would carry,
+  // so a cell's hover text (section 3) can add "tokens in that minute" from
+  // burn.turns to the same CPU-sample bucket this heatmap already sums.
+  // wsl/burnmon-dev/node have no such counterpart agent (not a coding tool
+  // that emits its own turn events), so they simply never show tokens.
+  var HARNESS_AGENTS = {
+    claude: 'claude-code', 'claude-desktop': 'cowork', codex: 'codex',
+    'copilot-cli': 'copilot-cli', 'copilot-vscode': 'copilot-vscode', hermes: 'hermes'
+  };
+  var AGENT_TO_HARNESS = {};
+  Object.keys(HARNESS_AGENTS).forEach(function(h){ AGENT_TO_HARNESS[HARNESS_AGENTS[h]] = h; });
+
+  function renderHarnessHeatmap(rows, nowMs, turns){
+    lastProcessGroupsHistory = rows || [];
+    if(nowMs) lastHarnessHeatmapNow = nowMs;
+    if(turns) lastHarnessHeatmapTurns = turns;
+    var el = document.getElementById('harnessHeatmap');
+    if(!el) return;
+    if(!rows || !rows.length){ el.innerHTML = ''; return; }
+
+    // byHarness sums every sample's CPUPct per minute (the design doc's own
+    // CPU-weighted intensity, unchanged); countByHarness counts how many
+    // samples landed in that minute alongside it, purely so the hover text
+    // below can show a true average instead of presenting that sum as if it
+    // were itself a percentage (found by review, 2026-09-26: at the default
+    // ~6 samples/minute, one harness pinning a single core the whole minute
+    // would sum to "~600% CPU", not the "60%" an average would show).
+    var byHarness = {}, countByHarness = {};
+    rows.forEach(function(r){
+      var minuteKey = Math.floor(new Date(r.Ts).getTime() / 60000);
+      var byMin = (byHarness[r.Harness] || (byHarness[r.Harness] = {}));
+      byMin[minuteKey] = (byMin[minuteKey] || 0) + r.CPUPct;
+      var cntMin = (countByHarness[r.Harness] || (countByHarness[r.Harness] = {}));
+      cntMin[minuteKey] = (cntMin[minuteKey] || 0) + 1;
+    });
+    // tokensByHarness only ever covers lastHarnessHeatmapTurns' own window
+    // (burn.turns: last 30 minutes, capped at 50 turns) - the CPU history
+    // this heatmap otherwise draws from goes back a full 60 minutes
+    // (RecentProcessGroups' own window, app.go), and a busy 30 minutes can
+    // exceed 50 turns on its own, so a cell can legitimately have real
+    // token activity this map has no way to know about; it just shows CPU
+    // only for that cell rather than claiming certainty it had none.
+    var tokensByHarness = {};
+    lastHarnessHeatmapTurns.forEach(function(t){
+      var h = AGENT_TO_HARNESS[t.agent];
+      if(!h) return;
+      var minuteKey = Math.floor(new Date(t.at).getTime() / 60000);
+      var byMin = (tokensByHarness[h] || (tokensByHarness[h] = {}));
+      var tok = (t.fresh || 0) + (t.cache_write || 0) + (t.cache_read || 0) + (t.output || 0);
+      byMin[minuteKey] = (byMin[minuteKey] || 0) + tok;
+    });
+    var harnesses = Object.keys(byHarness).sort(function(a, b){
+      var sa = Object.values(byHarness[a]).reduce(function(x, y){ return x + y; }, 0);
+      var sb = Object.values(byHarness[b]).reduce(function(x, y){ return x + y; }, 0);
+      return sb - sa;
+    });
+    var max = 1;
+    harnesses.forEach(function(h){
+      Object.keys(byHarness[h]).forEach(function(m){ if(byHarness[h][m] > max) max = byHarness[h][m]; });
+    });
+
+    var availableWidth = el.clientWidth - 116; // 110px label + 6px row gap
+    var fitMinutes = Math.max(1, Math.floor(availableWidth / 10)); // 9px cell + 1px gap
+    // maxMin anchors to the shared tick's own now, not this cache's own
+    // newest row (found by review, 2026-09-25: anchoring to the data's own
+    // last row meant the heatmap only ever shifted when its 10s background
+    // cache happened to refresh, not on the same beat as the burn chart and
+    // system history); a minute the cache has not caught up to yet simply
+    // renders as an empty/cold column until the next background refresh
+    // fills it in.
+    var maxMin = Math.floor((lastHarnessHeatmapNow) / 60000);
+    var fromMin = maxMin - fitMinutes + 1;
+
+    var html = '';
+    harnesses.forEach(function(h){
+      var label = HARNESS_LABEL[h] || h;
+      html += '<div class="heatrow"><span class="heatrow-label">' + label + '</span><span class="heatrow-cells">';
+      for(var m = fromMin; m <= maxMin; m++){
+        var v = byHarness[h][m] || 0;
+        var op = v > 0 ? (0.12 + 0.85 * Math.min(1, v / max)) : 0;
+        // hover text, section 3: same style as the Activity heatmap
+        // (renderHeatmap above) - harness, HH:mm, CPU percent for that
+        // minute, and tokens when there are any; an empty minute (no CPU
+        // sample) shows "no activity" regardless of any stray token match.
+        // The percent shown is v's own average over that minute's sample
+        // count, not the raw sum op/max use for colour intensity - the sum
+        // can honestly run past 100% (several busy processes at once), but
+        // labelling it "% CPU" without averaging first would misread as a
+        // single core pinned at an impossible value. Also divided by
+        // lastCoreCount (2026-09-26 fix): CPUPct's own unit is unnormalized
+        // per-process percent (100% = one full core), not the whole-machine
+        // percent every other "%" on this page means.
+        var cnt = (countByHarness[h] && countByHarness[h][m]) || 1;
+        var avgPct = v / cnt / lastCoreCount;
+        var tok = (tokensByHarness[h] && tokensByHarness[h][m]) || 0;
+        var title = label + ', ' + fmtHM(new Date(m * 60000)) +
+          (v > 0 ? ': ' + Math.round(avgPct) + '% CPU' + (tok > 0 ? ', ' + fmtTokens(tok) + ' tok' : '') : ': no activity');
+        html += '<i class="heatcell' + (v > 0 ? ' active' : '') + '" style="background:' + harnessColor(h) + ';opacity:' + op.toFixed(2) + '" title="' + esc(title) + '"></i>';
+      }
+      html += '</span></div>';
+    });
+    el.innerHTML = html;
+  }
+
+  window.__bdevExportResolve = function(result){
+    var btn = document.getElementById('exportBtn');
+    var status = document.getElementById('exportStatus');
+    if(btn) btn.disabled = false;
+    if(!status) return;
+    if(!result || !result.ok){
+      status.textContent = 'export failed' + (result && result.error ? ': ' + result.error : '');
+      status.style.color = 'var(--red)';
+      return;
+    }
+    status.textContent = 'exported ' + fmtBytesPlain(result.summary_bytes + result.data_json_bytes + result.daily_csv_bytes) +
+      ' to ' + result.dir;
+    status.style.color = 'var(--grn)';
+  };
+
+  function setupExportButton(){
+    var btn = document.getElementById('exportBtn');
+    if(!btn) return;
+    btn.addEventListener('click', function(){
+      if(!window.bdevExport) return;
+      btn.disabled = true;
+      var status = document.getElementById('exportStatus');
+      if(status){ status.textContent = 'exporting...'; status.style.color = 'var(--dim)'; }
+      window.bdevExport();
+    });
+  }
+
+  var lastProcessGroupsNow = [];
+
+  // ---------- Microsoft To Do panel (section 9) ----------
+  // Off unless burnmon-dev.json sets microsoft_todo_enabled. Section 5:
+  // the panel's enabled/signed-in status and task list both come from the
+  // shared snapshot's own todo/todo_tasks fields (startSlowRefreshers' own
+  // 30s/300s background cache, app.go) painted on every tick, not their
+  // own poll. todoState tracks what the panel is currently showing so the
+  // tick's own status never clobbers an in-progress interactive sign-in
+  // ("waiting for approval") with the plain sign-in button again.
+  var todoState = 'unknown'; // 'unknown' | 'signedout' | 'pending' | 'signedin'
+
+  // renderTodoTasks: no-scroll patch section 3, "as many tasks as fit, then
+  // '+N more'" (cropToFit's own footerFn).
+  function renderTodoTasks(items){
+    var body = document.getElementById('todoBody');
+    if(!body) return;
+    if(!items || !items.length){
+      body.innerHTML = '<div class="placeholder" style="padding:10px">No tasks due today</div>';
+      return;
+    }
+    var rows = items.map(function(t){
+      return '<div class="todorow">' +
+        '<span class="due' + (t.Overdue ? ' overdue' : '') + '">' + esc(t.DueDate || '') + '</span>' +
+        '<span class="title">' + esc(t.Title) + '</span>' +
+        '<span class="list">' + esc(t.List) + '</span></div>';
+    });
+    cropToFit(body, rows, function(remaining){
+      return '<div class="todorow" style="color:var(--dim)">+' + remaining + ' more</div>';
+    });
+  }
+
+  // renderTodoSignIn always leaves a working Sign in button behind, even
+  // after a failed attempt (errorMsg, optional): without this, a failed or
+  // expired device code left the panel permanently stuck on a static error
+  // with no way to retry short of restarting the app, since the tick's own
+  // status only ever calls this once per signedout transition (found by
+  // review, 2026-09-25).
+  function renderTodoSignIn(errorMsg){
+    var body = document.getElementById('todoBody');
+    if(!body) return;
+    var errorHtml = errorMsg ? '<div class="placeholder" style="padding:4px 0">' + esc(errorMsg) + '</div>' : '';
+    body.innerHTML = errorHtml + '<button class="textbtn" id="todoSignInBtn" style="align-self:flex-start">Sign in</button>';
+    document.getElementById('todoSignInBtn').addEventListener('click', function(){
+      this.disabled = true;
+      if(!window.bdevTodoLogin) return;
+      todoState = 'pending';
+      window.bdevTodoLogin().then(function(info){
+        if(todoState !== 'pending') return; // the tick's own status already moved on
+        body.innerHTML = '<div>' + esc(info.message) + '</div>' +
+          '<div class="tododevicecode">' + esc(info.user_code) + '</div>' +
+          '<div class="dim">Waiting for approval&hellip; a browser window should already be open.</div>';
+      }).catch(function(e){
+        todoState = 'signedout';
+        renderTodoSignIn('Sign-in failed: ' + (e && e.message ? e.message : String(e)));
+      });
+    });
+  }
+
+  // __bdevTodoLoginResolve: on success, bdevTodoLogin (main.go) has already
+  // refreshed a.todoTasksCache server-side before this fires, so the very
+  // next render tick already shows signed-in with real tasks; this just
+  // flips todoState so that tick's own snapshot.todo.signed_in is allowed
+  // to render instead of being treated as still 'pending'.
+  window.__bdevTodoLoginResolve = function(result){
+    if(!result || !result.ok){
+      todoState = 'signedout';
+      renderTodoSignIn('Sign-in failed' + (result && result.error ? ': ' + result.error : ''));
+      return;
+    }
+    todoState = 'signedin';
+  };
+
+  // renderTodoPanel (section 5): the To Do panel's per-tick render, fed
+  // from the shared snapshot's own todo/todo_tasks fields (both
+  // startSlowRefreshers' own background cache, app.go) instead of their
+  // own poll. Skips repainting while todoState is 'pending' (an
+  // interactive sign-in the page's own bdevTodoLogin promise is already
+  // driving), the same guard the old pollTodoStatus used against its own
+  // 30s poll.
+  function renderTodoPanel(status, tasksPayload){
+    var panel = document.getElementById('todoPanel');
+    if(!panel) return;
+    if(!status || !status.enabled){
+      panel.style.display = 'none';
+      todoState = 'unknown';
+      return;
+    }
+    panel.style.display = 'flex';
+    if(todoState === 'pending') return;
+    if(status.signed_in){
+      todoState = 'signedin';
+      if(tasksPayload && tasksPayload.error){
+        var body = document.getElementById('todoBody');
+        if(body) body.innerHTML = '<div class="placeholder" style="padding:10px">Could not read tasks: ' + esc(tasksPayload.error) + '</div>';
+      } else {
+        renderTodoTasks(tasksPayload && tasksPayload.items);
+      }
+    } else if(todoState !== 'signedout'){
+      todoState = 'signedout';
+      renderTodoSignIn();
+    }
+  }
+
+  // ---------- The one shared render tick (no-scroll patch section 5)
+  // ----------
+  // One render tick every refresh_ms (default 1000ms, floored at 1000ms by
+  // loadDevConfig, app.go), driven from this one place: every other
+  // setInterval/setTimeout loop that used to poll and paint its own panel
+  // independently is gone, replaced by one bdevSnapshotNow call per tick
+  // and one requestAnimationFrame that paints every panel from that same
+  // snapshot. tickInFlight skips starting a new tick while the previous
+  // one is still in flight (a slow round trip) rather than overlapping
+  // calls or painting a part-old, part-new mix of panels; a tick that
+  // errors or overlaps simply paints nothing that beat, the next one picks
+  // up normally.
+  var tickInFlight = false;
+  var tickTimer = null;
+  var tickRefreshMs = 1000;
+
+  function scheduleTick(ms){
+    if(tickTimer) clearInterval(tickTimer);
+    tickRefreshMs = ms;
+    window.__bdevRefreshMs = ms; // exposed for tools\uicheck (check_d11.go), not read by this page itself
+    tickTimer = setInterval(tick, ms);
+  }
+
+  // paintMark timestamps a panel's own paint (performance.now(), a
+  // monotonic clock unaffected by clock changes) into a small ring buffer:
+  // this page never reads it itself, but a uicheck case (tools\uicheck)
+  // reads window.__bdevPaintLog through the dev eval channel to prove every
+  // panel actually paints inside the same tick, not on its own drift.
+  function paintMark(name){
+    var log = window.__bdevPaintLog || (window.__bdevPaintLog = []);
+    log.push({ name: name, t: performance.now() });
+    if(log.length > 4000) log.splice(0, log.length - 4000);
+  }
+
+  function paintTick(snap){
+    var now = new Date(snap.now);
+    renderClock(now); paintMark('clock');
+    renderSysmonPanels(snap.sysmon); paintMark('sysmon');
+    lastSysmonHistory = snap.sysmon_history || [];
+    renderHistoryChart(lastSysmonHistory); paintMark('sysmonHistory');
+    renderBurnPanels(snap.burn); paintMark('burn');
+    renderVendorPanels(snap.vendor_strip); paintMark('vendorStrip');
+    renderHeadline(snap.headline_today); paintMark('headline');
+    renderHeatmap(snap.activity_heatmap); paintMark('activityHeatmap');
+    lastProcessGroupsNow = snap.process_groups_now || [];
+    lastProcessGroupsHistory = snap.process_groups_history || [];
+    renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory); paintMark('processGroups');
+    renderHarnessHeatmap(lastProcessGroupsHistory, snap.now, (snap.burn && snap.burn.turns) || []); paintMark('harnessHeatmap');
+    renderTodoPanel(snap.todo, snap.todo_tasks); paintMark('todo');
+    applyPanelFit();
+    paintMark('tickEnd');
+  }
+
+  // firstTickDone: section 11 step 1 (startup measurement) - the first
+  // full render is this page's own first tick actually landing, not a
+  // Go-side guess, so this reports back to bdevMarkFirstRender exactly
+  // once. Section 11 step 3 ("show the full UI as soon as the store's
+  // existing data can render") hides the loading screen at this same
+  // point, whether or not the background backfill (startBackgroundIngest,
+  // main.go) has finished yet: this dashboard already reflects whatever
+  // the store holds right now, real history on a second launch or an
+  // honestly-empty "no sessions" on a first one, and either way the next
+  // tick picks up anything backfill adds after.
+  var firstTickDone = false;
+
+  function tick(){
+    if(tickInFlight || !window.bdevSnapshotNow) return Promise.resolve();
+    tickInFlight = true;
+    var startedAt = performance.now();
+    return window.bdevSnapshotNow().then(function(snap){
+      tickInFlight = false;
+      if(!snap) return;
+      if(snap.refresh_ms && snap.refresh_ms !== tickRefreshMs) scheduleTick(snap.refresh_ms);
+      if(!firstTickDone){
+        firstTickDone = true;
+        if(window.bdevMarkFirstRender) window.bdevMarkFirstRender();
+        hideLoadingOverlay();
+      }
+      // "If a tick's data is late, skip that paint rather than painting
+      // part of the panels": a round trip that took more than 1.5 ticks to
+      // come back is stale enough (a slow store query, a GC pause) that
+      // painting it now would show an old moment as if it were current;
+      // wait for the next, on-time tick instead of painting late data.
+      if(performance.now() - startedAt > tickRefreshMs * 1.5) return;
+      requestAnimationFrame(function(){ paintTick(snap); });
+    }).catch(function(err){
+      tickInFlight = false;
+      console.error('bdevSnapshotNow failed', err);
+    });
+  }
+
+  scheduleTick(tickRefreshMs);
+  tick();
+
+  // WS2 item 2, "pause when nobody looks": document.visibilitychange
+  // fires when this app's own window is minimized (WebView2/Chromium ties
+  // page visibility to the host window's state, the same signal a real
+  // browser tab gets) and again when it is restored. Hidden: stop the
+  // shared render tick entirely, not just slow it - nobody can see a paint
+  // against a minimized window, so there is nothing to buy by still
+  // computing one every refresh_ms. Visible again: one immediate tick
+  // (not a stale one from whatever the timer's own phase happened to be)
+  // then resume the normal cadence. bdevSetHidden also tells the Go side
+  // (app.go's startSampling), which slows its own cheap system sample to
+  // 10s while hidden - a page that is not painting still has that ticker
+  // running server-side, since it feeds sysmon_history for the moment the
+  // page comes back.
+  document.addEventListener('visibilitychange', function(){
+    var hidden = document.hidden;
+    if(window.bdevSetHidden) window.bdevSetHidden(hidden);
+    if(hidden){
+      if(tickTimer){ clearInterval(tickTimer); tickTimer = null; }
+    } else if(!tickTimer){
+      tick();
+      scheduleTick(tickRefreshMs);
+    }
+  });
+
+  // Section 10 (responsive, "panels grow and shrink with the window"): the
+  // history canvas sets its backing-store pixel size from its container's
+  // clientWidth/clientHeight at draw time (renderHistoryChart), so a window
+  // resize between ticks leaves it drawn at the OLD size while its CSS box
+  // has already grown or shrunk to the new one, stretching/blurring the
+  // existing bitmap until the next tick redraws it (found visually against
+  // a real resize this session, not just in review). Re-drawing from the
+  // already-cached lastSysmonHistory on resize, debounced to one redraw per
+  // animation frame rather than once per resize event, fixes it without
+  // waiting on the next tick.
+  // pageOverflows/applyPanelFit: no-scroll patch section 4, "window too
+  // small: drop low panels", fixed order To Do, then process groups, then
+  // the Activity/heatmap row; header, burn chart, vendor strip, turn
+  // ticker and the system panel always stay (they are never in
+  // FIT_CANDIDATE_IDS). Measures the actual page (a scrollbar-free window
+  // never lets body or any .zonebody overflow) rather than tracking panel
+  // pixel budgets by hand, so this stays correct regardless of exactly how
+  // much any one panel's own content happens to need this tick; a dropped
+  // panel comes back as soon as there's slack again because this always
+  // starts from "show everything" and only re-hides what still does not fit.
+  var FIT_CANDIDATE_IDS = ['todoPanel', 'processGroupsPanel', 'activityHeatmapRow'];
+  function pageOverflows(){
+    if(document.body.scrollHeight > document.body.clientHeight + 1) return true;
+    if(document.body.scrollWidth > document.body.clientWidth + 1) return true;
+    var zones = document.querySelectorAll('.zonebody');
+    for(var i = 0; i < zones.length; i++){
+      if(zones[i].scrollHeight > zones[i].clientHeight + 1) return true;
+    }
+    return false;
+  }
+  // A panel's own width/height-cropped content (renderHeatmap,
+  // renderHarnessHeatmap, renderProcessGroups) reads clientWidth/clientHeight as
+  // 0 while display:none, so whatever last rendered into it while it was
+  // fit-dropped is wrong (crops to almost nothing) and would otherwise sit
+  // there stale once the panel comes back, until that panel's own next
+  // slow poll happens to land (up to 60s later). applyPanelFit re-renders
+  // any candidate that just went from dropped to shown, from its own
+  // last-fetched cache, so it repaints correctly the instant it reappears
+  // (fixed after review, 2026-09-25).
+  function rerenderFitCandidate(id){
+    if(id === 'activityHeatmapRow'){
+      renderHeatmap(lastHeatmapPayload);
+      renderHarnessHeatmap(lastProcessGroupsHistory);
+    } else if(id === 'processGroupsPanel'){
+      renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory);
+    }
+  }
+  function applyPanelFit(){
+    var candidates = FIT_CANDIDATE_IDS.map(function(id){ return document.getElementById(id); }).filter(Boolean);
+    var wasDropped = {};
+    candidates.forEach(function(el){ wasDropped[el.id] = el.classList.contains('fit-dropped'); el.classList.remove('fit-dropped'); });
+    var stillDropped = {};
+    for(var i = 0; i < candidates.length; i++){
+      if(!pageOverflows()) break;
+      candidates[i].classList.add('fit-dropped');
+      stillDropped[candidates[i].id] = true;
+    }
+    candidates.forEach(function(el){
+      if(wasDropped[el.id] && !stillDropped[el.id]) rerenderFitCandidate(el.id);
+    });
+  }
+
+  // resize (and F11, which is itself a resize of the window's client area):
+  // no-scroll patch section 3/4, "recompute what fits on resize and on
+  // F11". Slow-polled panels (activity heatmap 60s, harness heatmap/process
+  // groups 10s) re-render from their own last-fetched cache immediately
+  // rather than waiting for their next scheduled poll, the same recipe
+  // histResizeRAF already used for the system history canvas. applyPanelFit
+  // runs first so a panel that only just became visible again re-renders
+  // against its now-real (non-zero) box, not the stale one from while it
+  // was still display:none.
+  var histResizeRAF = null;
+  window.addEventListener('resize', function(){
+    if(histResizeRAF) return;
+    histResizeRAF = requestAnimationFrame(function(){
+      histResizeRAF = null;
+      applyPanelFit();
+      renderHistoryChart(lastSysmonHistory);
+      renderHeatmap(lastHeatmapPayload);
+      renderHarnessHeatmap(lastProcessGroupsHistory);
+      renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory);
+    });
+  });
+  setupExportButton();
+})();
+</script>
+</body>
+</html>

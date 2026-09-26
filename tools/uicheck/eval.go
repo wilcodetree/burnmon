@@ -10,6 +10,17 @@ import (
 
 const evalAddr = "127.0.0.1:9333"
 
+// evalAddrDev is burnmon-dev.exe's own dev eval server
+// (cmd\burnmon-dev\uicheck_devserver.go, BURNMON_DEV_UICHECK=1), a distinct
+// port from burnmon.exe's own 9333 so both can run (and be driven) at
+// once, the design doc's own normal-case scenario.
+const evalAddrDev = "127.0.0.1:9334"
+
+// currentEvalAddr is which of the two servers evalRaw talks to; main.go
+// sets it once at startup based on the check name's own "d" prefix before
+// any check runs.
+var currentEvalAddr = evalAddr
+
 type evalResponse struct {
 	OK    bool            `json:"ok"`
 	Value json.RawMessage `json:"value"`
@@ -20,9 +31,9 @@ type evalResponse struct {
 // dev eval server (cmd\burnmon\uicheck_devserver.go, BURNMON_UICHECK=1) and
 // returns its JSON-encoded result value.
 func evalRaw(script string) (json.RawMessage, error) {
-	conn, err := net.DialTimeout("tcp", evalAddr, 5*time.Second)
+	conn, err := net.DialTimeout("tcp", currentEvalAddr, 5*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("dial %s (is burnmon.exe running with BURNMON_UICHECK=1?): %w", evalAddr, err)
+		return nil, fmt.Errorf("dial %s (is the right exe running with its own UICHECK env var set?): %w", currentEvalAddr, err)
 	}
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(15 * time.Second))

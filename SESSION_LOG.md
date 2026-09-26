@@ -2,6 +2,265 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-26, v0.4 WS2 performance patch, v0.4.0-alpha.2
+
+Followed `02_roadmap\2026-09-26_ws2_performance_patch.md` on `burnmon-dev`, after rebasing
+onto `main`'s `v0.3.2` (`69a071e`, WS3's shared-ingest watcher fix and local time
+everywhere): one conflict, `SESSION_LOG.md` (both branches prepend entries, four separate
+conflict points across the 22-commit rebase), resolved by keeping every entry in
+newest-on-top order by real commit timestamp; no other file conflicted. Post-rebase,
+pre-anything-else 10-minute baseline (`burnmon.exe` co-running): Go process 0.89% avg /
+1.95% peak CPU, 252.5 MB peak RAM, 763 peak handles - the WS3 rebase already removed most
+of the earlier session's own documented shared-ingest climb, as expected.
+
+**Item 1, cheaper process sampler.** `internal\sysmon\process.go`'s old `Tick` called
+`process.Processes()` for the PID list, then several more gopsutil calls per process every
+3s walk (`Name`/`Cmdline`/`Ppid`/`Percent`/`MemoryInfo`/`IOCounters`, each opening its own
+process handle). Replaced with one `NtQuerySystemInformation(SystemProcessInformation)`
+snapshot per walk (`process_windows.go`, new: hand-derived `SYSTEM_PROCESS_INFORMATION`
+struct, a growing-buffer retry loop, decode straight into a plain Go struct so the raw
+buffer can be discarded immediately) - CPU time, working set and IO counters for every
+process on the machine in one syscall. `Cmdline()` (the one thing that snapshot cannot
+give: only a bare image name) is still a per-process gopsutil call, but now only the first
+tick a pid is ever seen, cached in the registry until that pid exits, not every tick for
+every already-known process. `process_other.go` keeps the old gopsutil-only path verbatim
+for the untested darwin/linux build (`process.go` now holds only the OS-independent
+`resolveHarnesses`). New `TestQuerySystemProcesses_FindsSelfWithSanePPID` is this file's
+own correctness gate for the hand-derived struct layout: the parsed parent pid must match
+`os.Getppid()`, an independent ground truth a wrong field offset could not satisfy by
+chance; passed first try.
+
+**Item 2, pause when nobody looks.** Minimized: page.html's own shared render tick stops
+entirely (`document.visibilitychange`, which WebView2/Chromium already ties to the host
+window's real minimize state, no new Win32 hook needed) rather than just slowing, since
+nobody can see a paint against a minimized window; a new `bdevSetHidden` binding tells the
+Go side, whose cheap system-sample ticker (`app.go`'s `startSampling`) then slows to a
+fixed 10s while hidden - the process walk and persistence stay on their own fixed
+cadences, unaffected, per item 1's own "independent of refresh_ms." Un-hide: the page
+fires one immediate tick itself, not a stale one from wherever the timer's phase happened
+to be. Not built: WebView2's own memory usage target to "Low" while hidden -
+`ICoreWebView2Controller4` (the interface that carries it) is not vendored in
+`go-webview2`, and hand-deriving its COM vtable layout without the official SDK header
+risks a wrong method-slot offset, a crash risk in a tool run daily, for a soft (RAM-only)
+win; flagged in STATUS.md rather than silently dropped.
+
+**Item 3, no per-tick DOM rebuilds.** Burn chart, session cards, turn ticker and process
+groups (vendor strip already did this, `ensureVendorRow`'s own doc comment) now create
+their DOM nodes once and update text/attributes/sparkline points in place, reordering only
+when a row's own rank actually changed, instead of tearing down and rebuilding their whole
+`innerHTML` every `refresh_ms` tick. Process groups' old `cropTableRows` helper (a
+rebuild-and-remeasure loop) is gone with it, replaced by a one-shot height estimate from a
+real row's own `offsetHeight` plus a tightening loop against already-built rows; it had no
+other caller.
+
+**Item 4, honest self row.** `internal\sysmon\harness.go`'s `Classify` used to fold
+burnmon-dev.exe's own WebView2 host process tree into `HarnessSelf` via generic
+parent-chain inheritance (Wilco's own "BurnMon Dev 47%" observation, phase 5b, could not
+be read as meaning the Go process or the browser process specifically). New
+`HarnessSelfWebview`: a `msedgewebview2.exe` whose nearest classified ancestor is already
+`HarnessSelf` or `HarnessSelfWebview` gets its own bucket; a webview2 process belonging to
+any other app on the machine still falls through to that app's own classification or
+`HarnessOther`, never this one. Process groups now shows "BurnMon Dev (Go)" and "BurnMon
+Dev (WebView2)" as two rows (`page.html`'s `HARNESS_LABEL`), and its CPU column header now
+states the percent is of the whole machine, matching the header/CPU box's own convention
+(phase 5b already did the normalization; only the label was missing).
+
+**Item 5, local time everywhere.** `headline.go`'s `headlineDayStart` was a UTC copy left
+behind when `vendorstrip`'s own switched (WS3); now local, matching it exactly, with a new
+DST-transition test (`TestHeadlineDayStart_LocalNotUTC`, both 2026 Europe/Amsterdam
+dates). Auditing every other `.UTC()` call in `cmd\burnmon-dev` found two more of the same
+class, neither named directly in the spec: `app.go`'s `closedDayRows` (the activity
+heatmap's own "today"/182-day-window boundary) and `main.go`'s `bdevCacheBreakdown` (the
+vendor strip's own click-through cache breakdown) - both switched to local. The heatmap's
+JS-side grid math (`page.html`'s `mondayOnOrBefore`/`renderHeatmap`) was UTC too
+(`Date.UTC`, `toISOString()`), disagreeing with the Go side's own local-day row keys for
+the early-local-morning window each day; now built from local y/m/d (`fmtLocalDateKey`,
+new). `export_run.go`'s `parseExportTime` (the CLI's own `--since`/`--until`) parsed a
+bare day as UTC and added a UTC calendar day for `--until`'s "through the end of that
+day" - modeled on burnmon-cli's own pre-WS3 convention, but never updated when that
+command's flag was; now `time.ParseInLocation` plus `AddDate` on the resulting
+local-located time, with two new tests confirmed to fail against the old code first. Every
+`.UTC()` call in `cmd\burnmon-dev` is now gone; `internal\devexport`'s own `.UTC()` calls
+on the exported bundle's `GeneratedAt`/`Since`/`Until`/event `At` are kept, deliberately -
+a portable, machine-readable export stays UTC, matching WS3's own established convention
+that display converts to local at render time, not the stored/exported value itself.
+
+**Item 6, headline evidence.** Watched the shared render tick for 30 real seconds during
+this session's own active Claude Code session (its own transcript file, live-ingested):
+30 ticks, 9 of them a real headline change (measured span 29.0s), via a new
+`window.__bdevHeadlineLog` (the same pattern `paintMark`/`__bdevPaintLog` already
+established, read through the dev eval channel like a uicheck case).
+
+**Review, one fresh Opus pass, five real findings, all fixed.** Over the full diff before
+committing: (1) the activity heatmap's own week count (`renderHeatmap`) divided a raw ms
+difference by a fixed 604800000, silently dropping a whole week - including today's own
+column - on any Monday whose 182-day lookback crossed a DST transition; confirmed with a
+`node` repro against the old code first, fixed by counting whole days (rounded, absorbing
+the DST hour) before dividing into weeks. (2) the process-groups crop's own "-1 row"
+guess for the thead's headroom hid one row that actually fit whenever the real thead was
+shorter than a data row (the ordinary case); now measured against the thead's own real
+`offsetHeight`, confirmed by screenshot at a wide viewport showing all seven harness rows
+where the guess-based version would have hidden the lowest-CPU one. (3) item 4's harness
+split broke `internal/advisor`'s `evalSelfOverhead` rule, which still only read
+`HarnessSelf` - the smaller half of this app's own footprint after the split - silently
+under-reporting BurnMon Dev's real overhead in both the advisor findings and the export's
+own summary.md; now sums `HarnessSelf` plus `HarnessSelfWebview` per tick before
+averaging, new test confirms neither harness alone crosses the budget but their sum does.
+(4) `internal/devexport`'s `dailyRows` bucketed by `t.At`'s own UTC calendar day even
+though `--since`/`--until` (this same session's own item 5 fix) now select a local
+window - the exact class of bug this item was meant to close, just in a file the spec did
+not name directly; fixed (local day for the bucket key, `t.At` itself stays the portable
+UTC instant its own doc comment already promised), plus the same fix for summary.md's
+top-turns table, which showed a bare, unlabelled UTC time a reader would reasonably read
+as local. (5) the process-registry cache (item 1) had no way to notice a pid reappearing
+as a different process within one 3s walk (Windows reuses pids aggressively; the old
+gopsutil-based sampler re-read name/cmdline every tick, so this self-corrected, the new
+cached one does not) - fixed with the snapshot's own `CreateTime`, already available and
+previously discarded, as the reuse guard. Every fix RED (a failing test, or a `node`
+repro for the JS-only heatmap one) before GREEN. The struct hand-derivation in item 1
+(`systemProcessInfoT`) was checked field-by-field against the real Win32 layout and found
+correct as written; the harness-split ordering, the DOM-reuse reconciliation, the
+`hidden`/atomic.Bool concurrency and the headline-log cap were all checked and found
+correct. Not addressed: the Microsoft To Do panel's own due-date comparison against
+Graph's `dueDateTime` (named under item 5's own "To Do", never touched this session,
+correctness depends on an undocumented Graph API timezone behaviour this sandbox cannot
+verify live) - flagged in STATUS.md rather than guessed at.
+
+**Verify.** `go vet ./...`, `go test ./... -count=1` (every package, including the new
+process-sampler, harness-split, local-time and review-fix tests), `.\build.ps1`, `node
+--check` on both page JS files, `uicheck d0`-`d12` (the real running window, confirming
+the split process-groups rows, the DOM-reuse panels and both review-fixed heatmap/crop
+bugs render correctly - re-run in full after the review's own fixes) all green. `w0`-`w8`
+against `burnmon.exe`: `w0`/`w2`-`w8` all green on the final post-review-fix build; `w1`
+(startup, a fixed 1500ms WebView2-engine-warm-up budget its own doc comment already calls
+"independent of app code") passed once earlier in the session but could not get a clean
+run against the final build - five attempts, the last of which captured an entirely
+unrelated foreground window in its own screenshot (confirmed: `GetForegroundWindow` read
+a different Claude Code window at the same moment), not a blank or malformed BurnMon
+window. This is real, interactive desktop contention on a machine in active use during
+the run, the same category of limitation `d7`'s own comment already documents for BitBlt
+against a locked screen, not a code regression: `w1` exercises only `cmd\burnmon`'s own
+startup path, which nothing in this session's diff touches. Left unresolved rather than
+force-retried further; Wilco should re-run `w1` alone once the desktop is idle. One `d9`
+run (no-scrollbar sweep, unrelated to this session) failed at 1920x1080 only, on a
+`.heatmonth` label whose CSS (`overflow:visible`,
+committed 2026-09-24, two days before this session) deliberately lets an 8px month
+abbreviation peek a few px past its own 9px column; `check_d9.go`'s own sweep flags any
+non-`hidden` overflow as a possible scrollbar, which `overflow:visible` can never actually
+produce. Confirmed unrelated to this session's own changes two ways: today (2026-09-26)
+is not a Monday, the one day-of-week the heatmap's own DST fix could have changed
+anything about; and the CSS predates this session. Reproduced consistently at that one
+viewport on a display configuration that changed mid-session (100% scale, 3440x1440,
+against an earlier 200%-scale, 1600x1000 pass that ran `d9` clean at all five sizes);
+d9 passed clean at 1024x768, 1280x860, 1152x2048 and 2560x1440 both before and after. Not
+fixed (out of WS2's own scope, a pre-existing `check_d9.go` detection gap, not a real
+scrollbar); flagged in STATUS.md. Post-patch 10-minute measurement (active, `burnmon.exe` co-running): Go
+process 0.28% avg / 0.59% peak CPU (was 0.89%/1.95%), 195.4 MB peak RAM (was 252.5 MB,
+under the 250 MB target), 781 peak handles (was 763 - item 1 is a CPU fix, handle count is
+governed by the already-rebased WS3 watcher); WebView2 tree 0.51% avg / 1.36% peak CPU
+(was 0.71%/1.58%), 671.1 MB peak RAM (was 680.9 MB), 6 processes peak both runs. Minimized
+for 5 minutes: Go process 0.15% avg / 0.80% peak CPU, 297.2 MB peak RAM; WebView2 tree
+0.03% avg / 0.11% peak CPU, 499.0 MB peak RAM - CPU on both drops sharply from the active
+run, confirming the pause actually holds even without the WebView2 memory-target call.
+
+A stray, garbled-named WebView2 profile cache folder appeared in the worktree root again
+during this session's own repeated test runs (`EBWebView` inside it, same harmless
+pattern a prior session already found and removed once); removed again, flagging in case
+it keeps recurring.
+
+Version `0.4.0-alpha.2` (`cmd\burnmon-dev\app.go`, `winres\burnmon-dev.json`). README,
+STATUS updated. Committed, not pushed or tagged; see the hub brief and the commands
+handed to Wilco for the exact next steps.
+
+## 2026-09-26, v0.4 phase 5: verify and release
+
+Followed `02_roadmap\2026-09-24_ws2_burnmon_dev.md`'s "Verify and close" and this session's
+own fixes-first brief, on `burnmon-dev`. Headline: today's total used to only move on
+`vendor_strip`'s own 60s cache refresh; `cmd\burnmon-dev\headline.go`'s new
+`headlineTodayTokens` now adds tokens from the shared tick's own already-fetched
+30-minute `live.ChartWindow` events that landed after the cache's own `GeneratedAt`
+moment, so the header moves nearly every 2s tick instead of once a minute, with no extra
+store query and no double count (three unit tests, including a cache-refresh boundary and
+a stale-cache-across-midnight reset). `tools\uicheck`'s `ensureWindowSizeWH` now reads
+`GetDpiForWindow`/`AdjustWindowRectExForDpi`/`MonitorFromWindow` so a requested viewport
+size (e.g. "1152x2048") really means that many CSS pixels regardless of display scaling,
+capped to the target monitor with a logged note when it does not fit; re-ran `d0`-`d12`
+against this sandbox's own ~200%-scaled, 1600x1000 CSS screen and confirmed exact matches
+where the viewport fits (e.g. `d4`'s 1280x860) and a clear, logged cap where it does not
+(e.g. `d2`'s 1152x2048 capped to 1152x915), replacing the previous silent roughly-half-size
+bug.
+
+Rebased onto `main`'s `v0.3.1` (`1291ef9`, WS1's Monitor-mode removal and Sessions/pricing
+fixes): one conflict, `SESSION_LOG.md` (both branches prepend to the same file), resolved
+by keeping both entries in newest-on-top order, no other file conflicted. Full verify pass
+green after: `go vet ./...`, `go test ./... -count=1` (every package), `.\build.ps1`,
+`node --check` on both page JS files (`cmd\burnmon-dev\page.html` and
+`internal\report\template.html`), `uicheck d0`-`d12` and the full `w0`-`w8` suite (`w1`
+failed once under load from the concurrent build/test/uicheck activity, exactly the same
+known first-paint-budget flake earlier sessions documented, passed clean on retry).
+Committed the four untracked UI-review reference screenshots
+(`04_assets\reference\2026-09-25_ui_review\5_topbar_target.jpg` through `8_current.jpg`).
+
+Wilco asked, mid-session, for the header's headline total to sit centered between the
+"BURNMON DEV" title and the stat cluster rather than hugging the title; `.hltotal` now
+grows to fill that gap (`flex:1 1 auto`) and centers its own text within it, verified by
+screenshot at five widths (1024 to 2560 CSS px) with no wrapping or clipping introduced.
+
+Phase 5b: measured `burnmon-dev.exe` for 10 minutes with `burnmon.exe` co-running at the
+then-current default `refresh_ms` 2000: 2.22 percent average whole-machine CPU (peak
+19.14 percent), peak RAM 937 MB, peak handles 13,940. RAM and handles match the design
+doc's own documented, out-of-scope shared-ingest climb (WS3); not touched here. Split
+sampling into three independent cadences (`cmd\burnmon-dev\app.go`'s `startSampling`):
+paint/cheap system sample on `refresh_ms`, the expensive full process walk fixed at 3s,
+persistence to `burnmon-dev.db` fixed at 10s wall clock, so a faster paint cadence no
+longer multiplies process-scan or disk-write cost. Fixed the process-groups panel's CPU
+unit: gopsutil's per-process `Percent` is unnormalized (100% = one full logical core, so a
+multi-threaded process can exceed 100%), unlike every other "%" on the page (header, CPU
+box, pressure score), which is normalized against the whole machine - Wilco's own "BurnMon
+Dev 47%" observation could not be read as either convention with confidence. `page.html`
+now tracks the live core count and divides by it before display, in both the
+process-groups table and the harness heatmap's hover average; the value stored in
+`ProcessGroupSample.CPUPct` itself is deliberately left unnormalized, since
+`internal/advisor`'s `RunawayCPUPct`/`SelfCPUPct` thresholds are calibrated against it.
+Re-measured 10 minutes at `refresh_ms` 1000 under the new split cadences: 1.89 percent
+average (peak 16.96 percent), peak RAM 937.5 MB, peak handles 13,774 - under the 2 percent
+bar and not worse than the 2000 run (it was, if anything, a little better), so
+`refresh_ms`'s own default flips to 1000 per the design doc's own flip condition. Re-ran
+`d7` (real F11) and the full `d0`-`d12`/`w0`-`w8` suites again against the final build,
+all green.
+
+Version `0.4.0-alpha.1` confirmed in `cmd\burnmon-dev\app.go` and `winres\burnmon-dev.json`
+(both already set from earlier phases). Added a "BurnMon Dev" section to `README.md`
+(what it is, start, F11, the Microsoft To Do opt-in, export, `refresh_ms`) and a matching
+section to `STATUS.md` describing this branch's current state, the phase 5 fixes and the
+still-open shared-ingest gap.
+
+A fresh, independent read-only review agent over the full `main..burnmon-dev` diff (74
+files, about 10.5k insertions - the whole BurnMon Dev feature, not just this session's
+own changes) found the sampling refactor's locking discipline, the CPU-per-core display
+fix and `tools\uicheck`'s DPI/monitor-cap math all correct as written, and no security
+issues (export never reads event `Title`, `--redact` salts and hashes correctly,
+Microsoft To Do stays read-only, task text never persisted). One real gap: `headline.go`'s
+`headlineTodayTokens` can silently undercount, and worse visibly dip, if `vendor_strip`'s
+own 60s refresh stalls for longer than `live.ChartWindow` (30 minutes, a sustained store
+error, not just sleep/wake) - an event counted on one tick can age out of the sliding
+window on a later one while the cache still has not refreshed, so the sum it contributed
+would disappear again. Fixed with `a.headlineTodayMonotonic` (headline.go), a per-day
+floor guarded by `a.mu`: the value only ever holds level or rises within a calendar day; a
+genuine day rollover still resets rather than clamping against the previous day's higher
+total. Two new tests, one reproducing the exact dip (confirms the bare function really
+would drop, then confirms the wrapper holds) and one confirming the day-rollover reset
+still works; `headline.go`'s test count is now five. Also corrected a review-flagged
+inaccuracy in `.hltotal`'s own doc comment (it shares the header's free space with
+`.hdrspacer` rather than consuming all of it alone, though the visual result, screenshotted
+at five widths, was already correct). Full verify green again after this fix; this
+session's own real-world proof of the day-rollover reset: the sandbox's clock crossed UTC
+midnight mid-session and the headline correctly dropped from 534,790,202 to 12,700,392,
+not a jump-back bug, the new day's own true total.
+
+Not pushed, tagged or merged, per house process; see the hub brief and the commands
+handed to Wilco for the exact next steps.
+
 ## 2026-09-26, WS3: shared ingest performance, local time everywhere, v0.3.2
 
 Read first: `02_roadmap\2026-09-26_ws3_shared_ingest_performance.md` (decisions already
@@ -182,6 +441,187 @@ STATUS.md updated. Committed on `main`, not pushed or tagged (Wilco's own manual
 commands in the hub brief). Hub brief:
 `04_assets\hub_agent_update_2026-09-26_ws3_shared_ingest_performance.md`.
 
+## 2026-09-26, v0.4 ticker/headline patch (sections 1-4)
+
+Followed `02_roadmap\2026-09-25_ws2_ticker_headline_patch.md` on `burnmon-dev`.
+Turn ticker: rows get a fixed 22px height instead of flexbox's default
+shrink (the exact bug in `11_ticker_broken.png` - cropToFit's own
+scrollHeight<=clientHeight check never tripped because rows just squeezed
+to a sliver instead of overflowing), and the ticker becomes the one
+deliberate exception to "no scrollbars anywhere": it scrolls with a thin
+house-style scrollbar (check_d9.go's sweep now excludes `#turnTicker`),
+skips its own repaint while the user has scrolled away from the top (so a
+live update no longer drifts their reading position), and a new
+`check_d12.go` fails if any row is shorter than its own line height, if
+the box itself collapses, or if a run finds no rows to check. Process
+groups: the trend column is capped to at most half the panel width via a
+`<colgroup>` plus `table-layout:fixed` (`12_process_groups.png` showed it
+eating most of the panel under the old `width:100%` auto-layout hint);
+also fixed a pre-existing dead CSS selector that matched nothing. Harness
+heatmap: each cell now carries an Activity-heatmap-style hover title
+(harness, `HH:mm`, CPU percent, tokens when there are any, "no activity"
+otherwise), correlating `burn.turns` onto the sysmon harness vocabulary via
+a new `HARNESS_AGENTS` map mirroring `internal/advisor`'s own
+`harnessAgents`; the CPU figure is an average over that minute's sample
+count, not the colour-intensity math's own raw sum (review caught this -
+at ~6 samples/minute a busy harness could otherwise show "600% CPU"), and
+token correlation is limited to `burn.turns`' own 30-minute/50-turn
+window, narrower than the heatmap's 60-minute CPU history, so an older or
+busier cell can show CPU with no token figure even when real activity
+happened. Headline: today's total renders as a full comma-separated whole
+number (`fmtTokensFull`) instead of the K/M abbreviation used everywhere
+else, bigger (36px baseline, 48px at 1152px+) with width reserved for 12
+digits so the header never reshuffles as it grows, tweened with a linear
+ease over the current tick interval (the one exception to the shared
+600ms ease-out) - though the underlying value only actually changes on
+`vendor_strip`'s own 60s cache refresh, so most ticks are a no-op, not
+continuous motion. Header gap widened (16px to 24px) to fix "3 sessions"
+clipping against the headline (`14_topbar.png`).
+
+A fresh read-only Opus review over the diff caught five real issues before
+commit, all fixed here: `animateNumber` only recorded its in-flight value
+at t=1, so a tween cancelled mid-flight (routine once its own duration is
+close to the tick cadence, exactly the headline's new case) restarted from
+the stale pre-tween value and visibly snapped backward; the heatmap's raw
+per-minute CPU sum mislabeled as a percentage; the ticker's full-innerHTML
+replace every tick would have drifted a scrolled-down reading position by
+one row height per new turn; the dead `#processGroupsHead th:...` CSS
+selector (that id belongs to the panel's title div, not the table's own
+thead); and a doc comment overclaiming the headline "keeps counting up"
+continuously when the data source only changes once a minute.
+
+`go vet`, `go test ./... -count=1`, `.\build.ps1`, `node --check` on the
+page JS, and `uicheck d0`-`d12` (rerun in full after the review fixes) all
+pass. Display scale in this sandboxed session: every d-check's requested
+window size lands at roughly half its CSS-pixel target (e.g. 1280x860 real
+to 627x395), consistent with ~200% Windows display scaling; d7's own
+fullscreen path still reaches the full 1600x1000 CSS px this session's
+screen actually offers, and that is where the ticker/process-groups/
+heatmap-hover screenshots for this session's own report were taken (not
+committed - ad hoc verification only, per the four reference screenshots
+already committed with the patch). Version stays `0.4.0-alpha.1` on
+purpose (phase 5, not this patch, does the bump); not pushed, tagged, or
+merged.
+
+## 2026-09-25, v0.4 burn chart no-scroll patch (sections 1-5)
+
+Followed `02_roadmap\2026-09-25_ws2_burn_chart_no_scroll_patch.md` end to end
+on `burnmon-dev`. Burn chart is bars only now (turn tick marks and finding
+lines gone; findings still show in the ticker tags and turn popup); every
+harness and session gets its own colour from one shared categorical palette
+(`HARNESS_HUE`), Claude Code and Cowork no longer read as the same orange
+anywhere, including the process-groups/harness-heatmap panels that use a
+separate vocabulary for the same tools (found by review: the first pass
+missed that `claude-desktop`, sysmon's own harness key, *is* Cowork there,
+per `internal/advisor`'s own harness map); a compact per-session legend sits
+under the chart. No scrollbar anywhere at 1024x768/1280x860/1152x2048/
+1920x1080/2560x1440 (`cropToFit`/`cropTableRows`, analytical column math for
+the two heatmaps, `overflow:hidden` on `.panel` itself as a last-resort
+backstop): the turn ticker, activity heatmap, harness heatmap, process
+groups and To Do panel all crop to whole items instead of scrolling, the
+turn popup crops its tool-call list with "+N more". Window too small drops
+To Do, then process groups, then the Activity/heatmap row, in that fixed
+order (`applyPanelFit`/`pageOverflows`), header/burn chart/vendor
+strip/turn ticker/system panel never drop; a panel re-render on the way
+back from dropped (and on resize/F11) redraws from its own last-fetched
+cache instead of showing one stale, mis-cropped frame. One shared render
+tick (`bdevSnapshotNow`, 2s default, floored at 1000ms, `refresh_ms` in
+burnmon-dev.json): every panel now paints from one Go-side snapshot inside
+one `requestAnimationFrame`, replacing eleven independent
+setInterval/poll pairs; vendor strip, the activity heatmap, process-groups
+history and Microsoft To Do status/tasks refresh on their own slower
+background cadence (`startSlowRefreshers`, app.go) and are only ever
+painted on the shared tick. Version stays `0.4.0-alpha.1` on purpose (phase
+5, not this patch, does the bump); not pushed, tagged or merged.
+
+Two fresh read-only Opus reviews (sections 1-4, then section 5) both caught
+real bugs before commit: the session-rank sort key read a live shared
+counter instead of each session's own assigned index (bars could visibly
+reorder poll to poll); the session colour palette had three near-duplicate
+hue pairs and reused exact colours after 8 wrapped sessions (replaced the
+lighten/darken wrap with an 8-bit-clean hue rotation); the Cowork/Claude
+Code colour bug above; a hidden-then-shown panel repainted at 0 clientWidth
+until its own next slow poll (fixed: `applyPanelFit` now re-renders a panel
+the instant it stops being dropped); and, most seriously, `startSlowRefreshers`
+called synchronously from `main()` reintroduced the exact "blocks window
+creation" regression section 11 had already fixed (a cold 182-day heatmap
+scan plus up to two Microsoft Graph calls before the window existed) -
+backgrounded now, window creation measured at 702-752ms and first render at
+939-973ms across several runs, matching the established fast-launch
+baseline. Real-window testing at the app's own 1280x860 default launch size
+(this session's own display reports ~2x DPI scaling, so that is really
+~627x395 CSS px) surfaced one more real gap the reviews had not: the vendor
+strip table had no height cap, so it alone could consume the burn zone's
+whole budget and push the turn ticker (an "always stay" panel) to zero
+height with the zone never technically overflowing; capped at 180px,
+`.panel`'s own `overflow:hidden` backstop clips it the same way as
+everything else. At that same tight size, even after both droppable
+candidates are dropped, the "always stay" panels alone still do not fully
+fit; confirmed by direct DOM inspection this is a genuine space constraint
+(the fixed drop order and re-render-on-show both verified working
+correctly), not a logic bug, and very likely specific to this sandboxed
+session's own DPI scaling rather than Wilco's real hardware.
+
+`go vet`, `go test ./... -count=1` and `.\build.ps1` all green. New
+`tools\uicheck` cases: `d8` (1024x768, the fifth viewport), `d9` (the
+no-scrollbar sweep across all five sizes, every element, not just body),
+`d10` (no marker/line elements in the burn chart), `d11` (records
+`paintMark`/`window.__bdevPaintLog` for 30s, fails if a tick's panels do
+not all land within one requestAnimationFrame of each other or the tick
+cadence drifts off `refresh_ms`) - all pass against the real running
+window, `d0`-`d6` unaffected. Screenshots taken at all five sizes against
+the real window; the workstation intermittently auto-locked mid-session
+(BitBlt then captures the lock screen, not the app - the same known
+limitation `d7`'s own comment already documents), so not every size has a
+final matched screenshot from the very last run, though every size was
+visually confirmed correct at least once earlier in the session. Reference
+screenshots `9_burn_chart_lines.png`/`10_scrollbars.png` committed with the
+patch, per house process.
+
+## 2026-09-25, v0.4 UI review patch (sections 1-11)
+
+Followed `02_roadmap\2026-09-25_ws2_ui_review_patch.md` end to end on
+`burnmon-dev`, five commits (measured startup first, then sections 1-8
+together, 10, 9, 11's own rest, plus one design-note-only commit and this
+log entry). Header, burn chart (per-session stacked bars, CPU line
+overlay removed), vendor strip totals row, the activity/harness-heatmap
+split row, a turn ticker with a click-through popup (new
+`live.TurnDetail.Cost`, `bdevTurnDetail`), a perfadvisor-style system
+panel (new `Sample.SwapUsedMB/Disks/Wifi`, `sysmon.BaseClockGHz()`,
+source commit perfadvisor main `2ed8046`), process-groups column tweaks,
+and the "Today's Read" panel's deletion (its `bdevAdvisorNow` binding
+only; `internal/advisor` itself is unchanged and still runs inside the
+export bundle). Window state now persists across launches and F11/Esc
+fullscreen works (new `cmd\burnmon-dev\windowstate.go`, hand-rolled Win32:
+go-webview2 exposes no placement/settings API, and WebView2/Chromium
+reserves F11 as a browser accelerator key the page's own JS never sees, so
+a global hotkey plus a thread-local `WH_GETMESSAGE` hook reacts to it
+directly). Responsive CSS breakpoints (900px/1600px) replace the phase 1-2
+two-viewport/tabs plan, which was never finished. A new, optional
+Microsoft To Do panel (`internal/todo`, also ported from perfadvisor,
+off by default). Startup ordering changed last: the native-root filesystem
+scan and the startup backfill used to run before the window was created;
+they now run in a background goroutine after it, so window creation
+dropped from 18.67s to 0.80s and first full render from 19.08s to 1.03s,
+measured against the real store both times, with a new loading screen and
+a header status line covering the gap until backfill actually finishes.
+
+Three fresh read-only Opus reviews (one per major commit) caught, and this
+session fixed, real bugs rather than style nits: a `WINDOWPLACEMENT`
+struct with an extra field only valid on the old Mac Win32 port (silently
+failed every window-state save/restore), `MonitorFromPoint` called with
+two arguments instead of one packed `POINT` (silently found no monitor
+ever), an unguarded system-wide F11 hotkey, a turn-popup stale-response
+race, a Microsoft To Do sign-in that could get permanently stuck after one
+failed attempt, and a per-file progress callback that could have pushed
+thousands of UI-thread round trips against a large trail. `go vet`,
+`go test ./...`, `.\build.ps1` and a `node --check` pass on `page.html`'s
+script all green throughout. `uicheck` `d0` through `d6` pass together in
+one run against the real window; `d7` (the real F11 keypress test) was
+independently verified working end to end earlier in the session, with
+real screenshots, but could not be re-run in the final pass because the
+workstation was locked at that exact moment (SendInput correctly refuses a
+locked secure desktop). Not pushed, tagged or merged, per house process.
 
 ## 2026-09-24, WS1 cleanup: dev-only mode, Sessions harness fix, History stacked chart, v0.3.1
 
@@ -302,6 +742,77 @@ const `version`); `README.md` and `STATUS.md` updated throughout (Dev/Business a
 Monitor mode sections removed, adapter/pages/cost/forecast/config sections rewritten for
 v0.3.1). Not pushed, not tagged, not committed by this session: see the hub brief and the
 commands handed to Wilco.
+
+## 2026-09-24, v0.4 WS2 phase 4: advisor panel and export
+
+Built the "TODAY'S READ" advisor panel and the AI-ready export bundle on
+`burnmon-dev`, following `02_roadmap\2026-09-24_ws2_burnmon_dev.md`'s phase
+4 scope. `internal/advisor` (six table-driven rules: heavy-turn-pressure,
+harness-runaway, cache-hit-drop, context-window, hard-faults-memory,
+self-overhead), `internal/devexport` (pure `Assemble`/`BuildSummaryMD`/
+`BuildDataJSON`/`BuildDailyCSV`/`Redact`, `Write` the only disk-touching
+function), `internal/sysmon/machineprofile*.go`, the `export` CLI
+subcommand and `bdevAdvisorNow`/`bdevExport` bindings, and a page.html
+panel plus header button. Built test-first throughout (advisor and
+devexport both have real fire/no-fire unit tests, including a dedicated
+privacy test that a prompt/response-text fixture never reaches any of the
+three export files).
+
+A fresh Opus review agent over the whole diff, before committing, caught
+one real must-fix (`live.BuildTurns` had silently inherited the Now page's
+50-turn ticker cap, so a 24-hour export's advisor pass only ever saw its
+newest 50 turns, and could make harness-runaway fire a false positive for
+a harness whose real turns had aged out of that cap) plus several
+should-fix items, all applied and re-verified before commit: heavy-turn-
+pressure no longer counts cache reads toward "heavy" (nearly every late-
+session turn was crossing 200K on cache read alone); both per-turn rules
+now collapse a sustained episode into one finding via a 5-minute cooldown
+instead of one finding per matching turn; `Redact` now salts its hash with
+a per-install random value (`redact_salt`, generated once) instead of an
+unsalted 8-hex-character hash that a short, guessable name like a client
+folder could realistically be reverse-brute-forced from; the export folder
+name now includes seconds and uses local time (was colliding on two
+exports in the same UTC minute); `--until` on a bare `YYYY-MM-DD` now
+means through the end of that day (was excluding the whole day, since
+Assemble's window is exclusive at the upper bound); and a documented
+caveat that `burnmon-dev.exe`, built `-H windowsgui`, needs
+`Start-Process -Wait -RedirectStandardOutput` (or an output redirect) for
+the `export` subcommand's own stdout to be visible from a shell.
+
+Ran a real 24-hour export against the live store both times (before and
+after the review fixes): `summary.md` reads as a genuinely usable prompt
+(machine profile, totals per harness/model, top 10 expensive turns, real
+pressure episodes, advisor findings, known limits); real sizes measured
+this session ranged from about 3.4KB to 11.5KB for `summary.md` (well
+under the ~30KB budget; a synthetic 720-turn stress test in
+`devexport_test.go` also stays under budget), 1.1-1.6MB for `data.json`
+(no size budget applies), under 1KB for `daily.csv`. The advisor's own
+self-overhead rule fired on real data both times, correctly naming
+`burnmon-dev.exe`'s own known shared-ingest memory climb (design doc,
+"both exes climb to about 900 MB... a BurnMon bug on main, handled in a
+separate session") rather than a false alarm.
+
+Built a parallel `tools\uicheck`/`scripts\uicheck-dev.ps1` dev-eval-channel
+path for `burnmon-dev.exe` (port 9334, env `BURNMON_DEV_UICHECK`, window
+title "BurnMon Dev": none of this existed before this session) since the
+plan's own verify list calls for "uicheck d* cases". Four checks (`d0`-
+`d3`) all ran and passed against the real running window this session:
+advisor panel populates with real findings, the header EXPORT button
+writes real files end to end (click through the dev eval channel, then
+confirmed on disk), and both viewports screenshot with no content
+clipping (`d2` at this session's own screen came within about 16px width /
+39px height of the 1152x2048 target; `d3`'s known "system zone scrolls
+here" gap, design doc section 2.2, "not wired yet", is unchanged by this
+phase and was not asserted away). This laptop's own cold start for
+`burnmon-dev.exe` (window plus startup backfill) measured up to ~90s this
+session, well past `burnmon.exe`'s 20s equivalent wait budget; the dev
+script's own wait is 120s.
+
+`go vet ./...`, `go test ./... -count=1` (every package, including the new
+ones) and `.\build.ps1` all green; `node --check`-equivalent parse on
+page.html's script tag clean. Committed on `burnmon-dev`, not pushed,
+tagged or merged, per house process. Left alone, per the plan's own scope:
+the shared memory/handle-growth bug, plan limits, phase 5.
 
 ## 2026-09-24, v0.3 V3-6: release candidate, Done-when and VERIFY pass, v0.3.0
 

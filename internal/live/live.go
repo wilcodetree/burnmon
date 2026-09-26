@@ -312,18 +312,32 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time, bu
 		WindowStart:          windowStart.UTC().Format(time.RFC3339),
 		BucketSeconds:        bs,
 		Chart:                buildChart(events, cfg, windowStart, now, bs),
-		Turns:                buildTurns(events, cfg, windowStart, now),
+		Turns:                buildTurns(events, cfg, windowStart, now, turnTickerCap),
 	}
+}
+
+// BuildTurns is buildTurns exported with no cap, for a caller that needs
+// every real turn over an arbitrary window, not the Now page's fixed
+// 30-minute, 50-line-ticker chart window (phase 4's advisor rule engine and
+// export bundle, both of which look back further than ChartWindow and both
+// of which need the whole window, not just its newest 50 turns: capping
+// here silently under-counted a busy 24-hour export to its last 50 turns,
+// and could make advisor's harness-runaway rule see "zero turns" for a
+// harness whose real turns had aged out of the cap, a false positive caught
+// by review, 2026-09-24).
+func BuildTurns(events []schema.Event, cfg *pricing.Config, windowStart, now time.Time) []TurnEvent {
+	return buildTurns(events, cfg, windowStart, now, 0)
 }
 
 // buildTurns implements I3's turn ticker and marker source: every real turn
 // across every (vendor, session_id) group with at least one turn inside
-// [windowStart, now], newest first, capped at turnTickerCap. Groups its own
-// events independently of BuildSnapshot's sessions map (which only keeps
-// still-running groups) so a session that stopped a few minutes ago but is
-// still inside the 30-minute chart window still contributes its turns and
-// findings here.
-func buildTurns(events []schema.Event, cfg *pricing.Config, windowStart, now time.Time) []TurnEvent {
+// [windowStart, now], newest first. limit caps the result to the newest
+// limit turns (I3's own "capped at 50 lines"); limit<=0 means no cap,
+// BuildTurns' own case. Groups its own events independently of BuildSnapshot's sessions
+// map (which only keeps still-running groups) so a session that stopped a
+// few minutes ago but is still inside the window still contributes its
+// turns and findings here.
+func buildTurns(events []schema.Event, cfg *pricing.Config, windowStart, now time.Time, limit int) []TurnEvent {
 	type group struct {
 		vendor, sessionID string
 		events            []schema.Event
@@ -375,8 +389,8 @@ func buildTurns(events []schema.Event, cfg *pricing.Config, windowStart, now tim
 	}
 
 	sort.SliceStable(out, func(i, j int) bool { return out[i].At > out[j].At })
-	if len(out) > turnTickerCap {
-		out = out[:turnTickerCap]
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
 	}
 	return out
 }
@@ -395,6 +409,11 @@ type TurnDetail struct {
 	CacheWrite int64              `json:"cache_write"`
 	CacheRead  int64              `json:"cache_read"`
 	Output     int64              `json:"output"`
+	// Cost is turnCost's own subscription-share figure for this one event
+	// (BurnMon Dev UI review patch, section 5: the turn detail popup shows
+	// cost alongside the token split, which burnmon.exe's own drawer,
+	// ported from here, does not surface).
+	Cost float64 `json:"cost"`
 	// HasGap is false for a session's own first turn: there is no previous
 	// turn to measure a gap against.
 	HasGap     bool               `json:"has_gap"`
@@ -438,7 +457,7 @@ func BuildTurnDetail(st *store.Store, cfg *pricing.Config, sessionID string, tur
 	d := TurnDetail{
 		SessionID: sessionID, Vendor: e.Vendor, Agent: e.Agent, Model: e.Model,
 		Turn: turn, At: e.At.UTC().Format(time.RFC3339),
-		Fresh: e.Input, Output: e.Output,
+		Fresh: e.Input, Output: e.Output, Cost: turnCost(e, cfg),
 	}
 	if e.CacheWrite != nil {
 		d.CacheWrite = *e.CacheWrite

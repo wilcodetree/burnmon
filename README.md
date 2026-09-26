@@ -177,6 +177,46 @@ outside the WebView2 window, so the page falls back to its own "only available i
 BurnMon app window" text for anything live, the same as any saved report. **Untested**:
 built and cross-compiled, never run on real macOS or Linux hardware.
 
+## BurnMon Dev
+
+`burnmon-dev.exe` (`v0.4.0-alpha.2`) is a second, developer-facing window: what running
+AI agents burn (tokens, cost, turns) on top, what the laptop does (CPU, per-core heat
+grid, memory, disk, network, GPU, harness process groups) below, on one time axis, so a
+performance problem and a token spike show up together. It reuses `burnmon.exe`'s own
+`internal\` packages and shares the same store (`%LOCALAPPDATA%\burnmon\burnmon.db`)
+whether or not `burnmon.exe` is open at the same time; system samples go to a separate
+`burnmon-dev.db` next to it, retained 7 days by default (`retention_days` in
+`burnmon-dev.json`). Dark, dense, amber-on-black, built for a portrait second screen but
+responsive down to a single compact column.
+
+- **Start**: double-click `burnmon-dev.exe`, built alongside the other two by
+  `.\build.ps1`. First launch opens an ordinary 1280x860 window, centered; after that its
+  size, position, maximized state and monitor are remembered and restored if that monitor
+  still exists.
+- **F11** toggles fullscreen; **Esc** also leaves it.
+- **Minimized**: painting stops and the system sampler slows to one sample per 10s; both
+  resume immediately, with one fresh render, the moment the window is restored.
+- **Microsoft To Do** panel: off by default, `"microsoft_todo_enabled": true` in
+  `burnmon-dev.json` turns it on. Its own device-code sign-in (shows the code and URL in
+  the panel, opens the browser), its own token cache under
+  `%LOCALAPPDATA%\burnmon\`, separate from `burnmon.exe`. Read-only; task text is live
+  only, never written to an export, a log or a committed screenshot.
+- **Export**: the header's "EXPORT" button, or
+  `burnmon-dev.exe export --since --until --out DIR [--redact]` (`--since`/`--until` take
+  a local day, YYYY-MM-DD, or a full RFC3339 timestamp), writes an AI-ready bundle to
+  `DIR\burnmon-dev_<yyyy-mm-dd_hhmm>\`: `summary.md` (machine profile, totals per
+  harness/model, top expensive turns with the system state at that moment, advisor
+  findings, a ready prompt asking a model for concrete improvements), `data.json` (full
+  timeline, schema-versioned) and `daily.csv`. `--redact` replaces project, client and
+  owner names with stable hashes; never exports prompt or response text either way.
+- `refresh_ms` in `burnmon-dev.json` (default and floor both 1000) sets the one shared
+  paint cadence every panel renders on; the process-group walk (a single system-wide
+  process snapshot per walk, not one query per process) and persistence to
+  `burnmon-dev.db` run on their own fixed cadences (3s and 10s) regardless of it, so a
+  faster paint refresh never multiplies process-scan or disk-write cost. Go process
+  measured at 0.28 percent average whole-machine CPU over 10 minutes with `burnmon.exe`
+  co-running, under the 2 percent target.
+
 ## Configuration
 
 Prices and the subscription calibration are compiled-in illustrative defaults (see
