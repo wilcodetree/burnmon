@@ -1,8 +1,8 @@
 # Parked after v0.4.0-alpha.2 (2026-09-26)
 
 Wilco accepted v0.4.0-alpha.2 (`c236162`, branch `burnmon-dev`) as is. These items came out of
-the hub review of the phase 5, WS3 and WS2 performance patch reports. None is scheduled. Never
-use em dashes anywhere.
+the hub review of the phase 5, WS3 and WS2 performance patch reports. Items 1 to 5 are planned
+as v0.4.0-alpha.3, later, no date (`roadmap.md` item 9). Never use em dashes anywhere.
 
 ## BurnMon Dev (branch `burnmon-dev`)
 

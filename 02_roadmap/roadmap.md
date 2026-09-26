@@ -63,7 +63,16 @@ Priority order lives here and only here.
    `2026-09-23_v0.3_session_prompts.md`. Grilled 2026-09-23. **DONE 2026-09-24, tagged
    `v0.3.0`, 15 days early, all Done-when items pass against the built exe and the real
    local store, no fail carried into the tag** (V3-6, `SESSION_LOG.md`).
-8. Decision 2026-12-19.
+8. WS1 to WS3 plus BurnMon Dev (2026-09-24 to 2026-09-26). **DONE:** v0.3.1 cleanup
+   (`1291ef9`), v0.3.2 shared ingest performance and local time everywhere (`69a071e`),
+   BurnMon Dev `burnmon-dev.exe` v0.4.0-alpha.2 on branch `burnmon-dev` (`c236162`), accepted
+   by Wilco 2026-09-26 and merging into `main`. Briefs: `2026-09-24_ws1_burnmon_cleanup.md`,
+   `2026-09-24_ws2_burnmon_dev.md`, `2026-09-26_ws3_shared_ingest_performance.md`,
+   `2026-09-26_ws2_performance_patch.md`.
+9. v0.4.0-alpha.3, later, no date: BurnMon Dev minimized RAM (297 MB against a 250 MB
+   target), WebView2 memory target, To Do due dates in local time, d9 at 1920x1080, w1 solo
+   re-run. Items and main-side follow-ups: `2026-09-26_parked_after_alpha2.md`.
+10. Decision 2026-12-19.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.
 Architecture (decided): `..\04_assets\2026-09-22_token_monitor_architecture.md`.
