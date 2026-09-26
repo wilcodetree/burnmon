@@ -2,6 +2,95 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-26, v0.4 phase 5: verify and release
+
+Followed `02_roadmap\2026-09-24_ws2_burnmon_dev.md`'s "Verify and close" and this session's
+own fixes-first brief, on `burnmon-dev`. Headline: today's total used to only move on
+`vendor_strip`'s own 60s cache refresh; `cmd\burnmon-dev\headline.go`'s new
+`headlineTodayTokens` now adds tokens from the shared tick's own already-fetched
+30-minute `live.ChartWindow` events that landed after the cache's own `GeneratedAt`
+moment, so the header moves nearly every 2s tick instead of once a minute, with no extra
+store query and no double count (three unit tests, including a cache-refresh boundary and
+a stale-cache-across-midnight reset). `tools\uicheck`'s `ensureWindowSizeWH` now reads
+`GetDpiForWindow`/`AdjustWindowRectExForDpi`/`MonitorFromWindow` so a requested viewport
+size (e.g. "1152x2048") really means that many CSS pixels regardless of display scaling,
+capped to the target monitor with a logged note when it does not fit; re-ran `d0`-`d12`
+against this sandbox's own ~200%-scaled, 1600x1000 CSS screen and confirmed exact matches
+where the viewport fits (e.g. `d4`'s 1280x860) and a clear, logged cap where it does not
+(e.g. `d2`'s 1152x2048 capped to 1152x915), replacing the previous silent roughly-half-size
+bug.
+
+Rebased onto `main`'s `v0.3.1` (`1291ef9`, WS1's Monitor-mode removal and Sessions/pricing
+fixes): one conflict, `SESSION_LOG.md` (both branches prepend to the same file), resolved
+by keeping both entries in newest-on-top order, no other file conflicted. Full verify pass
+green after: `go vet ./...`, `go test ./... -count=1` (every package), `.\build.ps1`,
+`node --check` on both page JS files (`cmd\burnmon-dev\page.html` and
+`internal\report\template.html`), `uicheck d0`-`d12` and the full `w0`-`w8` suite (`w1`
+failed once under load from the concurrent build/test/uicheck activity, exactly the same
+known first-paint-budget flake earlier sessions documented, passed clean on retry).
+Committed the four untracked UI-review reference screenshots
+(`04_assets\reference\2026-09-25_ui_review\5_topbar_target.jpg` through `8_current.jpg`).
+
+Wilco asked, mid-session, for the header's headline total to sit centered between the
+"BURNMON DEV" title and the stat cluster rather than hugging the title; `.hltotal` now
+grows to fill that gap (`flex:1 1 auto`) and centers its own text within it, verified by
+screenshot at five widths (1024 to 2560 CSS px) with no wrapping or clipping introduced.
+
+Phase 5b: measured `burnmon-dev.exe` for 10 minutes with `burnmon.exe` co-running at the
+then-current default `refresh_ms` 2000: 2.22 percent average whole-machine CPU (peak
+19.14 percent), peak RAM 937 MB, peak handles 13,940. RAM and handles match the design
+doc's own documented, out-of-scope shared-ingest climb (WS3); not touched here. Split
+sampling into three independent cadences (`cmd\burnmon-dev\app.go`'s `startSampling`):
+paint/cheap system sample on `refresh_ms`, the expensive full process walk fixed at 3s,
+persistence to `burnmon-dev.db` fixed at 10s wall clock, so a faster paint cadence no
+longer multiplies process-scan or disk-write cost. Fixed the process-groups panel's CPU
+unit: gopsutil's per-process `Percent` is unnormalized (100% = one full logical core, so a
+multi-threaded process can exceed 100%), unlike every other "%" on the page (header, CPU
+box, pressure score), which is normalized against the whole machine - Wilco's own "BurnMon
+Dev 47%" observation could not be read as either convention with confidence. `page.html`
+now tracks the live core count and divides by it before display, in both the
+process-groups table and the harness heatmap's hover average; the value stored in
+`ProcessGroupSample.CPUPct` itself is deliberately left unnormalized, since
+`internal/advisor`'s `RunawayCPUPct`/`SelfCPUPct` thresholds are calibrated against it.
+Re-measured 10 minutes at `refresh_ms` 1000 under the new split cadences: 1.89 percent
+average (peak 16.96 percent), peak RAM 937.5 MB, peak handles 13,774 - under the 2 percent
+bar and not worse than the 2000 run (it was, if anything, a little better), so
+`refresh_ms`'s own default flips to 1000 per the design doc's own flip condition. Re-ran
+`d7` (real F11) and the full `d0`-`d12`/`w0`-`w8` suites again against the final build,
+all green.
+
+Version `0.4.0-alpha.1` confirmed in `cmd\burnmon-dev\app.go` and `winres\burnmon-dev.json`
+(both already set from earlier phases). Added a "BurnMon Dev" section to `README.md`
+(what it is, start, F11, the Microsoft To Do opt-in, export, `refresh_ms`) and a matching
+section to `STATUS.md` describing this branch's current state, the phase 5 fixes and the
+still-open shared-ingest gap.
+
+A fresh, independent read-only review agent over the full `main..burnmon-dev` diff (74
+files, about 10.5k insertions - the whole BurnMon Dev feature, not just this session's
+own changes) found the sampling refactor's locking discipline, the CPU-per-core display
+fix and `tools\uicheck`'s DPI/monitor-cap math all correct as written, and no security
+issues (export never reads event `Title`, `--redact` salts and hashes correctly,
+Microsoft To Do stays read-only, task text never persisted). One real gap: `headline.go`'s
+`headlineTodayTokens` can silently undercount, and worse visibly dip, if `vendor_strip`'s
+own 60s refresh stalls for longer than `live.ChartWindow` (30 minutes, a sustained store
+error, not just sleep/wake) - an event counted on one tick can age out of the sliding
+window on a later one while the cache still has not refreshed, so the sum it contributed
+would disappear again. Fixed with `a.headlineTodayMonotonic` (headline.go), a per-day
+floor guarded by `a.mu`: the value only ever holds level or rises within a calendar day; a
+genuine day rollover still resets rather than clamping against the previous day's higher
+total. Two new tests, one reproducing the exact dip (confirms the bare function really
+would drop, then confirms the wrapper holds) and one confirming the day-rollover reset
+still works; `headline.go`'s test count is now five. Also corrected a review-flagged
+inaccuracy in `.hltotal`'s own doc comment (it shares the header's free space with
+`.hdrspacer` rather than consuming all of it alone, though the visual result, screenshotted
+at five widths, was already correct). Full verify green again after this fix; this
+session's own real-world proof of the day-rollover reset: the sandbox's clock crossed UTC
+midnight mid-session and the headline correctly dropped from 534,790,202 to 12,700,392,
+not a jump-back bug, the new day's own true total.
+
+Not pushed, tagged or merged, per house process; see the hub brief and the commands
+handed to Wilco for the exact next steps.
+
 ## 2026-09-26, WS3: shared ingest performance, local time everywhere, v0.3.2
 
 Read first: `02_roadmap\2026-09-26_ws3_shared_ingest_performance.md` (decisions already
