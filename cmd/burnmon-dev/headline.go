@@ -57,6 +57,18 @@ func headlineDayStart(now time.Time) time.Time {
 // never be smaller than the previous tick's, since each tick's cache base
 // only grows and its delta only adds events after that same, unmoving
 // cache moment.
+//
+// One gap this function alone cannot close (found by review, 2026-09-26):
+// if vendor_strip's own 60s refresh (startSlowRefreshers, app.go) stalls
+// for longer than live.ChartWindow - a sustained store error, not just a
+// sleep/wake, which refreshes within one tick - cacheGeneratedAt falls
+// behind events' own window start. Every fetched event is then "after
+// cacheTime" and gets added on top of the stale base, but tokens from the
+// gap between cacheTime and the window start are in neither, silently
+// missing. Worse, as those already-counted events age out of the sliding
+// window on later ticks, the sum they contributed shrinks, so the total
+// would visibly dip. headlineTodayMonotonic below is the guard: call that,
+// not this function directly, from bdevSnapshotNow.
 func headlineTodayTokens(vendorTotal vendorstrip.Row, cacheGeneratedAt string, events []schema.Event, now time.Time) int64 {
 	day := headlineDayStart(now)
 	cacheTime, err := time.Parse(time.RFC3339, cacheGeneratedAt)
@@ -77,4 +89,30 @@ func headlineTodayTokens(vendorTotal vendorstrip.Row, cacheGeneratedAt string, e
 		added += eventTokens(e)
 	}
 	return base + added
+}
+
+// headlineTodayMonotonic wraps headlineTodayTokens with a per-day floor
+// (a.headlineDay/a.headlineFloor, guarded by a.mu): the candidate value
+// only ever holds level or rises within one calendar day, never dips, even
+// during headlineTodayTokens' own documented gap (a vendor_strip refresh
+// stalled past live.ChartWindow). A day boundary always resets the floor
+// rather than clamping the new day's low starting total against the old
+// day's high one - that reset is intentional, not the jump back this
+// guards against.
+func (a *app) headlineTodayMonotonic(vendorTotal vendorstrip.Row, cacheGeneratedAt string, events []schema.Event, now time.Time) int64 {
+	candidate := headlineTodayTokens(vendorTotal, cacheGeneratedAt, events, now)
+	day := headlineDayStart(now)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.headlineDay.IsZero() || !a.headlineDay.Equal(day) {
+		a.headlineDay = day
+		a.headlineFloor = candidate
+		return candidate
+	}
+	if candidate < a.headlineFloor {
+		return a.headlineFloor
+	}
+	a.headlineFloor = candidate
+	return candidate
 }

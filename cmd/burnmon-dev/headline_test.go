@@ -85,6 +85,60 @@ func TestHeadlineTodayTokens_CacheCrossesMidnight(t *testing.T) {
 	}
 }
 
+// TestHeadlineTodayMonotonic_NeverDipsOnStaleCache reproduces the gap found
+// by review: a vendor_strip cache stalled for longer than live.ChartWindow,
+// so an event counted on one tick later ages out of the fetched window
+// while the cache still has not refreshed. The bare headlineTodayTokens
+// would then report a lower number than before (its own doc comment says
+// so); headlineTodayMonotonic must hold the floor instead.
+func TestHeadlineTodayMonotonic_NeverDipsOnStaleCache(t *testing.T) {
+	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	cacheAt := day.Add(5 * time.Minute) // never refreshes again in this test
+	vendorTotal := vendorstrip.Row{Today: 1000}
+	tickEvent := mkEvent(cacheAt.Add(1*time.Minute), 500, 0, nil, nil)
+
+	a := &app{}
+
+	// Tick 1: the event is still inside the fetched window and after
+	// cacheAt, so it adds on top of the cached base.
+	now1 := cacheAt.Add(20 * time.Minute)
+	got1 := a.headlineTodayMonotonic(vendorTotal, cacheAt.Format(time.RFC3339), []schema.Event{tickEvent}, now1)
+	if got1 != 1500 {
+		t.Fatalf("tick1 = %d, want 1500", got1)
+	}
+
+	// Tick 2: 35 minutes after the event, past live.ChartWindow (30 min),
+	// so it no longer appears in the fetched events at all; the cache
+	// still has not refreshed. Confirm the bare function really would dip
+	// here (the gap this test guards against), then confirm the wrapper
+	// does not.
+	now2 := tickEvent.At.Add(35 * time.Minute)
+	if bare := headlineTodayTokens(vendorTotal, cacheAt.Format(time.RFC3339), nil, now2); bare != 1000 {
+		t.Fatalf("sanity: bare headlineTodayTokens = %d, want 1000 (demonstrating the gap this test guards against)", bare)
+	}
+	got2 := a.headlineTodayMonotonic(vendorTotal, cacheAt.Format(time.RFC3339), nil, now2)
+	if got2 != 1500 {
+		t.Fatalf("tick2 = %d, want 1500 (monotonic floor must hold, not dip)", got2)
+	}
+}
+
+// TestHeadlineTodayMonotonic_DayRolloverResets: a genuine day boundary must
+// still reset to the new day's own low total, not be clamped against the
+// previous day's high one - that is the one intentional exception to
+// "never dips".
+func TestHeadlineTodayMonotonic_DayRolloverResets(t *testing.T) {
+	yesterday := time.Date(2026, 9, 25, 23, 0, 0, 0, time.UTC)
+	today := time.Date(2026, 9, 26, 0, 30, 0, 0, time.UTC)
+
+	a := &app{}
+	if got := a.headlineTodayMonotonic(vendorstrip.Row{Today: 900_000}, yesterday.Format(time.RFC3339), nil, yesterday.Add(10*time.Minute)); got != 900_000 {
+		t.Fatalf("day1 = %d, want 900000", got)
+	}
+	if got := a.headlineTodayMonotonic(vendorstrip.Row{Today: 40}, today.Format(time.RFC3339), nil, today); got != 40 {
+		t.Fatalf("day2 = %d, want 40 (new day resets, not clamped to yesterday's 900000)", got)
+	}
+}
+
 // TestEventTokens_SumsAllFourClasses matches internal/store.VendorStripTotals'
 // own SQL sum (input + cache_write + cache_read + output).
 func TestEventTokens_SumsAllFourClasses(t *testing.T) {

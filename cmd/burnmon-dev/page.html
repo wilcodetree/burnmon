@@ -59,10 +59,14 @@ header{
    (fmtTokensFull), no K/M/B - bigger, and min-width reserves room for 12
    digits plus their thousands separators (e.g. 999,999,999,999) so the
    header never reflows/shifts as the true value grows digit by digit.
-   flex:1 1 auto plus centered text (Wilco, 2026-09-26): the box grows to
-   fill the header's free space up to the next fixed-width .hstat, so the
-   number sits centered between the brand on its left and the stat
-   cluster on its right instead of hugging the brand. */
+   flex:1 1 auto plus centered text (Wilco, 2026-09-26): the header's own
+   free space splits between this box and .hdrspacer further right (both
+   flex:1 1 auto in the same row), so this one grows in place rather than
+   taking all of it; centering its own text inside that grown box is what
+   actually reads as "between the brand and the stat cluster" rather than
+   hugging the brand, checked by screenshot at five widths (review,
+   2026-09-26: an earlier version of this comment overstated the box as
+   consuming the header's whole free span on its own). */
 .hltotal{font-size:36px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; white-space:nowrap; min-width:15ch; flex:1 1 auto; text-align:center}
 @media (min-width: 1152px){
   .hltotal{font-size:48px}

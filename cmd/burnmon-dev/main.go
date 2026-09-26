@@ -311,8 +311,10 @@ func main() {
 		// HeadlineToday (2026-09-26 phase 5 fix) is vendorStrip.Total.Today
 		// plus tokens ingested since that cache's own GeneratedAt, from the
 		// events this same tick already fetched below for Burn - see
-		// headline.go's headlineTodayTokens. The header no longer waits on
-		// vendorStrip's own 60s refresh to move.
+		// headline.go's headlineTodayTokens, wrapped by
+		// a.headlineTodayMonotonic so a stalled vendor_strip refresh can
+		// never make this dip. The header no longer waits on vendorStrip's
+		// own 60s refresh to move.
 		HeadlineToday int64 `json:"headline_today"`
 	}
 	if err := w.Bind("bdevSnapshotNow", func() (snapshotPayload, error) {
@@ -367,7 +369,7 @@ func main() {
 			ActivityHeatmap:      heatmapPayload{Rows: heatmapRows},
 			Todo:                 todoStatus,
 			TodoTasks:            todoTasks,
-			HeadlineToday:        headlineTodayTokens(vendorStrip.Total, vendorStrip.GeneratedAt, events, now),
+			HeadlineToday:        a.headlineTodayMonotonic(vendorStrip.Total, vendorStrip.GeneratedAt, events, now),
 		}, nil
 	}); err != nil {
 		log.Println("could not bind bdevSnapshotNow:", err)
