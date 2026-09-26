@@ -125,6 +125,9 @@ Writes `DIR\burnmon-dev_<yyyy-mm-dd_hhmm>\`:
 1. Skeleton: `cmd\burnmon-dev`, `internal\sysmon` with tests, sample store, bindings, empty
    panels in the grid at both viewports.
 2. Burn zone.
+2b. Token-monitor items in the burn zone (added after phase 2 closed): running headline
+   total, tok/min, activity heatmap, cache-hit breakdown. Update the design note first, then
+   build. The export items (pure builders, `daily.csv`) go into phase 4.
 3. System zone and correlation (markers, process groups, heatmap).
 4. Advisor panel and export.
 5. Verify and release.
@@ -139,7 +142,9 @@ If context passes about 60 percent, stop at a phase boundary and write a handove
   scroll at 1152x2048, markers present, export writes both files and `data.json` validates.
 - Measure and report `burnmon-dev.exe` own CPU and RAM over 10 minutes. It must not become the
   load it monitors: target under 2 percent CPU average and under 250 MB RAM; report the real
-  number either way.
+  number either way. Known after phase 2: both exes climb to about 900 MB and 13k handles in
+  the first minute through the shared live-watch and store path. That is a BurnMon bug on
+  `main`, handled in a separate session; do not fix shared ingest code on this branch.
 - A fresh read-only review agent (Opus) over the diff before each commit.
 - Version: v0.4.0-alpha.1 on the branch (semver minor per `C:\ZND\AGENTS.md`).
 - Do not push, tag or merge. Hand Wilco the exact PowerShell commands (with `cd`).
