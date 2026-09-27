@@ -20,13 +20,15 @@ body{
 }
 /* no-scroll patch section 3: no visible scrollbar in any panel or on the
    page, at any window size. Every list/grid that used to scroll internally
-   (harness heatmap, activity heatmap, To Do, turn popup) now crops to whole
+   (harness heatmap, activity heatmap, turn popup) now crops to whole
    items instead (see cropToFit/renderProcessGroups' own row crop/the two
    heatmaps' column math below), so nothing here is ever meant to overflow;
-   overflow:hidden on each of those containers is the hard backstop. The turn ticker is the
-   one deliberate exception (headline patch section 1): it scrolls instead
-   of cropping, .ticker's own overflow-y:auto below and check_d9.go's own
-   exclusion for #turnTicker both reflect that. */
+   overflow:hidden on each of those containers is the hard backstop. Two
+   deliberate exceptions: the turn ticker (headline patch section 1, .ticker's
+   own overflow-y:auto below) and the To Do body (WS2 alpha.3 item 1,
+   .todobody's own overflow-y:auto below - rows keep their natural height
+   instead of shrinking to fit, the panel scrolls instead of squeezing them
+   unreadable). check_d9.go excludes both #turnTicker and #todoBody. */
 .fit-dropped{display:none !important}
 
 /* loading screen, section 11 steps 2-3: shown from first paint, hidden once
@@ -216,7 +218,15 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .heatcell.active{background:var(--grn)}
 .heatcell.empty{background:transparent}
 .heatmonths{display:flex; gap:2px; margin-top:3px}
-.heatmonth{width:9px; font-size:8px; color:var(--dim); overflow:visible; white-space:nowrap}
+/* WS2 alpha.3 item 6: overflow:hidden, not visible - a month label wider
+   than its 9px column (most of them are) used to spill past its own box,
+   which check_d9.go's scrollbar sweep correctly flags as a real overflow
+   regardless of how many columns happen to render at a given window width
+   (only 1920x1080 fit enough heatmap columns to actually render one of the
+   offending labels). Cropped to whatever fits, same convention as every
+   other narrow label on this page (.corelabel-l/.heatrow-label), rather than
+   widening the column and breaking the heatmap's own grid alignment. */
+.heatmonth{width:9px; font-size:8px; color:var(--dim); overflow:hidden; white-space:nowrap}
 
 /* harness x minute heatmap, phase 3 */
 .heatrow{display:flex; align-items:center; gap:6px; margin-bottom:2px}
@@ -234,7 +244,13 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .coreitem{display:flex; align-items:center; gap:4px; font-size:10px; color:var(--dim); min-width:0}
 .corebar{position:relative; flex:1; height:8px; background:#10151d; border:1px solid var(--bd); min-width:0}
 .corebar i{display:block; height:100%}
-.corelabel{flex:0 0 auto; white-space:nowrap; font-variant-numeric:tabular-nums}
+/* WS2 alpha.3 item 2: fixed slots on both sides of every .corebar so all 20
+   bars share the identical track length regardless of the label/value text
+   width - .corelabel-l fits "C19" (the widest core label, this box has 20
+   cores/C0-C19), .corelabel-r fits "100%" (the widest value), both
+   tabular-nums, the value right-aligned so its digits line up. */
+.corelabel-l{flex:0 0 3ch; white-space:nowrap; font-variant-numeric:tabular-nums}
+.corelabel-r{flex:0 0 4ch; white-space:nowrap; font-variant-numeric:tabular-nums; text-align:right}
 
 .histwrap{flex:1; min-height:60px; padding:6px 10px; display:flex; flex-direction:column}
 .histlegend{display:flex; gap:12px; flex-wrap:wrap; font-size:10px; color:var(--dim); margin-bottom:4px}
@@ -277,8 +293,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 /* Microsoft To Do panel, section 9: off by default, full width, sits below
    the two-column layout too (a sibling of main, not inside either zone). */
 .todopanel{flex:0 1 auto; max-height:200px; margin:0 4px 4px; display:none; flex-direction:column}
-.todobody{flex:1; min-height:0; overflow:hidden; padding:6px 10px; display:flex; flex-direction:column; gap:3px}
-.todorow{display:flex; gap:8px; align-items:baseline; font:11.5px/1.4 var(--mono); white-space:nowrap; overflow:hidden}
+.todobody{flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:6px 10px; display:flex; flex-direction:column; gap:3px}
+.todorow{flex:0 0 auto; display:flex; gap:8px; align-items:baseline; font:11.5px/1.4 var(--mono); white-space:nowrap; overflow:hidden}
 .todorow .due{color:var(--dim); flex:0 0 auto}
 .todorow .due.overdue{color:var(--red)}
 .todorow .title{color:var(--txt); overflow:hidden; text-overflow:ellipsis}
@@ -1485,9 +1501,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       var html = '';
       (sm.Cores || []).forEach(function(v, i){
         var color = v < 45 ? 'var(--grn)' : v < 75 ? 'var(--yel)' : 'var(--red)';
-        html += '<div class="coreitem"><span class="corelabel">C' + i + '</span>' +
+        html += '<div class="coreitem"><span class="corelabel-l">C' + i + '</span>' +
           '<div class="corebar"><i style="width:' + Math.min(100, v).toFixed(0) + '%;background:' + color + '"></i></div>' +
-          '<span class="corelabel">' + Math.round(v) + '%</span></div>';
+          '<span class="corelabel-r">' + Math.round(v) + '%</span></div>';
       });
       grid.innerHTML = html;
     }
@@ -1941,8 +1957,10 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // ("waiting for approval") with the plain sign-in button again.
   var todoState = 'unknown'; // 'unknown' | 'signedout' | 'pending' | 'signedin'
 
-  // renderTodoTasks: no-scroll patch section 3, "as many tasks as fit, then
-  // '+N more'" (cropToFit's own footerFn).
+  // renderTodoTasks: WS2 alpha.3 item 1 - the To Do body scrolls instead of
+  // cropping (its own second exception to the no-scroll patch, see the
+  // .todobody/.todorow rule above), so every task renders, no "+N more"
+  // footer and no cropToFit call.
   function renderTodoTasks(items){
     var body = document.getElementById('todoBody');
     if(!body) return;
@@ -1950,15 +1968,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       body.innerHTML = '<div class="placeholder" style="padding:10px">No tasks due today</div>';
       return;
     }
-    var rows = items.map(function(t){
+    body.innerHTML = items.map(function(t){
       return '<div class="todorow">' +
         '<span class="due' + (t.Overdue ? ' overdue' : '') + '">' + esc(t.DueDate || '') + '</span>' +
         '<span class="title">' + esc(t.Title) + '</span>' +
         '<span class="list">' + esc(t.List) + '</span></div>';
-    });
-    cropToFit(body, rows, function(remaining){
-      return '<div class="todorow" style="color:var(--dim)">+' + remaining + ' more</div>';
-    });
+    }).join('');
   }
 
   // renderTodoSignIn always leaves a working Sign in button behind, even
@@ -2067,9 +2082,28 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     if(log.length > 4000) log.splice(0, log.length - 4000);
   }
 
+  // trackChange/window.__bdevChangeCounts: WS2 alpha.3 item 3's own proof
+  // that the System zone shares one beat, not just that every panel paints
+  // on the same tick (paintMark/__bdevPaintLog already proved that). This
+  // counts how many ticks actually carried new data for a given snapshot
+  // field, so a uicheck case (check_d11.go) can confirm the process-groups
+  // walk and the main chart's own system sample change on the same ticks,
+  // instead of the process walk still lagging behind on its own slower
+  // cadence with paintTick simply repainting stale data every tick.
+  var __bdevChangeLast = {};
+  window.__bdevChangeCounts = { sysmon: 0, processGroups: 0 };
+  function trackChange(name, value){
+    var key = JSON.stringify(value);
+    if(__bdevChangeLast[name] !== key){
+      __bdevChangeLast[name] = key;
+      window.__bdevChangeCounts[name]++;
+    }
+  }
+
   function paintTick(snap){
     var now = new Date(snap.now);
     renderClock(now); paintMark('clock');
+    trackChange('sysmon', snap.sysmon);
     renderSysmonPanels(snap.sysmon); paintMark('sysmon');
     lastSysmonHistory = snap.sysmon_history || [];
     renderHistoryChart(lastSysmonHistory); paintMark('sysmonHistory');
@@ -2079,6 +2113,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     renderHeatmap(snap.activity_heatmap); paintMark('activityHeatmap');
     lastProcessGroupsNow = snap.process_groups_now || [];
     lastProcessGroupsHistory = snap.process_groups_history || [];
+    trackChange('processGroups', lastProcessGroupsNow);
     renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory); paintMark('processGroups');
     renderHarnessHeatmap(lastProcessGroupsHistory, snap.now, (snap.burn && snap.burn.turns) || []); paintMark('harnessHeatmap');
     renderTodoPanel(snap.todo, snap.todo_tasks); paintMark('todo');

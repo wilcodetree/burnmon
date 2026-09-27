@@ -27,6 +27,10 @@ func init() {
 		if _, err := evalRaw(`(window.__bdevPaintLog = [])`); err != nil {
 			return fmt.Errorf("reset paint log: %w", err)
 		}
+		// Same reset for WS2 alpha.3 item 3's own change counters (below).
+		if _, err := evalRaw(`(window.__bdevChangeCounts = {sysmon:0, processGroups:0})`); err != nil {
+			return fmt.Errorf("reset change counts: %w", err)
+		}
 
 		time.Sleep(30 * time.Second)
 
@@ -117,6 +121,50 @@ func init() {
 			if gap < refreshMs*0.4 || gap > refreshMs*2.5 {
 				return fmt.Errorf("tick %d to %d: %.0fms apart, expected close to the %.0fms refresh cadence", i-1, i, gap, refreshMs)
 			}
+		}
+
+		// WS2 alpha.3 item 3's own proof: the process-groups walk used to
+		// lag the rest of the System zone on its own 3s cadence, painting
+		// stale data on the ~2 out of 3 ticks its own data had not actually
+		// moved - paintMark above only proves every panel paints together,
+		// not that a new sample actually landed for processGroups as often
+		// as it did for sysmon. window.__bdevChangeCounts (page.html's
+		// trackChange, reset above) counts how many render ticks actually
+		// carried a new (previously unseen) payload for each snapshot
+		// field, over this same 30s window - both a.latest and
+		// a.latestGroups carry their own sample's Ts, which changes every
+		// time that sampler runs, so this counts "did a fresh sample land
+		// this tick", not a deeper semantic value comparison (a process
+		// group whose CPU/RAM/IO happen to read identically to the
+		// previous tick still counts as changed here, because its Ts did).
+		var changeCounts struct {
+			Sysmon         int `json:"sysmon"`
+			ProcessGroups int `json:"processGroups"`
+		}
+		if err := evalInto(`window.__bdevChangeCounts || {}`, &changeCounts); err != nil {
+			return fmt.Errorf("read change counts: %w", err)
+		}
+		fmt.Printf("uicheck: d11: shared beat over 30s - sysmon changed %d time(s), processGroups changed %d time(s)\n",
+			changeCounts.Sysmon, changeCounts.ProcessGroups)
+		if changeCounts.Sysmon == 0 || changeCounts.ProcessGroups == 0 {
+			return fmt.Errorf("d11: shared beat: sysmon changed %d time(s), processGroups changed %d time(s) - one of them never updated in 30s", changeCounts.Sysmon, changeCounts.ProcessGroups)
+		}
+		// Generous tolerance (item 3 only asks that they move on the same
+		// beat, not that every single render tick sees a brand new sample
+		// for both - the paint loop's own refresh_ms cadence and the 1s
+		// sample ticker are two independent tickers, so ordinary scheduling
+		// jitter between them can occasionally let one paint tick see the
+		// same a.latestGroups twice, or miss one; a rare procSampler.Tick
+		// error, logged but not fatal, also leaves a.latestGroups
+		// momentarily stale for one internal sample): a 3x difference
+		// either way would still indicate one of the two is stuck on a
+		// materially slower cadence than the other, not just jitter.
+		lo, hi := changeCounts.Sysmon, changeCounts.ProcessGroups
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		if hi > lo*3 {
+			return fmt.Errorf("d11: shared beat: sysmon changed %d time(s), processGroups changed %d time(s) - too far apart for a shared 1s cadence", changeCounts.Sysmon, changeCounts.ProcessGroups)
 		}
 
 		fmt.Printf("uicheck: d11: %d complete ticks in 30s, all panels paint within %.0fms of each other, cadence holds around %.0fms\n",

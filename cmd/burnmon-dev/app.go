@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	version     = "0.4.0-alpha.2"
+	version     = "0.4.0-alpha.3"
 	windowTitle = "BurnMon Dev"
 	mutexName   = `Local\burnmon-dev-app`
 )
@@ -130,18 +130,36 @@ type app struct {
 	// slowMu guards every "slow data" cache the shared render tick
 	// (no-scroll patch section 5, bdevSnapshotNow in main.go) reads but
 	// never itself recomputes: vendor strip and the activity heatmap
-	// refresh every 60s, process-groups history (also the harness heatmap's
-	// own source) every 10s, Microsoft To Do status every 30s and its task
+	// refresh every 60s, Microsoft To Do status every 30s and its task
 	// list every 300s (startSlowRefreshers, this file) - the same cadences
 	// this app used to poll each of these from the page directly, just
 	// moved server-side so every panel still paints from one snapshot per
-	// tick instead of resolving independently.
-	slowMu                 sync.Mutex
-	vendorStripCache       vendorstrip.Payload
-	heatmapRowsCache       []history.Row
-	processGroupsHistCache []sysmon.ProcessGroupSample
-	todoStatusCache        todoStatusPayload
-	todoTasksCache         todoTasksPayload
+	// tick instead of resolving independently. Process-groups history moved
+	// to sysHistMu/groupsHistBuf below, WS2 alpha.3 item 3's own fix.
+	slowMu           sync.Mutex
+	vendorStripCache vendorstrip.Payload
+	heatmapRowsCache []history.Row
+	todoStatusCache  todoStatusPayload
+	todoTasksCache   todoTasksPayload
+
+	// sysHistMu guards sysHistBuf/groupsHistBuf: WS2 alpha.3 item 3's own
+	// fix for a gap a fresh review found (2026-09-27) - bdevSnapshotNow used
+	// to serve SysmonHistory/ProcessGroupsHistory from burnmon-dev.db
+	// (sys.RecentSamples/RecentProcessGroups), which only gains a new row
+	// every persistInterval (10s), so the main chart and the process-groups
+	// sparklines/harness heatmap still moved on a 10s beat even after the
+	// live sample itself moved to 1s - the item 3 doc comment and README
+	// both claimed otherwise. Two small in-memory ring buffers, appended
+	// every systemSampleInterval tick alongside a.latest/a.latestGroups and
+	// pruned to sysHistWindow, give both a true 1s resolution without
+	// changing persistInterval: write volume to the store stays exactly as
+	// before, only what bdevSnapshotNow reads for live rendering changed.
+	// sys.RecentSamples/RecentProcessGroups (the DB path) are unaffected
+	// and still used by `burnmon-dev.exe export` (export_run.go), which
+	// needs history older than this buffer's own short window.
+	sysHistMu     sync.Mutex
+	sysHistBuf    []sysmon.Sample
+	groupsHistBuf []sysmon.ProcessGroupSample
 	// todoStatusGen guards a real (if narrow) race between the 30s status
 	// loop below and bdevTodoLogin's own success path (main.go): both write
 	// todoStatusCache from an independent read of the outside world (a disk
@@ -381,11 +399,13 @@ type devConfig struct {
 	// from one bdevSnapshotNow call on this cadence, no faster. Phase 5b
 	// measured a 10-minute refresh_ms 1000 run at 1.89 percent average
 	// whole-machine CPU against refresh_ms 2000's own 2.22 percent
-	// (process walk and persistence run on their own fixed cadences
-	// regardless, see processWalkInterval/persistInterval below, so
-	// halving the paint cadence did not double the cost of sampling);
-	// under the 2 percent bar and not worse than the old default, so the
-	// design doc's own flip condition made 1000 the new default.
+	// (persistence runs on its own fixed cadence regardless, see
+	// persistInterval below; the System zone's own sample cadence is now
+	// also independent of RefreshMs, WS2 alpha.3 item 3's own
+	// systemSampleInterval, fixed at 1s), so halving the paint cadence did
+	// not double the cost of sampling; under the 2 percent bar and not
+	// worse than the old default, so the design doc's own flip condition
+	// made 1000 the new default.
 	RefreshMs int `json:"refresh_ms"`
 }
 
@@ -414,51 +434,62 @@ func loadDevConfig(dataDir string) devConfig {
 	return cfg
 }
 
-// processWalkInterval and persistInterval are phase 5b's own split
-// cadences, both fixed and independent of refreshInterval (unlike the
-// single shared tick this replaced): a full process.Processes() walk
-// (ProcessSampler.Tick, classify plus a per-process Percent/MemoryInfo/
-// IOCounters read) is the expensive part of sampling, so it no longer
-// speeds up just because refresh_ms was lowered for a snappier paint
-// cadence; persistence to burnmon-dev.db is by wall clock for the same
-// reason, so a faster paint or process-walk cadence never multiplies
-// write volume to the store. 10 minutes measured at refresh_ms 2000 and
-// refresh_ms 1000 both against these same two fixed cadences, per
-// 02_roadmap\2026-09-24_ws2_burnmon_dev.md's phase 5 verify pass.
+// systemSampleInterval and persistInterval are WS2 alpha.3 item 3's own
+// cadences (replacing phase 5b's split refreshInterval/processWalkInterval
+// pair): one fixed 1s ticker now drives both the cheap whole-machine system
+// sample (a.sampler.Tick) and the process-group walk (a.procSampler.Tick)
+// together, so the CPU total bar, the 20 core bars, the main chart, the
+// process-groups rows/sparklines and the Memory/Disks/Network boxes all move
+// on the same beat instead of the process walk lagging on its own 3s clock -
+// perfadvisor's own model (internal/tui/sample.go), one sample per second,
+// one paint per sample, no panel on its own timer. Cheap enough to run at 1s:
+// the process walk is one NtQuerySystemInformation snapshot (item 1, phase
+// 5b), not a per-process gopsutil call each tick. persistInterval (writes to
+// burnmon-dev.db) stays fixed and independent of the sample cadence, same as
+// before, so a faster sample cadence never multiplies write volume to the
+// store.
 const (
-	processWalkInterval = 3 * time.Second
-	persistInterval     = 10 * time.Second
+	systemSampleInterval = 1 * time.Second
+	persistInterval      = 10 * time.Second
 	// hiddenSampleInterval is WS2 item 2's own number ("slow system
-	// sampling to 10s") while the window is minimized; the process walk
-	// and persistence above already run on their own fixed cadences
-	// independent of refresh_ms (item 1), and item 2 does not ask to slow
-	// those further, only the cheap per-tick system sample that would
-	// otherwise keep running at refresh_ms against a window nobody can see.
+	// sampling to 10s") while the window is minimized, item 3's own "drops
+	// everything, process walk included, to 10s when hidden": both
+	// a.sampler.Tick and a.procSampler.Tick now share the one guard below,
+	// so hiding the window slows the whole merged tick together, not just
+	// the system sample half of it.
 	hiddenSampleInterval = 10 * time.Second
+	// sysHistWindow is how far back sysHistBuf/groupsHistBuf keep in
+	// memory: the wider of the two live consumers' own windows -
+	// live.ChartWindow (30 minutes, the main chart) and the process-groups
+	// sparklines/harness heatmap's own 60-minute window (formerly the
+	// DB-backed processGroupsHistCache's own since-window in
+	// startSlowRefreshers, now this buffer's instead). main.go's
+	// bdevSnapshotNow trims sysHistBuf down further to live.ChartWindow at
+	// read time; groupsHistBuf is served as-is.
+	sysHistWindow = 60 * time.Minute
 )
 
-// startSampling runs three independent tickers instead of one shared one
-// (phase 5b): refreshInterval paints the cheap, whole-machine system
-// sample (a.sampler.Tick, CPU/mem/disk/net) that bdevSnapshotNow reads on
-// every render tick, matching the page's own paint cadence; a fixed
-// processWalkInterval runs the process-group sampler (harness CPU/RAM/IO)
-// on its own clock; a fixed persistInterval writes whatever the other two
-// goroutines most recently produced to burnmon-dev.db. Each ticker only
-// ever touches its own sampler (both Sampler and ProcessSampler require
-// single-goroutine use), and all three exchange state through a.latest/
-// a.latestGroups under a.mu.
-func (a *app) startSampling(refreshInterval time.Duration) {
+// startSampling runs two independent tickers (WS2 alpha.3 item 3 merges the
+// former three into two): systemSampleInterval samples both the
+// whole-machine system reading and the process-group walk together, every
+// 1s, so bdevSnapshotNow's readers (the system panel and the process-groups
+// panel alike) always see numbers from the same instant; persistInterval
+// writes whatever that most recently produced to burnmon-dev.db. The single
+// sampling goroutine only ever touches its own two samplers in turn (both
+// Sampler and ProcessSampler require single-goroutine use), and exchanges
+// state with the persist goroutine through a.latest/a.latestGroups under
+// a.mu.
+func (a *app) startSampling() {
 	firstSample := true
 	go func() {
-		ticker := time.NewTicker(refreshInterval)
+		ticker := time.NewTicker(systemSampleInterval)
 		defer ticker.Stop()
-		// lastSampleAt gates the hidden-window slowdown below: item 2 only
-		// wants the cheap system sample itself to slow to 10s while
-		// nobody's looking, not this ticker's own tick rate (a
-		// refreshInterval below 10s would otherwise mean the "still
-		// hidden" branch keeps re-checking the clock every tick, which is
-		// cheap - a lock and a time comparison, not a real sample - so
-		// that part is not worth avoiding on its own).
+		// lastSampleAt gates the hidden-window slowdown below: item 2/3
+		// only want the actual sample itself to slow to 10s while nobody's
+		// looking, not this ticker's own 1s tick rate (re-checking the
+		// clock every tick while hidden is cheap - a lock and a time
+		// comparison, not a real sample - so that part is not worth
+		// avoiding on its own).
 		var lastSampleAt time.Time
 		for range ticker.C {
 			if a.hidden.Load() && time.Since(lastSampleAt) < hiddenSampleInterval {
@@ -469,6 +500,13 @@ func (a *app) startSampling(refreshInterval time.Duration) {
 				log.Println("sysmon sample:", err)
 				continue
 			}
+			a.mu.Lock()
+			cfg := a.cfg
+			a.mu.Unlock()
+			groups, gerr := a.procSampler.Tick(cfg.CopilotVSCodeOtelFile != "")
+			if gerr != nil {
+				log.Println("process sample:", gerr)
+			}
 			lastSampleAt = time.Now()
 			if firstSample {
 				firstSample = false
@@ -476,25 +514,35 @@ func (a *app) startSampling(refreshInterval time.Duration) {
 			}
 			a.mu.Lock()
 			a.latest = sm
-			a.mu.Unlock()
-		}
-	}()
-
-	go func() {
-		ticker := time.NewTicker(processWalkInterval)
-		defer ticker.Stop()
-		for range ticker.C {
-			a.mu.Lock()
-			cfg := a.cfg
-			a.mu.Unlock()
-			groups, err := a.procSampler.Tick(cfg.CopilotVSCodeOtelFile != "")
-			if err != nil {
-				log.Println("process sample:", err)
-				continue
+			if gerr == nil {
+				a.latestGroups = groups
 			}
-			a.mu.Lock()
-			a.latestGroups = groups
 			a.mu.Unlock()
+
+			// sysHistBuf/groupsHistBuf: WS2 alpha.3 item 3's own in-memory
+			// history, a true 1s resolution for the main chart and the
+			// process-groups sparklines/harness heatmap (see sysHistWindow's
+			// own doc comment above). Pruned by reslicing forward from the
+			// first entry at or after the cutoff - no copy, the dropped
+			// prefix is simply unreachable through this slice header until
+			// append's own growth eventually recycles the backing array.
+			a.sysHistMu.Lock()
+			a.sysHistBuf = append(a.sysHistBuf, sm)
+			cutoff := sm.Ts.Add(-sysHistWindow)
+			dropSys := 0
+			for dropSys < len(a.sysHistBuf) && a.sysHistBuf[dropSys].Ts.Before(cutoff) {
+				dropSys++
+			}
+			a.sysHistBuf = a.sysHistBuf[dropSys:]
+			if gerr == nil {
+				a.groupsHistBuf = append(a.groupsHistBuf, groups...)
+				dropGroups := 0
+				for dropGroups < len(a.groupsHistBuf) && a.groupsHistBuf[dropGroups].Ts.Before(cutoff) {
+					dropGroups++
+				}
+				a.groupsHistBuf = a.groupsHistBuf[dropGroups:]
+			}
+			a.sysHistMu.Unlock()
 		}
 	}()
 
@@ -577,12 +625,13 @@ func (a *app) startRetentionPrune(retentionDays int) {
 // startSlowRefreshers runs the background loop behind every "slow data"
 // cache bdevSnapshotNow reads (no-scroll patch section 5, "may be fetched
 // less often in the background, but is only painted on the shared tick"):
-// vendor strip and the activity heatmap refresh every 60s, process-groups
-// history (also the harness heatmap's own source) every 10s, and Microsoft
+// vendor strip and the activity heatmap refresh every 60s, and Microsoft
 // To Do status every 30s / its task list every 300s - the same cadences
 // this app used to poll each of these from the page directly, just moved
 // server-side so every panel still paints from one snapshot per render
-// tick instead of resolving independently. Each refresher runs once
+// tick instead of resolving independently. Process-groups history moved to
+// startSampling's own sysHistBuf/groupsHistBuf (WS2 alpha.3 item 3), no
+// longer one of this function's own loops. Each refresher runs once
 // synchronously here before its own ticker starts, so the very first
 // render tick already has real data rather than an empty cache for up to a
 // whole cadence; the status loop is registered (and so runs its own first
@@ -625,18 +674,6 @@ func (a *app) startSlowRefreshers(st *store.Store, devCfg devConfig) {
 		}
 		a.slowMu.Lock()
 		a.heatmapRowsCache = rows
-		a.slowMu.Unlock()
-	})
-
-	loop(10*time.Second, func() {
-		since := time.Now().Add(-60 * time.Minute)
-		rows, err := a.sys.RecentProcessGroups(since)
-		if err != nil {
-			log.Println("slow refresh: process groups history:", err)
-			return
-		}
-		a.slowMu.Lock()
-		a.processGroupsHistCache = rows
 		a.slowMu.Unlock()
 	})
 

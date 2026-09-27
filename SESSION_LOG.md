@@ -2,6 +2,151 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-27, WS2 alpha.3 patch, v0.4.0-alpha.3
+
+Unattended overnight session (Sonnet 5, headless), following
+`02_roadmap\2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md` (items 1-3) and
+`_bundle_and_overnight_rules.md` (items 4-7, the overnight rules). `burnmon-dev` was
+already merged into `main` at `f7f1c26`; this work commits directly on `main`, no branch.
+
+**Item 1, To Do panel scrolls.** `.todobody` (`cmd\burnmon-dev\page.html`) was
+`overflow:hidden` with `.todorow` allowed to shrink, so rows squeezed into the panel
+height and overlapped once there were more tasks than fit. Now `overflow-y:auto;
+overflow-x:hidden`, `.todorow` gets `flex:0 0 auto` (natural height, never shrinks);
+`renderTodoTasks` renders every row directly instead of calling `cropToFit` for a "+N
+more" footer. Second deliberate exception to the no-scroll patch, alongside the turn
+ticker; `check_d9.go`'s scrollbar sweep now excludes `#todoBody` too, and its own top
+comment block documents both exceptions.
+
+**Item 2, equal core bars.** `.corelabel` (used for both the left "C0".."C19" label and
+the right "0%".."100%" value beside each `.corebar`) split into `.corelabel-l{flex:0 0
+3ch}` and `.corelabel-r{flex:0 0 4ch; text-align:right}`, both `tabular-nums`: every bar
+now has an identical track length regardless of its own value's digit count. New
+`tools\uicheck\check_d13.go` measures all 20 `.corebar` `clientWidth`s and fails unless
+min equals max; ran clean live, 195px each.
+
+**Item 3, one 1s cadence for the System zone.** `app.go`'s `startSampling` used to run
+`a.sampler.Tick()` (the cheap system sample: CPU/cores/mem/disk/net/gpu) on
+`refreshInterval` (from `refresh_ms`, default 1000) and `a.procSampler.Tick()` (the
+process-group walk) on its own fixed `processWalkInterval = 3s`, so process groups lagged
+the rest of the System zone by up to 3s even though the page painted every panel from one
+shared tick already. Both calls now run from a single merged `systemSampleInterval = 1 *
+time.Second` ticker, in sequence, writing `a.latest`/`a.latestGroups` together under
+`a.mu`; `main.go`'s call site dropped its `refreshInterval` argument entirely
+(`a.startSampling()`), and the hidden-window guard (item 2's own 10s slowdown) now gates
+both calls as one unit instead of only the system sample half. `page.html`'s `paintTick`
+gained a `trackChange(name, value)` helper (`JSON.stringify`-compares each snapshot field
+tick to tick, counts real changes into `window.__bdevChangeCounts`); `check_d11.go`
+(already sleeping 30s for its own pre-existing paint-mark proof) now also resets and reads
+those counters, asserting both `sysmon` and `processGroups` changed at least once and
+within a 3x ratio of each other. Ran clean live: 30 changes each in a 30s window - the
+process-groups panel now moves on the same beat as everything else, not a repaint of
+stale data on 2 out of 3 ticks.
+
+**Item 4, reuse the process snapshot buffer.** `internal\sysmon\process_windows.go`'s
+`querySystemProcesses` allocated a fresh buffer (`make([]byte, 2<<20)`, growing on
+`STATUS_INFO_LENGTH_MISMATCH`) on every single call; item 3 triples how often this now
+runs (1s instead of 3s), so this would have tripled that churn too. Signature changed to
+`querySystemProcesses(buf []byte) ([]procSnapshot, []byte, error)`: the caller
+(`ProcessSampler`, new `buf []byte` field) passes its previous buffer in and keeps
+whatever (possibly grown) buffer comes back, allocating fresh only the first time or when
+the kernel reports the buffer is still too small. New
+`TestProcessSampler_Tick_ReusesSnapshotBuffer` checks the backing array pointer
+(`&ps.buf[0]`) survives two `Tick` calls, not just that `ps.buf` is non-nil (which a fresh
+allocation each time would also satisfy).
+
+**Item 5, To Do due dates in local time.** `internal\todo\todo.go`'s `TodayTasks` used to
+compare `dueDateTime.DateTime[:10]` (a bare substring) straight against a local "today"
+string; Microsoft Graph's own documented default (no `Prefer: outlook.timezone` header
+sent) is to return every `dateTime` in UTC, so a due date near local midnight could read
+one calendar day early or late depending on the local UTC offset. New `dueDateTimeT{
+DateTime, TimeZone}` captures Graph's own `timeZone` field; new `localDueDate(dt, loc)`
+treats `TimeZone` as UTC when empty or literally "UTC", otherwise tries
+`time.LoadLocation`, falling back to UTC (documented, deliberately conservative, not
+confirmed-correct for that one case) if the name is not a real IANA zone (for example, a
+raw Windows time zone name, which this package has no way to detect without a live
+session to compare against) - then converts to `loc` and formats the calendar date. No
+live Microsoft Graph read was possible this session: no cached sign-in token exists on
+this machine, and an unattended overnight run cannot complete an interactive device-code
+sign-in itself. Covered instead by new `internal\todo\todo_test.go`: a UTC case (proves
+the old bare-substring bug is gone: 22:30 UTC lands on the next local day in
+Europe/Amsterdam), a same-zone passthrough, a 2026-10-25 Europe/Amsterdam DST-crossing
+case, an unrecognized-zone fallback case, and nil/short-input edge cases.
+
+**Item 6, `d9` at 1920x1080.** `.heatmonth` (`page.html`, the activity heatmap's own
+month-label column, 9px wide) was `overflow:visible`; most month labels are wider than
+9px, so they spilled past their own box, which `check_d9.go`'s scrollbar sweep correctly
+flagged - only at 1920x1080 because that is the one size wide enough to actually render
+one of the offending columns. Fixed the layout, not the check: `overflow:hidden`, same
+crop-instead-of-scroll convention every other narrow label on this page already uses.
+`d9` now passes clean at all five sizes.
+
+**Item 7, `w1` solo re-run.** Not run this session: see the measurement/real-window
+paragraph below.
+
+**Verify.** `go vet ./...`, `go test ./... -count=1` (every package, including the five
+new/changed tests above), `.\build.ps1`, `node --check` on both `cmd\burnmon-dev\page.html`
+and `internal\report\template.html`'s extracted script blocks all green.
+`scripts\uicheck.ps1 d0`-`d13` (the full five-size sweep) all pass, including `d9` at
+1920x1080 and the new `d13`; `w0`, `w2`-`w8` all pass against `burnmon.exe`. 10-minute
+active measurement (`burnmon.exe` co-running): Go process 0.21 percent avg / 0.37 percent
+peak CPU (was 0.28/0.59 at alpha.2), 111.5 MB avg / 113.5 MB peak RAM (was 195.4 MB peak);
+WebView2 tree 0.45 percent avg / 1.26 percent peak CPU, 489.6 MB avg / 514.3 MB peak RAM,
+6 processes peak (was 0.51/1.36, 671.1 MB peak) - well under the 2 percent/250MB cost
+guard despite the process walk now running three times as often, confirming item 3's own
+prediction that the cost is dominated by one syscall per walk, not by how often it runs.
+A first 5-minute minimized attempt was interrupted at 20s: the tracked `burnmon-dev.exe`
+process exited and was replaced by a fresh, differently-PID'd instance at the same moment
+the desktop showed a foreign foreground window, consistent with an external interruption
+of the desktop session (screen lock/unlock is company policy on this laptop, per the
+overnight rules) rather than anything in this session's own diff; per those same rules
+("stop the real-window part on a foreign foreground window... never report a check as
+passed that did not run"), it was not retried at that point in the session. Real-window
+work resumed later, after the review fix below and a rebuild: a full, clean 5-minute
+minimized run (from an already-settled process, on the fixed build) completed: Go process
+0.06 percent avg / 0.19 percent peak CPU, 111.5 MB avg / 113.5 MB peak RAM; WebView2 tree
+0.00 percent avg / 0.04 percent peak CPU, 384.2 MB avg / 387.0 MB peak RAM - both
+comfortably under target, no growth while minimized. (A shorter spot-check right after a
+fresh launch briefly read RAM near 263 MB in both phases before settling back to 109 MB
+once the one-time startup backfill finished; the settled numbers above are the ones that
+count.) `w1` (solo) failed once: its own saved screenshot showed an unrelated, actively-used
+Cowork chat window in the foreground, not `burnmon.exe` - confirmed real desktop
+contention, the same environmental-contention class the alpha.2 entry above already
+documents, not a code regression, and not retried further given that direct evidence.
+
+**Review.** A fresh, independent Opus review ran read-only over the full diff before
+commit and found one real gap: the item 3 doc comment and README both claimed the main
+chart and the process-groups sparklines/harness heatmap now moved on the same 1s beat as
+everything else, but `SysmonHistory`/`ProcessGroupsHistory` (`bdevSnapshotNow`, main.go)
+were still served from `burnmon-dev.db` via `sys.RecentSamples`/`RecentProcessGroups`,
+which only gains a new row every `persistInterval` (10s, unchanged by item 3) - so those
+two panels still moved in 10s steps in practice. Fixed, not just reworded: two small
+in-memory ring buffers (`app.go`'s new `sysHistBuf`/`groupsHistBuf`, appended every
+`systemSampleInterval` tick alongside `a.latest`/`a.latestGroups`, pruned to
+`sysHistWindow` = 60 minutes) now back both fields directly; `persistInterval` and
+`burnmon-dev.db`'s own write volume are unaffected (still 10s, still used by
+`burnmon-dev.exe export`'s own `sys.RecentSamples`/`RecentProcessGroups` calls, which need
+history older than this buffer's short window), and the now-redundant 10s
+`processGroupsHistCache` slow-refresher loop in `startSlowRefreshers` is gone. The review
+also flagged a weak DST test (`TestLocalDueDate_DST`'s original instant was 1.5h before
+the actual transition, so it only ever exercised CEST both ways); replaced with an instant
+after the transition that a lingering-CEST bug would land on the wrong calendar day for.
+Two low-severity, correct-as-is notes needed no fix: `check_d11.go`'s own comment
+overclaimed "real value changes" where `trackChange` actually counts a new sample landing
+(Ts always differs, so this is still a valid proof, just not for the reason originally
+written - comment corrected); and a pre-existing, unrelated stale comment on
+`decodeUnicodeString` (predates this session, out of scope, flagged for a future pass).
+Everything else the review checked (the merged sampling goroutine's own locking, the
+process-snapshot buffer's aliasing safety, the CSS `ch`-unit sizing, `check_d13`'s logic)
+came back clean.
+
+Version bumped `0.4.0-alpha.2` to `0.4.0-alpha.3` (`cmd\burnmon-dev\app.go`,
+`winres\burnmon-dev.json`); `README.md`, `STATUS.md` updated. `go.mod`'s own pre-existing
+uncommitted change (a line-ending difference only, predating this session) was left out of
+this commit, unneeded by this session's own work. Committed on `main`, not pushed, tagged,
+merged, rebased or reset. Hub brief and the exact push commands for Wilco: see the
+`04_assets\hub_agent_update_2026-09-27_ws2_alpha3_*.md` this session wrote.
+
 ## 2026-09-26, v0.4 WS2 performance patch, v0.4.0-alpha.2
 
 Followed `02_roadmap\2026-09-26_ws2_performance_patch.md` on `burnmon-dev`, after rebasing

@@ -244,16 +244,19 @@ ignored), it just no longer does anything.
   dropped. WebView2's own automatic memory management still measured a real drop while
   minimized (peak WebView2 RAM 499MB vs 671MB shown active, peak WebView2 CPU 0.11% vs
   1.36% active), just not as low as an explicit "Low" target might additionally buy.
-- The Microsoft To Do panel's own due-date comparison (`internal\todo\todo.go`) was not
-  brought in line with WS2 item 5's "local time everywhere", even though the spec's own
-  item 5 names "To Do": it compares `dueDateTime.DateTime[:10]` against the local date,
-  and no `Prefer: outlook.timezone` header is sent, so Microsoft Graph's own reply is
-  presumed UTC - a due date set in local time could read one day early or late near
-  midnight. Not fixed: this depends on Graph's actual, undocumented-here response
-  behaviour, which needs a live, signed-in To Do panel to confirm (Wilco's own device-code
-  sign-in, per the still-open item in the phase 5 brief); a fix built against a guess
-  about that behaviour risks getting it backwards. A future session with a live sign-in
-  should confirm and fix if real.
+- The Microsoft To Do panel's own due-date comparison (`internal\todo\todo.go`) is fixed
+  as of alpha.3 (WS2 alpha.3 item 5): `localDueDate` now converts Graph's own
+  `dueDateTime.timeZone` (documented default "UTC" without a `Prefer: outlook.timezone`
+  header, which this package still does not send) to the local calendar date, instead of
+  comparing `dueDateTime.DateTime[:10]` straight against local "today". Covered by unit
+  tests (UTC, a same-zone passthrough, a 2026-10-25 Europe/Amsterdam DST crossing, an
+  unrecognized-zone fallback, nil/short input), not by a live Graph read: no cached
+  sign-in token existed on this machine this session (an unattended overnight run cannot
+  complete an interactive device-code sign-in), so the actual shape of a real
+  `dueDateTime.timeZone` value from this tenant is still unconfirmed. A future session
+  with a live, signed-in To Do panel should confirm the real value matches what
+  `localDueDate` assumes (falls back to treating an unrecognized zone name as UTC, a
+  conservative but unverified choice for that one case).
 - GitHub Copilot Business and Copilot Enterprise: their AI-credit allotments are now
   confirmed live (1,900/user/month and 3,900/user/month respectively, pooled at the
   billing entity, `docs.github.com/en/copilot/concepts/billing-and-usage/organizations-
@@ -291,13 +294,29 @@ ignored), it just no longer does anything.
   needs a scratch `owners`/`client` config dropped next to the exe and reverted after,
   same as V3-6's own Done-when check 2, and this session did not repeat that live pass.
 
-## BurnMon Dev (branch `burnmon-dev`, not yet merged to `main`)
+## BurnMon Dev (`burnmon-dev` merged into `main` at `f7f1c26`; this and later work commits on `main` directly)
+
+`v0.4.0-alpha.3`: WS2 alpha.3 (`02_roadmap\2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md`,
+`_bundle_and_overnight_rules.md`) - the To Do panel now scrolls vertically instead of
+squeezing rows unreadable (its own second exception to the no-scroll patch, alongside the
+turn ticker); all 20 core bars share one fixed track length (left/right label slots sized
+in `ch`, `check_d13.go` proves min==max live); the whole System zone (CPU total, the 20
+core bars, the main chart, process groups and their sparklines, Memory/Disks/Network) now
+samples together on one fixed 1s cadence instead of the process walk lagging on its own
+3s clock (`check_d11.go` extended, proved live: sysmon and processGroups both changed 30
+times in the same 30s window); the process snapshot buffer is now reused across walks
+instead of a fresh 2MB allocation every tick (cheap headroom for the 3s-to-1s cadence
+change); the Microsoft To Do panel's own due-date comparison now converts Graph's
+`dueDateTime.timeZone` before comparing dates, not a bare UTC-string substring (no live
+Graph read was available this session, see Known gaps); `.heatmonth`'s own 1920x1080 `d9`
+failure (flagged, not fixed, in the alpha.2 entry below) is fixed by cropping instead of
+overflowing. Full writeup below the alpha.2 entry it builds on.
 
 `v0.4.0-alpha.2`: a second, developer-facing window (`cmd\burnmon-dev`, `burnmon-dev.exe`)
 showing token/cost burn and system load on one time axis, following
 `02_roadmap\2026-09-24_ws2_burnmon_dev.md`'s phases 0 through 4, three UI patches
 (`2026-09-25_ws2_ui_review_patch.md`, `_burn_chart_no_scroll_patch.md`,
-`_ticker_headline_patch.md`), phase 5 (verify and release), and this session's own
+`_ticker_headline_patch.md`), phase 5 (verify and release), and its own
 performance patch (`02_roadmap\2026-09-26_ws2_performance_patch.md`). Reuses
 `burnmon.exe`'s own `internal\` packages and store; system samples go to a separate
 `burnmon-dev.db`. See README's own "BurnMon Dev" section for what it does and how to run
@@ -397,7 +416,74 @@ desktop contention (a screenshot from one attempt captured an entirely different
 unrelated foreground window, confirmed via `GetForegroundWindow`), the same category of
 limitation `d7`'s own comment already documents for a locked screen, not a code
 regression. Wilco should re-run `w1` alone once the desktop is idle. Not pushed, tagged or
-merged; see the hub brief and the commands handed to Wilco for the exact next steps.
+merged; see the hub brief and the commands handed to Wilco for the exact next steps. Its
+own `d9`/1920x1080 finding (a pre-existing `.heatmonth{overflow:visible}` CSS spilling
+month labels wide enough to trip the scrollbar sweep at that one viewport) is fixed as of
+alpha.3 below, by cropping the layout rather than the check.
+
+`v0.4.0-alpha.3` (this session, `02_roadmap\2026-09-27_ws2_alpha3_*.md`), committed directly
+on `main` (the branch was merged at `f7f1c26` before this session started): the To Do panel
+scrolls vertically instead of cropping (`.todobody` `overflow-y:auto`, `.todorow`
+`flex:0 0 auto`, `renderTodoTasks` no longer calls `cropToFit`; `check_d9.go` excludes
+`#todoBody` alongside `#turnTicker`); all 20 core bars share one fixed track length
+(`.corelabel-l`/`.corelabel-r`, fixed `ch`-based slots either side of `.corebar`, value
+right-aligned; new `check_d13.go` measured all 20 bars live at 195px each, min==max); the
+whole System zone now samples on one merged 1s ticker (`app.go`'s `startSampling`, replacing
+the old `refreshInterval`-ticked system sample plus a separate `processWalkInterval = 3s`
+process walk) instead of the process-groups panel lagging the rest on its own slower clock -
+`check_d11.go` extended with a `window.__bdevChangeCounts` proof, ran clean live: sysmon and
+processGroups both changed 30 times in the same 30s window. A fresh review (below) found
+the main chart and the process-groups sparklines/harness heatmap still moved on a 10s beat
+regardless, since `SysmonHistory`/`ProcessGroupsHistory` were still served from
+`burnmon-dev.db` (only gains a row every 10s `persistInterval`); fixed with two in-memory
+ring buffers (`app.go`'s `sysHistBuf`/`groupsHistBuf`, appended every 1s tick, pruned to a
+60-minute `sysHistWindow`), `persistInterval` and the store's own write volume unchanged.
+`internal\sysmon\process_windows.go`'s
+`querySystemProcesses` now reuses its own snapshot buffer across walks (`ProcessSampler.buf`)
+instead of a fresh 2MB allocation every tick, cheap headroom for the 3s-to-1s cadence change
+(`TestProcessSampler_Tick_ReusesSnapshotBuffer` checks the backing array survives two ticks);
+`.heatmonth` changed `overflow:visible` to `overflow:hidden` (crops instead of spilling, same
+convention as every other narrow label on this page), fixing the `d9`/1920x1080 finding above
+without touching `check_d9.go` itself; `internal\todo\todo.go`'s due-date comparison is fixed
+per the Known gaps entry above. Cost guard held: Go process measured 0.21 percent avg / 0.37
+percent peak CPU (was 0.28/0.59 at alpha.2), 111.5 MB avg / 113.5 MB peak RAM (was 195.4 MB
+peak) over a 10-minute active run with `burnmon.exe` co-running - well under the 2
+percent/250MB targets, and no worse than alpha.2 despite the process walk now running three
+times as often, matching item 3's own prediction that the cost is dominated by one
+`NtQuerySystemInformation` snapshot, not per-tick frequency. WebView2 tree: 0.45 percent avg
+/ 1.26 percent peak CPU, 489.6 MB avg / 514.3 MB peak RAM, 6 processes peak (was 0.51/1.36,
+671.1 MB peak). A first minimized attempt was interrupted at 20s (the tracked process
+exited and was replaced by a fresh, differently-PID'd instance at the same moment the
+desktop showed a foreign foreground window - a real desktop-session interruption, per the
+overnight rules stopped rather than retried at that point in the session); a later,
+review-fixed-build re-run completed the full 5 minutes clean, from an already-settled
+process: Go process 0.06 percent avg / 0.19 percent peak CPU, 111.5 MB avg / 113.5 MB peak
+RAM; WebView2 tree 0.00 percent avg / 0.04 percent peak CPU, 384.2 MB avg / 387.0 MB peak
+RAM - both comfortably under target, confirming item 4's buffer reuse holds under the new
+1s cadence with no growth while minimized. (A shorter spot-check taken immediately after a
+fresh launch, before startup's own one-time backfill had settled, briefly showed RAM near
+263 MB in both the active and minimized phases; a live re-check afterward found it back
+down to 109 MB, confirming that figure was the known one-time startup cost, not sustained
+growth - the settled numbers above are the ones that matter.) `go vet ./...`, `go test
+./... -count=1` (every package, including the new tests above), `.\build.ps1`, `node
+--check` on both `cmd\burnmon-dev\page.html` and `internal\report\template.html`'s
+extracted script blocks, and `uicheck d0`-`d13` (the full five-size sweep, all clean
+including `d9` at 1920x1080 and the new `d13`) all pass. `w0`, `w2`-`w8` pass against
+`burnmon.exe`; `w1` (solo re-run) failed once, confirmed via its own saved screenshot to be
+the same environmental-contention pattern the alpha.2 entry above already documents (the
+screenshot showed an unrelated, actively-used Cowork chat window in the foreground, not
+`burnmon.exe` - real desktop contention this session could observe directly, not a code
+regression), not retried further given that live evidence. A fresh, independent Opus review
+ran read-only over the full diff
+before commit and found the chart/sparkline history gap above (fixed, not just reworded)
+plus a weak DST test (`TestLocalDueDate_DST` originally tested an instant before the
+actual transition; replaced with one after it that a lingering-CEST bug would land on the
+wrong calendar day for) and a `check_d11.go` comment that overclaimed "value changes"
+where it actually counts a new sample landing (corrected, the assertion itself was
+already valid); the merged sampling goroutine's locking, the process-snapshot buffer's
+aliasing safety, the CSS sizing and `check_d13`'s own logic all came back clean. Not
+pushed, tagged,
+merged, rebased or reset, per the overnight rules; committed directly on `main`.
 
 ## Next
 

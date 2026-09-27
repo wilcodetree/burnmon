@@ -108,37 +108,43 @@ type procSnapshot struct {
 }
 
 // querySystemProcesses takes one system-wide process snapshot via
-// NtQuerySystemInformation, growing the buffer (doubling, or to the kernel's
-// own reported required size if larger) until the call succeeds. A machine
-// under this sampler's own real-world load (several hundred processes) has
-// been seen needing a few hundred KB; this starts well above that so the
-// common case is one call, not two.
-func querySystemProcesses() ([]procSnapshot, error) {
-	size := uint32(2 << 20)
+// NtQuerySystemInformation into buf's own backing array (WS2 alpha.3 item 4:
+// reused across ticks by the caller, not a fresh allocation every walk - this
+// tick now runs once a second instead of once every three, so the old
+// fresh-2MB-per-call pattern would have tripled its own churn), growing it
+// (doubling, or to the kernel's own reported required size if larger) until
+// the call succeeds. Returns the (possibly grown) buffer alongside the
+// parsed snapshots so the caller keeps the grown capacity for its next call.
+// A machine under this sampler's own real-world load (several hundred
+// processes) has been seen needing a few hundred KB; buf starts well above
+// that so the common case is one call, not two.
+func querySystemProcesses(buf []byte) ([]procSnapshot, []byte, error) {
+	if len(buf) == 0 {
+		buf = make([]byte, 2<<20)
+	}
 	for attempt := 0; attempt < 8; attempt++ {
-		buf := make([]byte, size)
 		var retLen uint32
 		r1, _, _ := procNtQuerySystemInformation.Call(
 			uintptr(systemProcessInformationClass),
 			uintptr(unsafe.Pointer(&buf[0])),
-			uintptr(size),
+			uintptr(len(buf)),
 			uintptr(unsafe.Pointer(&retLen)),
 		)
 		status := uint32(r1)
 		if status == statusInfoLengthMismatch {
-			if retLen > size {
-				size = retLen
-			} else {
-				size *= 2
+			newSize := retLen
+			if newSize <= uint32(len(buf)) {
+				newSize = uint32(len(buf)) * 2
 			}
+			buf = make([]byte, newSize)
 			continue
 		}
 		if status != 0 {
-			return nil, fmt.Errorf("NtQuerySystemInformation(SystemProcessInformation): status=0x%08x", status)
+			return nil, buf, fmt.Errorf("NtQuerySystemInformation(SystemProcessInformation): status=0x%08x", status)
 		}
-		return parseProcessBuffer(buf), nil
+		return parseProcessBuffer(buf), buf, nil
 	}
-	return nil, fmt.Errorf("NtQuerySystemInformation(SystemProcessInformation): buffer still too small after %d growths", 8)
+	return nil, buf, fmt.Errorf("NtQuerySystemInformation(SystemProcessInformation): buffer still too small after %d growths", 8)
 }
 
 func parseProcessBuffer(buf []byte) []procSnapshot {
@@ -212,10 +218,12 @@ type trackedProc struct {
 
 // ProcessSampler holds per-process delta state (CPU% and IO rates both
 // need two points) across ticks. Not safe for concurrent use; call Tick
-// from one goroutine.
+// from one goroutine. buf is WS2 alpha.3 item 4's own reused snapshot
+// buffer, grown (never shrunk) by querySystemProcesses as needed.
 type ProcessSampler struct {
 	reg    map[int32]*trackedProc
 	lastAt time.Time
+	buf    []byte
 }
 
 func NewProcessSampler() *ProcessSampler {
@@ -244,7 +252,8 @@ func cmdlineOf(pid int32) string {
 // first call after NewProcessSampler has zero CPU/IO rates, since a rate
 // needs two points.
 func (ps *ProcessSampler) Tick(copilotVSCodeConfigured bool) ([]ProcessGroupSample, error) {
-	snaps, err := querySystemProcesses()
+	snaps, buf, err := querySystemProcesses(ps.buf)
+	ps.buf = buf
 	if err != nil {
 		return nil, err
 	}

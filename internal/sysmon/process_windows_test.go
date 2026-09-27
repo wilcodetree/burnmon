@@ -16,7 +16,7 @@ import (
 // within one test run). os.Getppid() is the independent ground truth this
 // checks against, not another read of the same snapshot.
 func TestQuerySystemProcesses_FindsSelfWithSanePPID(t *testing.T) {
-	snaps, err := querySystemProcesses()
+	snaps, _, err := querySystemProcesses(nil)
 	if err != nil {
 		t.Fatalf("querySystemProcesses: %v", err)
 	}
@@ -87,6 +87,31 @@ func TestProcessSampler_Tick_TwoTicksProduceRates(t *testing.T) {
 	}
 	if entry.cmdline != cachedCmdline {
 		t.Fatalf("own entry.cmdline changed between ticks (%q -> %q); should stay cached, not re-read", cachedCmdline, entry.cmdline)
+	}
+}
+
+// TestProcessSampler_Tick_ReusesSnapshotBuffer is WS2 alpha.3 item 4's own
+// correctness gate: querySystemProcesses used to allocate a fresh buffer
+// (starting at 2MB) on every single call; now the sampler grows it once (if
+// ever) and reuses the same backing array from then on, since Tick now runs
+// once a second instead of once every three (item 3). Checks the actual
+// backing array pointer survives two Tick calls, not just that ps.buf is
+// non-nil (which a fresh allocation each time would also satisfy).
+func TestProcessSampler_Tick_ReusesSnapshotBuffer(t *testing.T) {
+	ps := NewProcessSampler()
+	if _, err := ps.Tick(false); err != nil {
+		t.Fatalf("first Tick: %v", err)
+	}
+	if len(ps.buf) == 0 {
+		t.Fatalf("ps.buf is empty after first Tick; querySystemProcesses should have allocated it")
+	}
+	firstBufPtr := &ps.buf[0]
+
+	if _, err := ps.Tick(false); err != nil {
+		t.Fatalf("second Tick: %v", err)
+	}
+	if len(ps.buf) == 0 || &ps.buf[0] != firstBufPtr {
+		t.Fatalf("ps.buf's backing array changed between ticks; item 4 expects the same buffer reused, not a fresh allocation each Tick (a real process-count change forcing growth mid-test would also trip this, but is not expected in this short a window)")
 	}
 }
 

@@ -167,7 +167,7 @@ func main() {
 		st: st, cfg: cfg, initialCollectDone: make(chan struct{}),
 	}
 	a.cache.Store = st
-	a.startSampling(time.Duration(devCfg.RefreshMs) * time.Millisecond)
+	a.startSampling()
 	a.startRetentionPrune(devCfg.RetentionDays)
 	// Backgrounded (found by review, 2026-09-25): startSlowRefreshers' own
 	// first pass per cache runs synchronously before that cache's own
@@ -275,8 +275,9 @@ func main() {
 	// WebView2/Chromium already fires when this app's own window is
 	// minimized (the same page-visibility signal a real browser tab gets,
 	// tied here to the host window rather than a background tab). a.hidden
-	// is read by startSampling's cheap system-sample ticker (app.go) to
-	// slow it to a fixed 10s while true; the page itself stops calling
+	// is read by startSampling's merged system/process-walk ticker (app.go,
+	// WS2 alpha.3 item 3) to slow it to a fixed 10s while true; the page
+	// itself stops calling
 	// bdevSnapshotNow at all while hidden, so there is nothing here to do
 	// on the "becoming visible again" edge - the page's own listener fires
 	// one immediate tick then resumes its normal cadence, both client-side.
@@ -304,14 +305,16 @@ func main() {
 	// independent poll. Now is the tick's own shared instant, computed once
 	// here and reused for every time-axis field below (Burn, SysmonHistory),
 	// so the burn chart and system history both shift left together rather
-	// than each reading a slightly different time.Now(); the harness
-	// heatmap (ProcessGroupsHistory) is one of the slow caches below, so its
-	// own data can lag by up to its own refresh cadence, but page.html still
-	// anchors its right edge to this same Now (passed through the snapshot)
-	// so it visibly shifts on the same beat even between refreshes, rather
-	// time.Now(). VendorStrip/ActivityHeatmap/ProcessGroupsHistory/Todo/
-	// TodoTasks are read straight from app's own slow-refresh caches
-	// (startSlowRefreshers, app.go) rather than recomputed on this tick.
+	// than each reading a slightly different time.Now(). SysmonHistory and
+	// ProcessGroupsHistory (the harness heatmap's own source too) are read
+	// from app.go's own in-memory sysHistBuf/groupsHistBuf, a true 1s
+	// resolution (WS2 alpha.3 item 3); VendorStrip/ActivityHeatmap/Todo/
+	// TodoTasks are still read from app's own slower background-refresh
+	// caches (startSlowRefreshers, app.go), so those can lag by up to their
+	// own refresh cadence - page.html still anchors their right edge to
+	// this same Now (passed through the snapshot) so they visibly shift on
+	// the same beat even between refreshes, rather than each reading a
+	// slightly different time.Now().
 	type snapshotPayload struct {
 		Now                  int64                       `json:"now"`
 		RefreshMs            int                         `json:"refresh_ms"`
@@ -345,21 +348,32 @@ func main() {
 		a.slowMu.Lock()
 		vendorStrip := a.vendorStripCache
 		heatmapRows := a.heatmapRowsCache
-		groupsHistory := a.processGroupsHistCache
 		todoStatus := a.todoStatusCache
 		todoTasks := a.todoTasksCache
 		a.slowMu.Unlock()
 
-		// A failed query here returns the error (skipping this whole tick's
-		// paint, section 5's own "if a tick's data is late, skip that paint
-		// rather than painting part of the panels" - the same rule applies
-		// to a failed one) rather than logging and continuing with a nil
-		// history, which would have painted every other panel while system
-		// history alone silently went blank (found by review, 2026-09-25).
-		sysHistory, err := sys.RecentSamples(now.Add(-live.ChartWindow))
-		if err != nil {
-			return snapshotPayload{}, err
+		// sysHistory/groupsHistory: WS2 alpha.3 item 3's own fix (found by
+		// review, 2026-09-27) - these used to come from burnmon-dev.db
+		// (sys.RecentSamples/RecentProcessGroups), which only gains a new
+		// row every persistInterval (10s), so the main chart and the
+		// process-groups sparklines/harness heatmap still moved on a 10s
+		// beat even after the live sample itself moved to 1s. Now read
+		// straight from app.go's own in-memory sysHistBuf/groupsHistBuf
+		// (appended every systemSampleInterval tick, alongside a.latest/
+		// a.latestGroups), a true 1s resolution; sysHistBuf is trimmed
+		// further down to live.ChartWindow here (groupsHistBuf's own
+		// window already matches what the sparklines/heatmap want, see
+		// sysHistWindow's doc comment).
+		a.sysHistMu.Lock()
+		sysHistCutoff := now.Add(-live.ChartWindow)
+		sysHistory := make([]sysmon.Sample, 0, len(a.sysHistBuf))
+		for _, s := range a.sysHistBuf {
+			if !s.Ts.Before(sysHistCutoff) {
+				sysHistory = append(sysHistory, s)
+			}
 		}
+		groupsHistory := append([]sysmon.ProcessGroupSample(nil), a.groupsHistBuf...)
+		a.sysHistMu.Unlock()
 
 		events, err := st.EventsSince(now.Add(-live.ChartWindow))
 		if err != nil {

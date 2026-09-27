@@ -33,6 +33,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -327,6 +328,58 @@ type Item struct {
 	Overdue bool
 }
 
+// dueDateTimeT mirrors Microsoft Graph's own dueDateTime shape: a bare
+// dateTime string plus the IANA-ish timeZone it was expressed in. Without a
+// Prefer: outlook.timezone header (this package sends none), Graph's
+// documented default is to return every dateTime value in UTC, with
+// timeZone itself literally "UTC" - the STATUS.md known-gap this closes
+// (WS2 alpha.3 item 5) was comparing DateTime's own leading yyyy-mm-dd
+// straight against the local calendar date, which is only correct when the
+// local offset happens to be zero.
+type dueDateTimeT struct {
+	DateTime string `json:"dateTime"`
+	TimeZone string `json:"timeZone"`
+}
+
+// localDateString is today's own calendar date in loc (yyyy-mm-dd).
+func localDateString(t time.Time) string {
+	return t.Format("2006-01-02")
+}
+
+// localDueDate converts a Graph dueDateTime into the calendar date it names
+// in loc (WS2 alpha.3 item 5, "show the due date as a local calendar date").
+// dt.TimeZone is trusted when it is a real IANA zone name (Graph's own
+// documented default, "UTC", is the common case; a Prefer:
+// outlook.timezone-configured tenant could return others); a name Go's
+// tzdata does not recognize (for example, a raw Windows time zone name,
+// which Graph returns instead of an IANA one under some tenant/mailbox
+// settings this package has no way to detect without a live signed-in
+// session to compare against) falls back to treating the value as UTC
+// rather than guessing - a documented, conservative choice, not a
+// confirmed-correct one for that case.
+func localDueDate(dt *dueDateTimeT, loc *time.Location) (string, bool) {
+	if dt == nil || len(dt.DateTime) < 10 {
+		return "", false
+	}
+	zone := time.UTC
+	if tz := strings.TrimSpace(dt.TimeZone); tz != "" && !strings.EqualFold(tz, "UTC") {
+		if l, err := time.LoadLocation(tz); err == nil {
+			zone = l
+		}
+	}
+	t, err := time.ParseInLocation("2006-01-02T15:04:05.9999999", dt.DateTime, zone)
+	if err != nil {
+		// A shape this package has not seen (Graph's own format is stable,
+		// but not contractually guaranteed): fall back to the old
+		// leading-substring behaviour rather than dropping the task.
+		if len(dt.DateTime) >= 10 {
+			return dt.DateTime[:10], true
+		}
+		return "", false
+	}
+	return localDateString(t.In(loc)), true
+}
+
 // TodayTasks returns open tasks due today or overdue, across all lists.
 // Note: Graph does not expose To Do's "My Day", so due date is the
 // criterion (same limitation perfadvisor's own package documents).
@@ -344,7 +397,7 @@ func TodayTasks() ([]Item, error) {
 	if err := get(graphBase+"/me/todo/lists?$top=20", tok, &lists); err != nil {
 		return nil, err
 	}
-	today := time.Now().Format("2006-01-02")
+	today := localDateString(time.Now())
 	var out []Item
 	for i, l := range lists.Value {
 		if i >= 10 {
@@ -354,9 +407,7 @@ func TodayTasks() ([]Item, error) {
 			Value []struct {
 				Title       string `json:"title"`
 				Status      string `json:"status"`
-				DueDateTime *struct {
-					DateTime string `json:"dateTime"`
-				} `json:"dueDateTime"`
+				DueDateTime *dueDateTimeT `json:"dueDateTime"`
 			} `json:"value"`
 		}
 		u := graphBase + "/me/todo/lists/" + url.PathEscape(l.ID) +
@@ -365,10 +416,10 @@ func TodayTasks() ([]Item, error) {
 			continue // one broken list should not kill the panel
 		}
 		for _, t := range tasks.Value {
-			if t.DueDateTime == nil || len(t.DueDateTime.DateTime) < 10 {
+			due, ok := localDueDate(t.DueDateTime, time.Local)
+			if !ok {
 				continue
 			}
-			due := t.DueDateTime.DateTime[:10]
 			if due > today {
 				continue
 			}
