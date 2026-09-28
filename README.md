@@ -179,7 +179,7 @@ built and cross-compiled, never run on real macOS or Linux hardware.
 
 ## BurnMon Dev
 
-`burnmon-dev.exe` (`v0.4.0-alpha.3`) is a second, developer-facing window: what running
+`burnmon-dev.exe` (`v0.4.0-alpha.4`) is a second, developer-facing window: what running
 AI agents burn (tokens, cost, turns) on top, what the laptop does (CPU, per-core heat
 grid, memory, disk, network, GPU, harness process groups) below, on one time axis, so a
 performance problem and a token spike show up together. It reuses `burnmon.exe`'s own
@@ -197,6 +197,11 @@ responsive down to a single compact column.
 - **Minimized**: painting stops and the whole System zone's own sampler (system reading
   and process-group walk together) slows to one sample per 10s; both resume immediately,
   with one fresh render, the moment the window is restored.
+- **Session colour**: one colour family per vendor (burn chart, legend, session cards,
+  vendor strip, process groups, harness heatmap all draw from the same `HARNESS_HUE`);
+  several open sessions of one vendor get distinct lightness shades of that same hue
+  rather than a different colour each, so a session's colour matches everywhere it
+  appears and never gets mistaken for another vendor's.
 - **Microsoft To Do** panel: off by default, `"microsoft_todo_enabled": true` in
   `burnmon-dev.json` turns it on. Its own device-code sign-in (shows the code and URL in
   the panel, opens the browser), its own token cache under

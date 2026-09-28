@@ -217,16 +217,19 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .heatcell{width:9px; height:9px; background:var(--bd); border-radius:1px}
 .heatcell.active{background:var(--grn)}
 .heatcell.empty{background:transparent}
-.heatmonths{display:flex; gap:2px; margin-top:3px}
-/* WS2 alpha.3 item 6: overflow:hidden, not visible - a month label wider
-   than its 9px column (most of them are) used to spill past its own box,
-   which check_d9.go's scrollbar sweep correctly flags as a real overflow
-   regardless of how many columns happen to render at a given window width
-   (only 1920x1080 fit enough heatmap columns to actually render one of the
-   offending labels). Cropped to whatever fits, same convention as every
-   other narrow label on this page (.corelabel-l/.heatrow-label), rather than
-   widening the column and breaking the heatmap's own grid alignment. */
-.heatmonth{width:9px; font-size:8px; color:var(--dim); overflow:hidden; white-space:nowrap}
+/* WS2 follow-up (2026-09-28): position:relative + absolutely-positioned
+   children, not the alpha.3 fix's flex/overflow:hidden crop (that traded
+   full month names for 2-letter clips - "Ma","Ap" - which happened to also
+   satisfy check_d9's scrollbar sweep, but by hiding the label's own text,
+   not by fixing the layout). A label's own box now sizes to its full text
+   (no width/overflow constraint), so it can extend rightward over the
+   following columns without widening .heatmonths itself (position:absolute
+   children contribute no width to their container); .heatmapwrap's own
+   overflow:hidden (unchanged) still clips anything that runs past the
+   panel's right edge, so no scrollbar ever appears. renderHeatmap's own JS
+   pass (below) still skips a label that would overlap the previous one. */
+.heatmonths{position:relative; height:10px; margin-top:3px; overflow:hidden}
+.heatmonth{position:absolute; top:0; font-size:8px; color:var(--dim); white-space:nowrap}
 
 /* harness x minute heatmap, phase 3 */
 .heatrow{display:flex; align-items:center; gap:6px; margin-bottom:2px}
@@ -258,6 +261,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .histlegend .note{margin-left:auto; color:var(--dim); font-style:italic}
 .histcanvaswrap{flex:1; min-height:0}
 #histCanvas{width:100%; height:100%; display:block}
+/* histaxis (WS2 follow-up, 2026-09-28): same .axistick look as .burnaxis
+   above, but its ticks are placed by real elapsed time (renderHistoryChart),
+   not one per evenly-spaced flex slot, so it needs position:relative and
+   absolutely-positioned children instead of .burnaxis's flex row. */
+.histaxis{position:relative; height:12px; flex:0 0 auto; padding:2px 0 0; overflow:hidden}
+.histaxis .axistick{position:absolute; top:0}
 
 .sysbottom{display:flex; gap:4px; flex:0 0 auto}
 .sysbox{flex:1; background:var(--panel); border:1px solid var(--bd); padding:8px 10px; min-width:0}
@@ -390,6 +399,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       <div class="panel histwrap">
         <div class="histlegend" id="histLegend"></div>
         <div class="histcanvaswrap"><canvas id="histCanvas"></canvas></div>
+        <div class="histaxis" id="histAxis"></div>
       </div>
       <div class="panel" id="processGroupsPanel" style="flex:0 0 auto">
         <div class="panelhead" id="processGroupsHead">Process groups</div>
@@ -445,9 +455,16 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // claude, wsl, ...) are two separate label sets for mostly the same real
   // tools; both are built from this one map rather than picking colours
   // independently.
+  // copilotCli (WS2 follow-up, 2026-09-28): the old #38d3e3 cyan sat only
+  // ~23deg from cowork's #4da6ff blue on the hue wheel, close enough that
+  // Wilco's own screenshot read them as near-duplicates. #73d742 (a
+  // yellow-green "lime", hue ~100deg) sits in the widest open gap on this
+  // wheel - between burnmonDev's yellow (~48deg) and copilotVscode's green
+  // (~142deg), ~50deg clear of each - rather than splitting an already
+  // narrower gap elsewhere (e.g. next to codex/hermes, ~20-30deg apart).
   var HARNESS_HUE = {
     claudeCode: '#ffa028', cowork: '#4da6ff', codex: '#a78bfa',
-    copilotCli: '#38d3e3', copilotVscode: '#4ade80', hermes: '#e879f9',
+    copilotCli: '#73d742', copilotVscode: '#4ade80', hermes: '#e879f9',
     burnmonDev: '#ffd83d', wsl: '#ff6fae', other: '#66788c'
   };
   var AGENT_COLOR = {
@@ -460,17 +477,13 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   };
   function agentColor(agent){ return AGENT_COLOR[agent] || HARNESS_HUE.other; }
 
-  // rotateHue shifts hex's hue by degrees, keeping its saturation/lightness
-  // (used only for a wrapped-around session colour, sessionColor below,
-  // once more sessions have ever appeared in one run than SESSION_PALETTE
-  // has distinct hues for): a hue rotation stays readable on black the way
-  // repeatedly lightening/darkening a small fixed set of offsets does not,
-  // and 47 (sessionColor's own rotation step) shares no common factor with
-  // 360, so successive wraps keep landing on genuinely new hues for a long
-  // time (fixed after review, 2026-09-25: the previous 4-offset
-  // lighten/darken scheme produced two colours pixel-identical to each
-  // other after only 8 wrapped sessions).
-  function rotateHue(hex, degrees){
+  // hexToHSL/hslToHex (WS2 follow-up, 2026-09-28): shared hex<->HSL math,
+  // used by sessionColor below to hold a vendor's own hue and saturation
+  // fixed while only stepping lightness (the alpha.2-era rotateHue this
+  // replaced changed hue instead, which is exactly what item 3 of this
+  // follow-up is meant to stop happening: a session must read as its own
+  // vendor's colour, just a different shade of it).
+  function hexToHSL(hex){
     hex = hex.replace('#', '');
     var num = parseInt(hex, 16);
     var r = ((num >> 16) & 255) / 255, g = ((num >> 8) & 255) / 255, b = (num & 255) / 255;
@@ -483,7 +496,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       else h = (r - g) / d + 4;
       h /= 6;
     }
-    h = (((h * 360 + degrees) % 360) + 360) % 360 / 360;
+    return { h: h, s: s, l: l };
+  }
+  function hslToHex(h, s, l){
     function hue2rgb(p, q, t){
       if(t < 0) t += 1;
       if(t > 1) t -= 1;
@@ -527,36 +542,87 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   };
   function harnessColor(h){ return HARNESS_COLOR[h] || HARNESS_HUE.other; }
 
-  // SESSION_PALETTE (section 2): each session in the burn chart's 30-minute
-  // window gets its own colour from this one fixed set (>=8 clearly
-  // different hues, readable on black), assigned by first appearance and
-  // kept stable for the life of the session (sessionColor below), not
-  // shaded per-harness the way the old per-harness stacking used to. The
-  // eight HARNESS_HUE values (excluding the neutral "other" grey, which
-  // stays reserved for genuinely unclassified work) plus four more,
-  // deliberately spaced away from every HARNESS_HUE and from each other
-  // (evenly around the rest of the hue wheel) so none of the twelve reads
-  // as a near-duplicate of another. If a run somehow has more sessions
-  // ever appear than that in one launch, sessionColor wraps back through
-  // the palette with a rotateHue offset rather than ever reusing a hue
-  // outright.
-  var SESSION_PALETTE = [
-    HARNESS_HUE.claudeCode, HARNESS_HUE.cowork, HARNESS_HUE.codex, HARNESS_HUE.copilotCli,
-    HARNESS_HUE.copilotVscode, HARNESS_HUE.hermes, HARNESS_HUE.burnmonDev, HARNESS_HUE.wsl,
-    '#ff6b3d', '#8cffb0', '#3d5eff', '#ffe14d'
-  ];
+  // sessionColor (WS2 follow-up, 2026-09-28, supersedes the 2026-09-24
+  // "distinct colours per session" decision): a session's colour is now its
+  // own vendor's HARNESS_HUE/AGENT_COLOR base hue, one of SESSION_SHADE_L's
+  // four fixed lightness steps layered on top - never a different hue - so
+  // the same session reads as the same vendor everywhere (chart, legend,
+  // card) and two sessions of different vendors never share a colour family.
+  // SESSION_SHADE_L are absolute lightness targets (not offsets from the
+  // base colour's own L), so the step between any two of the four is always
+  // the same ~17 percentage points regardless of how light or dark a given
+  // vendor's base hue already is - a base-relative offset would let two
+  // shades collide once clamped for an already-light base (codex, hermes
+  // are both L>=0.73 before shading).
+  var SESSION_SHADE_L = [0.66, 0.49, 0.83, 0.32];
   var sessionColorMap = {};
   var sessionRankMap = {};
   var sessionColorOrder = 0;
-  function sessionColor(sid){
+  var vendorSessionCounts = {};
+
+  // reserveSessionShades/vendorShadeOwner (found by review, 2026-09-28: the
+  // first version picked a session's shade from a counter that only ever
+  // incremented, never freed when a session ended, so "shade index N mod 4"
+  // was really "the Nth session of this vendor ever seen this run", not "the
+  // Nth one open right now" - two sessions open at once could land on the
+  // same shade once more than 4 of one vendor's sessions had existed in
+  // total, long before 4 were ever open together). Runs once per render
+  // tick, before any sessionColor call, from burn.sessions - the
+  // authoritative "currently open" list (unlike the chart's own by_session
+  // buckets, which still name a session for a while after it stops). Frees
+  // any shade slot whose session is no longer open, then hands every
+  // not-yet-coloured open session the lowest free slot for its vendor;
+  // genuinely wraps (reuses a still-held slot) only once more than
+  // SESSION_SHADE_L.length sessions of one vendor are open at the same
+  // time, which is what "cap 4, then wrap" actually means.
+  var vendorShadeOwner = {};
+  function reserveSessionShades(sessions, agentBySession){
+    var openSids = {};
+    (function walk(list){
+      (list || []).forEach(function(s){ openSids[s.session_id] = true; walk(s.subagents); });
+    })(sessions);
+
+    Object.keys(vendorShadeOwner).forEach(function(vendor){
+      var slots = vendorShadeOwner[vendor];
+      for(var i = 0; i < slots.length; i++){
+        if(slots[i] && !openSids[slots[i]]) slots[i] = null;
+      }
+    });
+
+    Object.keys(openSids).forEach(function(sid){
+      if(sessionColorMap[sid]) return; // already coloured, stable for life
+      var agent = agentBySession[sid];
+      var vendor = agent || 'other';
+      var slots = vendorShadeOwner[vendor] || (vendorShadeOwner[vendor] = SESSION_SHADE_L.map(function(){ return null; }));
+      var freeIdx = slots.indexOf(null);
+      var shadeIdx = freeIdx !== -1 ? freeIdx : (vendorSessionCounts[vendor] || 0) % SESSION_SHADE_L.length;
+      slots[shadeIdx] = sid;
+      assignSessionColor(sid, agent, vendor, shadeIdx);
+    });
+  }
+
+  function assignSessionColor(sid, agent, vendor, shadeIdx){
+    sessionRankMap[sid] = sessionColorOrder++;
+    vendorSessionCounts[vendor] = (vendorSessionCounts[vendor] || 0) + 1;
+    var base = AGENT_COLOR[agent] || HARNESS_HUE.other;
+    var hsl = hexToHSL(base);
+    sessionColorMap[sid] = hslToHex(hsl.h, hsl.s, SESSION_SHADE_L[shadeIdx]);
+    return sessionColorMap[sid];
+  }
+
+  // sessionColor: returns a session's already-reserved colour (the normal
+  // case - reserveSessionShades runs first every tick). The fallback path
+  // (no reservation on record) covers a session the chart's own by_session
+  // buckets still name after reserveSessionShades' own burn.sessions walk
+  // already dropped it - round-robin, no live-slot tracking, same as this
+  // page's very first pass; rare enough (a session would need to start and
+  // fully end between two snapshot polls) that a live-open-session
+  // collision is not the concern the rewrite above targets.
+  function sessionColor(sid, agent){
     if(sessionColorMap[sid]) return sessionColorMap[sid];
-    var idx = sessionColorOrder++;
-    sessionRankMap[sid] = idx;
-    var base = SESSION_PALETTE[idx % SESSION_PALETTE.length];
-    var wraps = Math.floor(idx / SESSION_PALETTE.length);
-    var color = wraps === 0 ? base : rotateHue(base, wraps * 47);
-    sessionColorMap[sid] = color;
-    return color;
+    var vendor = agent || 'other';
+    var shadeIdx = (vendorSessionCounts[vendor] || 0) % SESSION_SHADE_L.length;
+    return assignSessionColor(sid, agent, vendor, shadeIdx);
   }
 
   // cropToFit renders itemHtml (already ordered so the items to drop first
@@ -770,10 +836,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // dropping any now-excess bar elements and growing to add new ones,
   // same as the segment reconciliation within each bar.
   var burnBarEls = [];
-  function renderBars(chart){
+  function renderBars(chart, agentBySession){
     var el = document.getElementById('burnBars');
     if(!el) return;
     chart = chart || [];
+    agentBySession = agentBySession || {};
 
     // Assign (or confirm) every session's own stable colour/rank before
     // sorting, including a bucket where it has 0 tokens, so rank stays
@@ -786,7 +853,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     // segments sorted identically regardless of which sessions they held,
     // and could visibly reorder between polls).
     chart.forEach(function(bucket){
-      Object.keys(bucket.by_session || {}).forEach(sessionColor);
+      Object.keys(bucket.by_session || {}).forEach(function(sid){
+        sessionColor(sid, agentBySession[sid]);
+      });
     });
 
     var perBucket = chart.map(function(bucket){
@@ -824,8 +893,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         var pct = 100 * s.tok / max;
         pct = Math.max(pct, 1.5); // a real but tiny bucket still shows a sliver
         var seg = bar.children[si];
+        seg.dataset.session = s.sid;
         seg.style.height = pct.toFixed(1) + '%';
-        seg.style.background = sessionColor(s.sid);
+        seg.style.background = sessionColor(s.sid, agentBySession[s.sid]);
       });
     });
   }
@@ -879,10 +949,21 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     var sids = Object.keys(totals).filter(function(sid){ return totals[sid] > 0; });
     sids.sort(function(a, b){ return totals[b] - totals[a]; });
 
-    var items = sids.map(function(sid){
-      return '<span class="legenditem"><span class="dot" style="background:' + sessionColor(sid) + '"></span>' +
-        esc(agentBySession[sid] || 'other') + ' ' + esc(shortSessionLabel(projectBySession[sid], sid)) +
-        '<b>' + fmtTokens(totals[sid]) + '</b></span>';
+    // Item 4: two sessions can render the same "agent project" text (today
+    // both read "cowork host-cwd") - append a short session id to every
+    // label that collides with another one in this same legend, so the
+    // dot colour is not the only thing telling them apart.
+    var labels = sids.map(function(sid){
+      return esc(agentBySession[sid] || 'other') + ' ' + esc(shortSessionLabel(projectBySession[sid], sid));
+    });
+    var labelCounts = {};
+    labels.forEach(function(l){ labelCounts[l] = (labelCounts[l] || 0) + 1; });
+
+    var items = sids.map(function(sid, i){
+      var label = labels[i];
+      if(labelCounts[label] > 1) label += ' #' + esc(sid.slice(-4));
+      return '<span class="legenditem"><span class="dot" style="background:' + sessionColor(sid, agentBySession[sid]) + '"></span>' +
+        label + '<b>' + fmtTokens(totals[sid]) + '</b></span>';
     });
     cropToFit(el, items);
   }
@@ -898,6 +979,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     if(rec) return rec;
     var card = document.createElement('div');
     card.className = 'card';
+    card.dataset.session = sid;
     var h4 = document.createElement('h4');
     var bar = document.createElement('div'); bar.className = 'ctxbar';
     var barFill = document.createElement('i');
@@ -926,7 +1008,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       seen[s.session_id] = true;
       var rec = ensureSessionCard(el, s.session_id);
       var pct = s.context_window > 0 ? Math.min(100, 100 * s.context / s.context_window) : 0;
-      var color = agentColor(s.agent);
+      // Item 1/3: the same shade sessionColor gave this session in the
+      // chart and legend, not the flat vendor base agentColor used to give
+      // every session of one vendor - the whole point of this follow-up is
+      // that a session's colour matches everywhere it appears.
+      var color = sessionColor(s.session_id, s.agent);
       rec.h4.textContent = s.agent || s.vendor;
       rec.h4.style.color = color;
       rec.barFill.style.width = pct.toFixed(0) + '%';
@@ -994,6 +1080,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     if(rec) return rec;
     var tr = document.createElement('tr');
     tr.className = 'vrow';
+    tr.dataset.agent = agent;
     var tdName = document.createElement('td');
     tdName.innerHTML = '<span class="dot" style="background:' + agentColor(agent) + '"></span>' + label;
     var tdToday = document.createElement('td'); tdToday.className = 'num';
@@ -1165,18 +1252,34 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       });
       html += '</div>';
     });
-    html += '</div><div class="heatmonths">';
+    html += '</div><div class="heatmonths" id="heatMonthsRow">';
     var lastMonth = null;
-    cols.forEach(function(col){
+    var colStep = 11; // .heatcell width (9px) + .heatgrid gap (2px)
+    cols.forEach(function(col, colIndex){
       var first = null;
       for(var i = 0; i < col.length; i++){ if(col[i]){ first = col[i]; break; } }
       var m = first ? new Date(first.date + 'T00:00:00Z').getUTCMonth() : null;
       var label = (m !== null && m !== lastMonth) ? MONTH_ABBR[m] : '';
       if(m !== null) lastMonth = m;
-      html += '<div class="heatmonth">' + label + '</div>';
+      html += '<div class="heatmonth" style="left:' + (colIndex * colStep) + 'px">' + label + '</div>';
     });
     html += '</div>';
     grid.innerHTML = html;
+
+    // A label's box now sizes to its own full text (CSS above), so two
+    // adjacent months (short columns between them) can overlap; skip
+    // whichever one would overlap the previous SHOWN label's real rendered
+    // width rather than guess a text width up front.
+    var monthsRow = document.getElementById('heatMonthsRow');
+    if(monthsRow){
+      var lastRight = -Infinity;
+      Array.prototype.forEach.call(monthsRow.children, function(el){
+        if(!el.textContent) return;
+        var left = el.offsetLeft;
+        if(left < lastRight){ el.textContent = ''; return; }
+        lastRight = left + el.scrollWidth;
+      });
+    }
   }
 
   // renderTicker (section 5): one dense line per turn, newest first, click
@@ -1400,6 +1503,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   });
 
   var lastSysmonHistory = [];
+  var lastSysmonNow = Date.now(); // paired with lastProcessGroupsHistory for the sparklines' own short window
+  var lastHistWindowStart = Date.now() - 30 * 60 * 1000; // paired with lastSysmonHistory for a resize redraw between ticks
 
   // lastCoreCount (2026-09-26 phase 5 fix): gopsutil's per-process Percent
   // (internal/sysmon/process.go, ProcessGroupSample.CPUPct) is unnormalized
@@ -1460,7 +1565,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     if(!burn) return;
     var agentBySession = agentBySessionMap(burn.sessions, burn.turns);
     var projectBySession = projectBySessionMap(burn.sessions);
-    renderBars(burn.chart);
+    reserveSessionShades(burn.sessions, agentBySession);
+    renderBars(burn.chart, agentBySession);
     renderBurnAxis(burn.chart, burn.bucket_seconds);
     renderBurnLegend(burn.chart, agentBySession, projectBySession);
     renderSessionCards(burn.sessions);
@@ -1509,11 +1615,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     }
   }
 
-  // renderHistoryChart draws cpu/ram/disk/net/gpu as smooth canvas lines,
-  // newest sample on the right (section 6). cpu/ram/gpu already share a
-  // natural 0-100 percent scale; disk and net (bytes/sec, no fixed
-  // ceiling) are each scaled to their own peak within the visible window,
-  // per the reference panel's own "disk and net scaled to own peak" note.
+  // renderHistoryChart draws cpu/ram/disk/net/gpu as smooth canvas lines
+  // (section 6). cpu/ram/gpu already share a natural 0-100 percent scale;
+  // disk and net (bytes/sec, no fixed ceiling) are each scaled to their own
+  // peak within the visible window, per the reference panel's own "disk
+  // and net scaled to own peak" note.
   var HIST_SERIES = [
     { key: 'CPUPct', label: 'cpu', color: '#00d26a', fmt: function(v){ return Math.round(v) + '%'; } },
     { key: 'ram', label: 'ram', color: '#4da6ff', fmt: function(v){ return Math.round(v) + '%'; } },
@@ -1525,9 +1631,31 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     var v = def.key2 != null ? (s[def.key] || 0) + (s[def.key2] || 0) : s[def.key];
     return v == null || v < 0 ? 0 : v;
   }
-  function renderHistoryChart(history){
+  // HIST_WINDOW_MS mirrors internal\live\live.go's own ChartWindow (30 min),
+  // the burn chart's own window - both charts share one timeline. A gap
+  // over HIST_GAP_MS between two consecutive samples (app hidden/minimized,
+  // sleep) breaks the line instead of drawing a straight segment across it.
+  var HIST_WINDOW_MS = 30 * 60 * 1000;
+  var HIST_GAP_MS = 5000;
+  // renderHistoryChart (WS2 follow-up, 2026-09-28): x is real elapsed time,
+  // not sample index - left edge is windowStartMs, right edge is
+  // windowStartMs + HIST_WINDOW_MS, each point at its own Ts. windowStartMs
+  // is paintTick's own snap.burn.window_start, not a locally-recomputed
+  // "nowMs - 30min" (found by review, 2026-09-28: internal\live\live.go's
+  // own windowEnd rounds UP to the next whole bucket - up to 60s later than
+  // the raw snapshot instant - so a left edge computed from raw "now" landed
+  // up to a minute away from the burn chart's own window_start/bucket
+  // boundaries, and the two axes' tick instants did not actually match
+  // despite reading close). Sharing the one window_start value the Go side
+  // already computed is what makes both axes agree, not recomputing the
+  // same arithmetic twice and hoping it lines up. Less than a full window of
+  // history simply leaves the left part of the canvas empty rather than
+  // stretching what exists across the full width, and labels every 5
+  // minutes below the chart line up with the burn axis above it.
+  function renderHistoryChart(history, windowStartMs){
     var canvas = document.getElementById('histCanvas');
     var legend = document.getElementById('histLegend');
+    var axisEl = document.getElementById('histAxis');
     if(!canvas || !legend) return;
     var wrap = canvas.parentElement;
     var w = wrap.clientWidth, h = wrap.clientHeight;
@@ -1539,25 +1667,48 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     ctx.clearRect(0, 0, w, h);
 
     var samples = (history || []).map(function(s){
-      return { CPUPct: s.CPUPct, ram: s.MemTotalMB > 0 ? 100 * s.MemUsedMB / s.MemTotalMB : 0,
+      return { t: new Date(s.Ts).getTime(), CPUPct: s.CPUPct, ram: s.MemTotalMB > 0 ? 100 * s.MemUsedMB / s.MemTotalMB : 0,
         DiskReadBps: s.DiskReadBps, DiskWriteBps: s.DiskWriteBps,
         NetDownBps: s.NetDownBps, NetUpBps: s.NetUpBps, GPUPct: s.GPUPct };
     });
 
-    var legendHtml = '';
     if(!samples.length){
       legend.innerHTML = '<span class="dim">No system history yet</span>';
+      if(axisEl) axisEl.innerHTML = '';
       return;
     }
-    HIST_SERIES.forEach(function(def){
+
+    var left = windowStartMs != null ? windowStartMs : samples[0].t;
+    var right = left + HIST_WINDOW_MS;
+    function xFor(t){ return Math.max(0, Math.min(w, w * (t - left) / (right - left))); }
+
+    // __bdevHistDebug (WS2 follow-up, 2026-09-28): tools\uicheck's own hook
+    // (check_d16.go) - the first series' own x positions in canvas CSS px,
+    // split into subpaths at each gap-break exactly like the canvas draw
+    // loop below, so the check can assert a real >5s gap produced 2
+    // segments and read each segment's own x range, instead of scraping
+    // rendered canvas pixels. Never read by this page itself.
+    var debugSegments = null;
+    var legendHtml = '';
+    HIST_SERIES.forEach(function(def, defIdx){
       var vals = samples.map(function(s){ return seriesValue(s, def); });
       var peak = def.ownPeak ? Math.max.apply(null, vals.concat([1])) : 100;
       ctx.beginPath();
-      vals.forEach(function(v, i){
-        var x = vals.length > 1 ? (i / (vals.length - 1)) * w : 0;
-        var y = h - Math.min(1, v / peak) * h;
-        if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      var prevT = null;
+      var segs = defIdx === 0 ? [] : null;
+      var curSeg = null;
+      samples.forEach(function(s, i){
+        var x = xFor(s.t);
+        var y = h - Math.min(1, vals[i] / peak) * h;
+        var isBreak = prevT === null || (s.t - prevT) > HIST_GAP_MS;
+        if(isBreak) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        if(segs){
+          if(isBreak){ curSeg = []; segs.push(curSeg); }
+          curSeg.push({ x: x, t: s.t });
+        }
+        prevT = s.t;
       });
+      if(segs) debugSegments = segs;
       ctx.strokeStyle = def.color;
       ctx.lineWidth = 1.4;
       ctx.stroke();
@@ -1566,6 +1717,26 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     });
     legendHtml += '<span class="note">disk and net scaled to own peak</span>';
     legend.innerHTML = legendHtml;
+    window.__bdevHistDebug = { w: w, left: left, right: right, segments: debugSegments };
+
+    if(axisEl){
+      // Ticks anchored to left (= the burn chart's own window_start),
+      // stepping forward by 5 minutes - not rounded to wall-clock :00/:05
+      // marks - so these land on exactly the same instants renderBurnAxis
+      // already labels (its own every-5th-bucket tick, bucket 0 at
+      // windowStart): both axes read as one timeline. Stops before right
+      // (the window's own end, one bucket width past "now"): a tick placed
+      // exactly at right would always render at the panel's own clipped
+      // edge (.histaxis's overflow:hidden) and never actually be visible,
+      // and renderBurnAxis's own last labelled bucket never reaches quite
+      // that far either.
+      var axisHtml = '';
+      var stepMs = 5 * 60 * 1000;
+      for(var t = left; t < right; t += stepMs){
+        axisHtml += '<div class="axistick" style="left:' + xFor(t).toFixed(1) + 'px">' + fmtHM(new Date(t)) + '</div>';
+      }
+      axisEl.innerHTML = axisHtml;
+    }
   }
 
   function renderMemoryBox(sm){
@@ -1683,18 +1854,33 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     var svg = document.createElementNS(svgNS, 'svg');
     svg.setAttribute('class', 'trendsvg'); svg.setAttribute('viewBox', '0 0 100 12');
     svg.setAttribute('preserveAspectRatio', 'none');
-    var poly = document.createElementNS(svgNS, 'polyline');
-    poly.setAttribute('fill', 'none'); poly.setAttribute('stroke-width', '1.2');
-    poly.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.appendChild(poly); tdTrend.appendChild(svg);
+    // path, not polyline (WS2 follow-up, 2026-09-28): a polyline's own
+    // points list has no way to lift the pen, so a gap in the samples (app
+    // hidden/minimized) used to draw as a straight line across it, same bug
+    // as the main history chart's old index-based x. A path's "M x,y"
+    // (moveTo) vs "L x,y" (lineTo) commands let renderProcessGroups start a
+    // new subpath on a real time gap instead.
+    var trendPath = document.createElementNS(svgNS, 'path');
+    trendPath.setAttribute('fill', 'none'); trendPath.setAttribute('stroke-width', '1.2');
+    trendPath.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(trendPath); tdTrend.appendChild(svg);
     tr.appendChild(tdName); tr.appendChild(tdCPU); tr.appendChild(tdRAM); tr.appendChild(tdIO); tr.appendChild(tdTrend);
     tbody.appendChild(tr);
-    rec = { tr: tr, dot: dot, nameText: nameText, cpu: tdCPU, ram: tdRAM, io: tdIO, poly: poly };
+    rec = { tr: tr, dot: dot, nameText: nameText, cpu: tdCPU, ram: tdRAM, io: tdIO, trendPath: trendPath };
     processGroupRowEls[harness] = rec;
     return rec;
   }
 
-  function renderProcessGroups(now, historyRows){
+  // PROCESS_GROUP_SPARK_WINDOW_MS (WS2 follow-up, 2026-09-28, item 4's own
+  // "say what the process-groups window is" question): 30s, the same span
+  // the old "last 30 samples" index-based slice covered at its own 1s
+  // sampling resolution (app.go's systemSampleInterval) in the ordinary
+  // case. Was index-based ("last 30 samples", HIST_GAP_MS's own gap rule
+  // never applied), so this item's own rule ("if it is index-based, make it
+  // time-based with the same rules") applies: now real elapsed time, same
+  // HIST_GAP_MS gap-break rule as the main history chart above.
+  var PROCESS_GROUP_SPARK_WINDOW_MS = 30 * 1000;
+  function renderProcessGroups(now, historyRows, nowMs){
     var tbody = document.getElementById('processGroups');
     var wrap = document.getElementById('processGroupsWrap');
     if(!tbody) return;
@@ -1702,6 +1888,8 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     (historyRows || []).forEach(function(r){
       (byHarness[r.Harness] || (byHarness[r.Harness] = [])).push(r);
     });
+    var sparkRight = nowMs || Date.now();
+    var sparkLeft = sparkRight - PROCESS_GROUP_SPARK_WINDOW_MS;
     var order = (now || []).slice().sort(function(a, b){ return b.CPUPct - a.CPUPct; });
     if(!order.length){
       processGroupRowEls = {};
@@ -1721,15 +1909,20 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       rec.cpu.textContent = (row.CPUPct / lastCoreCount).toFixed(0) + '%';
       rec.ram.textContent = (row.MemMB / 1024).toFixed(1) + 'G';
       rec.io.textContent = fmtBytes(row.IOBps);
-      var series = (byHarness[row.Harness] || []).slice(-30);
+      var series = (byHarness[row.Harness] || []).map(function(r){
+        return { t: new Date(r.Ts).getTime(), CPUPct: r.CPUPct };
+      }).filter(function(r){ return r.t >= sparkLeft && r.t <= sparkRight; });
       var maxCPU = series.reduce(function(m, r){ return Math.max(m, r.CPUPct); }, 1);
-      var pts = series.map(function(r, i){
-        var x = series.length > 1 ? (i / (series.length - 1)) * 100 : 0;
+      var d = '';
+      var prevT = null;
+      series.forEach(function(r){
+        var x = Math.max(0, Math.min(100, 100 * (r.t - sparkLeft) / (sparkRight - sparkLeft)));
         var y = 12 - Math.min(12, 12 * r.CPUPct / maxCPU);
-        return x.toFixed(1) + ',' + y.toFixed(1);
-      }).join(' ');
-      rec.poly.setAttribute('points', pts);
-      rec.poly.setAttribute('stroke', color);
+        d += (prevT === null || (r.t - prevT) > HIST_GAP_MS ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+        prevT = r.t;
+      });
+      rec.trendPath.setAttribute('d', d.trim());
+      rec.trendPath.setAttribute('stroke', color);
       var wantAfter = prevSibling ? prevSibling.nextSibling : tbody.firstChild;
       if(rec.tr !== wantAfter) tbody.insertBefore(rec.tr, wantAfter);
       prevSibling = rec.tr;
@@ -2071,6 +2264,30 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     tickTimer = setInterval(tick, ms);
   }
 
+  // bdevFakeMode/__bdevEnterFakeMode/__bdevExitFakeMode/__bdevPaintFake (WS2
+  // follow-up, 2026-09-28): tools\uicheck's own hook for driving a paint
+  // from synthetic data (fake sessions for the vendor-colours check, fake
+  // sysmon history for the System time-axis check) instead of whatever the
+  // real bdevSnapshotNow() poll returns - real data would defeat both
+  // checks' own determinism, and item 2 of this same follow-up needs To Do
+  // never fed real rows either. Entering fake mode stops the real tick
+  // timer and makes both the timer callback and any already-in-flight
+  // bdevSnapshotNow() response a no-op, so a real tick can never land a
+  // paint over the fake one mid-check; __bdevPaintFake then drives paintTick
+  // directly with whatever snapshot-shaped object the check builds. Never
+  // read by this page's own normal operation.
+  var bdevFakeMode = false;
+  window.__bdevEnterFakeMode = function(){
+    bdevFakeMode = true;
+    if(tickTimer){ clearInterval(tickTimer); tickTimer = null; }
+  };
+  window.__bdevExitFakeMode = function(){
+    bdevFakeMode = false;
+    tick();
+    scheduleTick(tickRefreshMs);
+  };
+  window.__bdevPaintFake = function(snap){ paintTick(snap); };
+
   // paintMark timestamps a panel's own paint (performance.now(), a
   // monotonic clock unaffected by clock changes) into a small ring buffer:
   // this page never reads it itself, but a uicheck case (tools\uicheck)
@@ -2106,7 +2323,9 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     trackChange('sysmon', snap.sysmon);
     renderSysmonPanels(snap.sysmon); paintMark('sysmon');
     lastSysmonHistory = snap.sysmon_history || [];
-    renderHistoryChart(lastSysmonHistory); paintMark('sysmonHistory');
+    lastSysmonNow = snap.now;
+    lastHistWindowStart = (snap.burn && snap.burn.window_start) ? new Date(snap.burn.window_start).getTime() : (snap.now - 30 * 60 * 1000);
+    renderHistoryChart(lastSysmonHistory, lastHistWindowStart); paintMark('sysmonHistory');
     renderBurnPanels(snap.burn); paintMark('burn');
     renderVendorPanels(snap.vendor_strip); paintMark('vendorStrip');
     renderHeadline(snap.headline_today); paintMark('headline');
@@ -2114,7 +2333,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     lastProcessGroupsNow = snap.process_groups_now || [];
     lastProcessGroupsHistory = snap.process_groups_history || [];
     trackChange('processGroups', lastProcessGroupsNow);
-    renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory); paintMark('processGroups');
+    renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, snap.now); paintMark('processGroups');
     renderHarnessHeatmap(lastProcessGroupsHistory, snap.now, (snap.burn && snap.burn.turns) || []); paintMark('harnessHeatmap');
     renderTodoPanel(snap.todo, snap.todo_tasks); paintMark('todo');
     applyPanelFit();
@@ -2134,12 +2353,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   var firstTickDone = false;
 
   function tick(){
-    if(tickInFlight || !window.bdevSnapshotNow) return Promise.resolve();
+    if(tickInFlight || bdevFakeMode || !window.bdevSnapshotNow) return Promise.resolve();
     tickInFlight = true;
     var startedAt = performance.now();
     return window.bdevSnapshotNow().then(function(snap){
       tickInFlight = false;
-      if(!snap) return;
+      if(!snap || bdevFakeMode) return;
       if(snap.refresh_ms && snap.refresh_ms !== tickRefreshMs) scheduleTick(snap.refresh_ms);
       if(!firstTickDone){
         firstTickDone = true;
@@ -2230,7 +2449,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       renderHeatmap(lastHeatmapPayload);
       renderHarnessHeatmap(lastProcessGroupsHistory);
     } else if(id === 'processGroupsPanel'){
-      renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory);
+      renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
     }
   }
   function applyPanelFit(){
@@ -2263,10 +2482,10 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     histResizeRAF = requestAnimationFrame(function(){
       histResizeRAF = null;
       applyPanelFit();
-      renderHistoryChart(lastSysmonHistory);
+      renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
       renderHeatmap(lastHeatmapPayload);
       renderHarnessHeatmap(lastProcessGroupsHistory);
-      renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory);
+      renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
     });
   });
   setupExportButton();

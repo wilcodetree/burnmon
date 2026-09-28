@@ -2,6 +2,169 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-28, WS2 follow-up: month labels, To Do privacy, vendor colours, System time axis, v0.4.0-alpha.4
+
+Small follow-up on `main`, after alpha.3 (`47e9efb`, pushed and tagged). Four items, all
+from Wilco directly this session; specs for items 3 and 4 written down first
+(`02_roadmap\2026-09-28_ws2_vendor_colour_families.md`,
+`_ws2_system_chart_time_axis.md`), items 1 and 2 specified inline.
+
+**Item 1, month labels.** Alpha.3's own `d9` fix (`.heatmonth{width:9px; overflow:hidden}`)
+made the scrollbar sweep pass by clipping every month label down to whatever fit a fixed
+9px box - "Mar" read as "Ma", "Sep" as "Se". Fixed the layout, not just the symptom:
+`.heatmonths` is now `position:relative`, each `.heatmonth` `position:absolute` with an
+explicit `left` (column index times 11px, matching `.heatgrid`'s own 9px cell + 2px gap)
+and no width constraint, so a label's box sizes to its own full text and can extend
+rightward over the following columns without widening the grid (an absolutely-positioned
+child contributes no width to its parent). `.heatmonths` itself keeps `overflow:hidden`
+(added after this session's own final live sweep caught a 2px *vertical* overflow at a
+wider window size than the first pass tried - "Sep"'s own lowercase "p" descender pokes
+below the 8px font's normal line box, `.heatmapwrap`'s pre-existing `overflow:hidden` only
+ever covered the horizontal case a label running past the panel's right edge). A JS pass
+after render measures each label's real `offsetLeft`/`scrollWidth` and blanks any label
+that would start before the previous *shown* label's own right edge ends - real measured
+widths, not a guessed text-width constant. New `check_d14.go` asserts every rendered
+`.heatmonth`'s `scrollWidth` is never greater than its `clientWidth` at 1920x1080; ran
+clean live (6 labels rendered on this session's own wide-monitor run, none clipped). `d9`
+passes at all five sizes.
+
+**Item 2, To Do privacy in uicheck.** Alpha.3's own overnight run captured real Microsoft
+To Do titles into `testdata\uicheck\out\*.png` screenshots, because `burnmon-dev.exe`
+running under `tools\uicheck` is the same signed-in session Wilco uses day to day. New
+`todoEnabledForRun(configEnabled, uicheckActive bool) bool` (`cmd\burnmon-dev\todo_gate.go`)
+forces Microsoft To Do off for the whole process lifetime whenever `BURNMON_DEV_UICHECK` is
+set (`main.go`, right after `loadDevConfig`) - not by feeding fake rows, by making the
+panel render its ordinary "not enabled" state: `startSlowRefreshers`' own status/refresh
+loop never starts and `bdevTodoLogin` refuses sign-in, so Microsoft Graph is never called
+under uicheck at all. Two unit tests (`todo_gate_test.go`) cover both branches of the pure
+gating function. Every existing PNG in `testdata\uicheck\out\` deleted (all gitignored,
+regenerable) and `d0` through `d16` re-run from a clean slate, twice more after later fixes
+in this same session; opened the freshly-produced `d5-viewport.png` each time and confirmed
+no To Do panel renders at all (real data, `display:none`, the "disabled" branch) - no real
+task title anywhere in any screenshot this session produced or re-produced.
+
+**Item 3, vendor colour families.** `SESSION_PALETTE` (a 12-entry list mixing the 8
+`HARNESS_HUE` colours with 4 more, assigned by global session arrival order regardless of
+vendor) is gone. `sessionColor(sid, agent)` now takes its hue and saturation from that
+session's own vendor base (`AGENT_COLOR`/`HARNESS_HUE` - the one and only colour source,
+used everywhere a vendor or session appears: burn chart, legend, session cards, vendor
+strip, process groups, harness heatmap) and only varies lightness: `SESSION_SHADE_L =
+[0.66, 0.49, 0.83, 0.32]`, four absolute lightness targets (not offsets from the base
+colour's own L - a relative offset would let two shades collide once clamped, since
+codex/hermes are already L>=0.73 before shading) roughly 17 percentage points apart
+pairwise. `rotateHue` (alpha.2-era, changed hue instead of lightness on wraparound) is gone
+with it, replaced by shared `hexToHSL`/`hslToHex` helpers. Copilot CLI's own base hue moved
+from `#38d3e3` (cyan, ~23deg from Cowork's `#4da6ff` blue) to `#73d742` (a yellow-green
+"lime", hue ~100deg) - the widest open gap on the hue wheel, between BurnMon Dev's own
+yellow (~48deg) and Copilot (VS Code)'s green (~142deg), ~50deg clear of each. Session cards
+now colour their title/bar from `sessionColor(sid, agent)` (the same shaded colour the
+chart and legend use for that session), not the flat `agentColor(agent)` every session of
+one vendor used to share. `renderBurnLegend` now de-duplicates: any two legend labels that
+render identical text (today's real complaint - two Cowork sessions both reading "cowork
+host-cwd") get the session id's own last 4 characters appended (through `esc()`, matching
+the rest of the label) to whichever ones collide. New `check_d15.go` drives `paintTick`
+with a synthetic burn snapshot (two Cowork, two Claude Code, one Copilot CLI session, via
+new `window.__bdevEnterFakeMode`/`__bdevPaintFake` test hooks - never live data) and
+asserts: every session's chart-segment colour equals its card colour; every session's hue
+sits within 6deg of that vendor's own live vendor-strip hue (read from the DOM, not
+hardcoded); same-vendor shades differ by at least 10 percentage points of lightness
+(measured ~17pp live); no session's hue sits within 20deg of another vendor present in the
+same run; the two same-project Cowork legend entries do not render identical text. Ran
+clean live. Reference screenshot (fake sessions only) committed to
+`04_assets\reference\2026-09-28_vendor_colours\d15-vendor-colours.png`.
+
+**Item 4, System chart time axis.** `renderHistoryChart` used to place each sample by
+array index (`x = i / (len-1) * w`), so a fresh start stretched a few minutes across the
+full width, samples looked evenly spaced across a 10s-per-sample hidden stretch and a
+1s-per-sample active one alike, and the System chart never actually lined up with the burn
+chart's own real-time axis above it. Now genuinely time-based: left edge is
+`snap.burn.window_start` (the Go side's own already-computed chart window start, not a
+locally-recomputed `nowMs - 30min` - see Review below), right edge `left + HIST_WINDOW_MS`
+(30 minutes, matching `internal\live\live.go`'s own `ChartWindow`), each point at its own
+`Ts`; a gap over `HIST_GAP_MS` (5s) between two consecutive samples breaks the line
+(`ctx.moveTo` instead of `ctx.lineTo`) instead of drawing straight across a
+hidden/minimized/sleep gap - concretely, since the hidden-window sample cadence is 10s
+(`app.go`'s own slowdown, above `HIST_GAP_MS`), a whole minimized stretch now renders as no
+visible line at all rather than a coarser one; flagged for Wilco to weigh in on in a future
+session if that reads as "the data vanished" rather than "the app was minimized", the
+spec's own literal wording ("app hidden, sleep" both named as break-worthy) is what this
+follows. New `#histAxis` (`position:relative`, absolutely-positioned `.axistick`s, same look
+as `.burnaxis`) labels every 5 minutes, anchored to the window's own left edge stepping
+forward and stopping one tick short of the right edge (a tick placed exactly at the right
+edge would always land inside `.histaxis`'s own `overflow:hidden` and never actually be
+visible) - so its tick instants land on the same ones `renderBurnAxis`'s own
+every-5th-bucket scheme already labels for the same window. The process-groups trend
+sparklines were also index-based (`series.slice(-30)`, `x = i/(len-1)*100`, one
+`<polyline>`, no gap rule) - item 4's own instruction ("if it is index-based, make it
+time-based with the same rules") applies: now a 30-second time window
+(`PROCESS_GROUP_SPARK_WINDOW_MS`, matching that slice's own typical span at 1s resolution)
+with the same `HIST_GAP_MS` break rule, an SVG `<path>` (`M`/`L` commands) in place of the
+`<polyline>` so a gap can actually lift the pen. New `window.__bdevHistDebug` (the first
+series' own x positions in canvas CSS px, split into subpaths at each break) lets
+`check_d16.go` assert structure directly instead of scraping canvas pixels: a synthetic 10
+minutes of 1s samples with one deliberate 60s gap in the middle produces exactly 2 segments
+(measured gap 60s); the first point's pixel ratio is 0.667 of the canvas width (measured
+live) - **flagged, not silently matched**: `2026-09-28_ws2_system_chart_time_axis.md`'s own
+proof section says "about one third of the width from the left" for this same
+10-minutes-of-data case, but the correct result for data that runs up to `now` (not away
+from it) inside a 30-minute window is the *newest* third filled, i.e. the first (oldest)
+point sits at `(30-10)/30 = 2/3` from the left, not 1/3; `#histAxis` and `#burnAxis` now
+render the exact same 6 labels for the same window (found by review: the first version
+compared them as a subset/superset because it anchored to a locally-recomputed "now", not
+the real shared `window_start` - see below). Ran clean live. Reference screenshot (fake
+samples only) committed next to item 3's,
+`04_assets\reference\2026-09-28_vendor_colours\d16-system-time-axis.png`.
+
+**Review.** A fresh, independent read-only review (Claude Opus 5.5) ran before the code
+commit and found two Important issues, both fixed and re-verified live, not just reworded:
+(1) the vendor-colour shade index (item 3) came from a counter that only ever incremented,
+never freed when a session ended - "shade N mod 4" meant "the Nth session of this vendor
+ever seen this run", not "the Nth one open right now", so two sessions open *at the same
+time* could land on the same shade once more than 4 of one vendor's sessions had existed in
+total, long before 4 were ever open together. Fixed with `reserveSessionShades` (page.html):
+runs once per tick from `burn.sessions` (the authoritative "currently open" list, unlike
+the chart's own by_session buckets which still name a session for a while after it stops),
+frees any shade slot whose session is no longer open, hands each new open session the
+lowest free slot for its vendor, and only genuinely wraps (reuses a still-held slot) once
+more than 4 sessions of one vendor are open at the same time - what "cap 4, then wrap"
+actually needs to mean. (2) the System chart's `#histAxis` was anchored to a
+locally-recomputed `nowMs - 30min` instead of reading `snap.burn.window_start`;
+`internal\live\live.go`'s own `windowEnd` rounds *up* to the next whole bucket (up to 60s
+later than the raw snapshot instant), so the two axes' real tick instants did not actually
+match on real data even though the first version's own d16 fixture (which set its fake
+`window_start` to the exact, unrounded value) happened to hide the mismatch - fixed by
+having `renderHistoryChart` take `window_start` directly instead of recomputing the same
+arithmetic a second time and assuming it would agree; `check_d16.go`'s own fixture and
+assertions were also corrected (exact label-set match, not a superset check) so this class
+of bug cannot pass silently again. Minor findings fixed alongside: the legend's collision
+suffix went through `esc()` for consistency with the rest of the label; `data-sid`
+attributes (new this session, for `check_d15.go`'s own DOM lookups) renamed to
+`data-session` to match the ticker rows' pre-existing convention; `check_d14.go` no longer
+prints "none clipped" before it has actually checked for clipping; both `check_d15.go` and
+`check_d16.go` now `defer` their own `__bdevExitFakeMode` call instead of calling it only
+after a successful measurement, so a JS exception mid-check can no longer leave the app
+stuck in fake mode. One more bug found independently during this session's own final
+verification pass (not by the Opus review): `screenshot()` (BitBlt) can capture a frame
+*before* WebView2's own compositor catches up to a `__bdevPaintFake` DOM update that just
+ran - both `check_d15.go` and `check_d16.go` now sleep 300ms between the fake paint and the
+screenshot; without it, the committed reference screenshots would have shown the previous
+real-data frame instead of the fake one (caught by inspecting the images, not by any check
+assertion - the DOM reads inside the same eval script already ran after the paint and were
+correct, so nothing about the check's own pass/fail result would have caught this). The
+laptop's screen also locked mid-run once (company policy) between two check invocations;
+one screenshot briefly held a lock-screen image instead of the app before this was noticed
+and the affected checks re-run after Wilco unlocked - never committed.
+
+**Verify.** `go vet ./...`, `go test ./... -count=1` (every package, including the two new
+`todo_gate_test.go` cases), `.\build.ps1`, `node --check` on `cmd\burnmon-dev\page.html`'s
+extracted script, all green, run twice (before and after the review's fixes).
+`scripts\uicheck.ps1 d0`-`d16` (full sweep, PNGs deleted first) all pass on the final code,
+including the three new checks; `d7`/`d8` failed twice mid-session with SendInput/BitBlt
+errors traced to the screen-lock and terminal-foreground contention above, not to this
+session's own diff (neither check touches anything this session changed) - confirmed clean
+on the next attempt once the contention cleared, same class of flake alpha.2's own
+SESSION_LOG entry already documents for `w1`.
+
 ## 2026-09-27, WS2 alpha.3 patch, v0.4.0-alpha.3
 
 Unattended overnight session (Sonnet 5, headless), following

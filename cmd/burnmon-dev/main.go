@@ -161,6 +161,7 @@ func main() {
 	}
 
 	devCfg := loadDevConfig(dataDir)
+	devCfg.MicrosoftTodoEnabled = todoEnabledForRun(devCfg.MicrosoftTodoEnabled, uicheckActive())
 
 	a := &app{
 		sys: sys, sampler: sysmon.NewSampler(), procSampler: sysmon.NewProcessSampler(),

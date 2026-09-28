@@ -296,6 +296,24 @@ ignored), it just no longer does anything.
 
 ## BurnMon Dev (`burnmon-dev` merged into `main` at `f7f1c26`; this and later work commits on `main` directly)
 
+`v0.4.0-alpha.4`: WS2 follow-up (2026-09-28, same session as the month-labels,
+vendor-colours and time-axis specs in `02_roadmap`) - the activity heatmap's month labels
+show their full three-letter text again (`.heatmonth` is now position:absolute,
+content-sized, instead of alpha.3's own fix which happened to pass `check_d9` by clipping
+"Mar" down to "Ma"; new `check_d14.go` proves no rendered label is clipped); every
+`tools\uicheck` run now forces the Microsoft To Do panel off (`todoEnabledForRun`,
+`BURNMON_DEV_UICHECK`), so a live signed-in session never gets screenshotted or read by an
+automated sweep; the burn chart, legend, session cards, vendor strip, process groups and
+harness heatmap now draw every session/vendor colour from one source (`HARNESS_HUE`) -
+several open sessions of one vendor get a lightness shade of that vendor's own hue instead
+of an unrelated colour, Copilot CLI's hue moved off a near-duplicate of Cowork's, and two
+legend entries with identical text get a session id appended (`check_d15.go`, fake
+sessions only); the System chart's x-axis is now real elapsed time (`renderHistoryChart`,
+`#histAxis`), not sample index, sharing its window and 5-minute labels with the burn chart
+above it and breaking the line on a >5s gap instead of drawing across it - the
+process-groups sparklines got the same time-based/gap-break treatment since they were
+index-based too (`check_d16.go`, fake samples only). Full writeup in `SESSION_LOG.md`.
+
 `v0.4.0-alpha.3`: WS2 alpha.3 (`02_roadmap\2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md`,
 `_bundle_and_overnight_rules.md`) - the To Do panel now scrolls vertically instead of
 squeezing rows unreadable (its own second exception to the no-scroll patch, alongside the
