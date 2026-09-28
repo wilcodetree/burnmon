@@ -319,6 +319,11 @@ func main() {
 	type snapshotPayload struct {
 		Now                  int64                       `json:"now"`
 		RefreshMs            int                         `json:"refresh_ms"`
+		// HistGapMs (v0.4.0-alpha.5) is app.go's own histGapThreshold in
+		// milliseconds - the System chart/sparkline gap-break threshold,
+		// derived from hiddenSampleInterval so page.html never hard-codes a
+		// second number that has to be kept in sync by hand.
+		HistGapMs int64 `json:"hist_gap_ms"`
 		Sysmon               sysmonNowPayload            `json:"sysmon"`
 		SysmonHistory        []sysmon.Sample             `json:"sysmon_history"`
 		ProcessGroupsNow     []sysmon.ProcessGroupSample `json:"process_groups_now"`
@@ -388,6 +393,7 @@ func main() {
 		return snapshotPayload{
 			Now:       now.UnixMilli(),
 			RefreshMs: devCfg.RefreshMs,
+			HistGapMs: histGapThreshold.Milliseconds(),
 			Sysmon: sysmonNowPayload{
 				Sample: latest, PressureScore: sysmon.PressureScore(latest),
 				BaseClockGHz: sysmon.BaseClockGHz(),

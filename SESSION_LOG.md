@@ -2,6 +2,59 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-28, WS2 follow-up fix: gap-break threshold vs hidden sampling cadence, v0.4.0-alpha.5
+
+Small fix on `main` after alpha.4 (`a7b398e`, pushed and tagged), same day, per the alpha.4
+brief's own open flag ("Wilco to confirm whether a blank System chart during a hidden/minimized
+stretch is the wanted behaviour"). Root cause: `page.html`'s `HIST_GAP_MS` was a hard-coded 5000
+(alpha.4, item 4), but `app.go`'s `hiddenSampleInterval` (the cadence the sampler falls back to
+while the window is hidden/minimized, WS2 alpha.3 item 2/3) is 10000 - every hidden-window
+sample-to-sample gap (10s) already exceeded the 5s break threshold, so the System chart and the
+process-groups sparklines drew a minimized stretch as no line at all, as if the data were simply
+missing, not "coarser". Fixed by deriving the threshold from the constant instead of hard-coding
+a second number: `app.go` gains `histGapThreshold = hiddenSampleInterval * 5 / 2` (25s today,
+tolerates the ordinary hidden cadence, still breaks on a real gap), sent to the page as
+`snapshotPayload.HistGapMs` (`main.go`) and read into `page.html`'s `HIST_GAP_MS` inside
+`paintTick` (`if(snap.hist_gap_ms) HIST_GAP_MS = snap.hist_gap_ms;`), replacing the old literal
+5000 that used to sit there permanently. A literal 25000 is still in `page.html` too, but only
+as the bootstrap default for the handful of frames before the first snapshot arrives - every
+real tick overwrites it from `app.go`'s own number. Both the System chart (`renderHistoryChart`)
+and the process-groups sparklines (`renderProcessGroups`) read the one shared `HIST_GAP_MS`, so
+one Go-side number fixes both.
+
+New `check_d17.go`: first reads `window.__bdevHistGapMs` off the real, already-running page
+(page.html's own live mirror of the `HIST_GAP_MS` its last real tick used, set from the real
+`bdevSnapshotNow`) and asserts it is exactly 25000 - proof `histGapThreshold` actually reaches
+the page end to end, not just that a fake snapshot's own `hist_gap_ms` round-trips (a fresh
+review below caught the first version of this check for only proving the latter). Then drives
+`paintTick` with synthetic `sysmon_history` (5 minutes of 1s samples, 5 minutes of 10s samples -
+the actual hidden cadence - a real 60s gap, then 1s samples again) via the existing
+`__bdevEnterFakeMode`/`__bdevPaintFake` hooks, asserting `__bdevHistDebug` (the same hook
+`check_d16.go` reads) shows exactly 2 line segments (331 points then 61, not one break per 10s
+step as the old threshold would have produced) with the gap measuring ~60s. The process-groups
+sparkline's own window (`PROCESS_GROUP_SPARK_WINDOW_MS`, 30 seconds) cannot hold both endpoints
+of a 60s gap at once (they would have to be at most 30s apart to both be visible in the same
+frame), so that part of the check instead pins the exact 25000ms boundary directly: a 24s gap
+must not break the trend `<path>` (one `M` moveto command), a 26s gap must (two). Flagged in
+this session rather than silently forcing the literal 60s number onto a window three times
+narrower - same house convention `check_d16.go` used for its own "one third vs two thirds"
+finding.
+
+Fresh independent read-only review (Claude Opus 5.5) of the staged diff before commit: the
+derivation, unit handling, JSON wiring, and every break site checked out (10s\*5/2 is an exact
+25s, no truncation; both render paths read the one shared `HIST_GAP_MS`). One Important finding:
+the first version of `check_d17.go` set its own fake `snap.hist_gap_ms`, so it proved the page
+honours that field but not that `histGapThreshold` actually reaches it through the real
+`bdevSnapshotNow` - fixed by adding the `window.__bdevHistGapMs` live mirror above and a check
+that reads it before entering fake mode at all. Minor/nit findings (stale "5s"/">5s" wording in
+two comments after the threshold number changed, an inaccurate "kept only as the fallback"
+sentence describing the wrong literal) fixed by rewording; `gofmt -l` flagging most of
+`cmd\burnmon-dev` and `tools\uicheck` traced to this checkout's own CRLF line endings, not this
+diff (confirmed via `gofmt -d`, which showed only line-ending noise even on untouched files).
+`go vet ./...`, `go test ./... -count=1`, `.\build.ps1`, `node --check` on `page.html`'s script,
+and `scripts\uicheck.ps1 d0`-`d17` all green, re-run after the review's fixes. Committed as
+`v0.4.0-alpha.5`, not pushed or tagged.
+
 ## 2026-09-28, WS2 follow-up: month labels, To Do privacy, vendor colours, System time axis, v0.4.0-alpha.4
 
 Small follow-up on `main`, after alpha.3 (`47e9efb`, pushed and tagged). Four items, all

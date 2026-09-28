@@ -179,7 +179,7 @@ built and cross-compiled, never run on real macOS or Linux hardware.
 
 ## BurnMon Dev
 
-`burnmon-dev.exe` (`v0.4.0-alpha.4`) is a second, developer-facing window: what running
+`burnmon-dev.exe` (`v0.4.0-alpha.5`) is a second, developer-facing window: what running
 AI agents burn (tokens, cost, turns) on top, what the laptop does (CPU, per-core heat
 grid, memory, disk, network, GPU, harness process groups) below, on one time axis, so a
 performance problem and a token spike show up together. It reuses `burnmon.exe`'s own

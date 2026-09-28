@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	version     = "0.4.0-alpha.4"
+	version     = "0.4.0-alpha.5"
 	windowTitle = "BurnMon Dev"
 	mutexName   = `Local\burnmon-dev-app`
 )
@@ -458,6 +458,16 @@ const (
 	// so hiding the window slows the whole merged tick together, not just
 	// the system sample half of it.
 	hiddenSampleInterval = 10 * time.Second
+	// histGapThreshold (v0.4.0-alpha.5, found by review 2026-09-28: the
+	// System chart and the process-groups sparklines broke their line on
+	// any gap over a page.html-side hard-coded 5s, so every minimized
+	// stretch - hidden sampling runs at hiddenSampleInterval, 10s - drew as
+	// no line at all, as if the data were simply missing. 2.5x
+	// hiddenSampleInterval tolerates the ordinary hidden cadence while
+	// still breaking on a real gap (sleep, closed app). Sent to page.html
+	// as snapshotPayload.HistGapMs (main.go) instead of a second hard-coded
+	// number there, so the two stay in sync by construction.
+	histGapThreshold = hiddenSampleInterval * 5 / 2
 	// sysHistWindow is how far back sysHistBuf/groupsHistBuf keep in
 	// memory: the wider of the two live consumers' own windows -
 	// live.ChartWindow (30 minutes, the main chart) and the process-groups

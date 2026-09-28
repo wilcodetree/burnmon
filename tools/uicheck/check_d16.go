@@ -121,7 +121,7 @@ func init() {
 			gapEnd := out.Debug.Segments[1][0].T
 			gapStart := out.Debug.Segments[0][len(out.Debug.Segments[0])-1].T
 			gapSec := (gapEnd - gapStart) / 1000
-			fmt.Printf("uicheck: d16: gap between segments = %.0fs (want ~60s, >5s HIST_GAP_MS threshold)\n", gapSec)
+			fmt.Printf("uicheck: d16: gap between segments = %.0fs (want ~60s, >25s HIST_GAP_MS threshold as of v0.4.0-alpha.5)\n", gapSec)
 			if gapSec < 55 || gapSec > 65 {
 				errs = append(errs, fmt.Sprintf("segment gap was %.0fs, want ~60s", gapSec))
 			}

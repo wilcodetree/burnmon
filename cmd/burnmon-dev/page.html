@@ -1635,8 +1635,16 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // the burn chart's own window - both charts share one timeline. A gap
   // over HIST_GAP_MS between two consecutive samples (app hidden/minimized,
   // sleep) breaks the line instead of drawing a straight segment across it.
+  // HIST_GAP_MS itself (v0.4.0-alpha.5, found by review 2026-09-28: a
+  // hard-coded 5000 here broke every minimized stretch, because hidden
+  // sampling runs at app.go's own hiddenSampleInterval, 10s) is overwritten
+  // every tick from paintTick's own snap.hist_gap_ms (app.go's
+  // histGapThreshold, 2.5x that interval) below; the 25000 here is only
+  // this page's own bootstrap default for the handful of frames before the
+  // first snapshot arrives, not a second production number to keep in sync
+  // by hand - every real tick replaces it with whatever app.go computed.
   var HIST_WINDOW_MS = 30 * 60 * 1000;
-  var HIST_GAP_MS = 5000;
+  var HIST_GAP_MS = 25000;
   // renderHistoryChart (WS2 follow-up, 2026-09-28): x is real elapsed time,
   // not sample index - left edge is windowStartMs, right edge is
   // windowStartMs + HIST_WINDOW_MS, each point at its own Ts. windowStartMs
@@ -1683,10 +1691,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     function xFor(t){ return Math.max(0, Math.min(w, w * (t - left) / (right - left))); }
 
     // __bdevHistDebug (WS2 follow-up, 2026-09-28): tools\uicheck's own hook
-    // (check_d16.go) - the first series' own x positions in canvas CSS px,
-    // split into subpaths at each gap-break exactly like the canvas draw
-    // loop below, so the check can assert a real >5s gap produced 2
-    // segments and read each segment's own x range, instead of scraping
+    // (check_d16.go, check_d17.go) - the first series' own x positions in
+    // canvas CSS px, split into subpaths at each gap-break (any gap over
+    // the current HIST_GAP_MS, not a hard-coded number - see its own
+    // comment above) exactly like the canvas draw loop below, so a check
+    // can assert a real gap produced N segments and read each segment's
+    // own x range, instead of scraping
     // rendered canvas pixels. Never read by this page itself.
     var debugSegments = null;
     var legendHtml = '';
@@ -2320,6 +2330,14 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   function paintTick(snap){
     var now = new Date(snap.now);
     renderClock(now); paintMark('clock');
+    if(snap.hist_gap_ms) HIST_GAP_MS = snap.hist_gap_ms;
+    // __bdevHistGapMs (v0.4.0-alpha.5): tools\uicheck's own hook
+    // (check_d17.go) - mirrors the live HIST_GAP_MS this tick actually
+    // used, read straight off the real, already-running page (before
+    // fake mode) so the check proves app.go's histGapThreshold really
+    // reached the page through bdevSnapshotNow, not just that fake mode's
+    // own synthetic snap.hist_gap_ms round-trips.
+    window.__bdevHistGapMs = HIST_GAP_MS;
     trackChange('sysmon', snap.sysmon);
     renderSysmonPanels(snap.sysmon); paintMark('sysmon');
     lastSysmonHistory = snap.sysmon_history || [];

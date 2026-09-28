@@ -296,6 +296,19 @@ ignored), it just no longer does anything.
 
 ## BurnMon Dev (`burnmon-dev` merged into `main` at `f7f1c26`; this and later work commits on `main` directly)
 
+`v0.4.0-alpha.5`: WS2 follow-up fix (2026-09-28, same day as alpha.4) - alpha.4's own gap-break
+threshold (a hard-coded 5s in `page.html`) hid every minimized stretch on the System chart and
+the process-groups sparklines, because hidden sampling runs at `app.go`'s own
+`hiddenSampleInterval` (10s), well over 5s. The threshold is now `histGapThreshold` (`app.go`,
+2.5x `hiddenSampleInterval`, 25s today), sent to the page as `snapshotPayload.HistGapMs` and
+read by `paintTick` into `HIST_GAP_MS` instead of a second hard-coded number in `page.html`; a
+minimized stretch draws as a coarser line, sleep or a closed app still breaks it. New
+`check_d17.go` proves the System chart stays one continuous line across a 5-minutes-at-1s plus
+5-minutes-at-10s stretch and breaks exactly once at a real 60s gap, and pins the sparkline's own
+25000ms boundary directly (24s holds, 26s breaks - a 60s gap cannot fit both its endpoints
+inside the sparkline's 30-second window at once, so this case cannot replay the System chart's
+literal 60s number). Full writeup in `SESSION_LOG.md`.
+
 `v0.4.0-alpha.4`: WS2 follow-up (2026-09-28, same session as the month-labels,
 vendor-colours and time-axis specs in `02_roadmap`) - the activity heatmap's month labels
 show their full three-letter text again (`.heatmonth` is now position:absolute,
