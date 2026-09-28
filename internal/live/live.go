@@ -120,6 +120,17 @@ type Snapshot struct {
 	// Turns is I3's turn ticker source: every real turn across every
 	// session in the chart window, newest first, capped at turnTickerCap.
 	Turns []TurnEvent `json:"turns"`
+	// ChartAgents maps every session_id appearing anywhere in Chart to its
+	// agent, from the same events and window buildChart itself uses -
+	// deliberately uncapped, unlike Turns (capped at turnTickerCap for I3's
+	// ticker). The frontend's colour system (page.html's sessionColor) needs
+	// every charted session's vendor to assign its one-vendor-family colour;
+	// Turns alone used to be its only fallback for a session already gone
+	// from Sessions (see page.html's own agentBySessionMap comment), so a
+	// busy window with more than turnTickerCap turns could
+	// silently starve that fallback of a session's agent, the same class of
+	// bug review already caught once for BuildTurns itself, 2026-09-24.
+	ChartAgents map[string]string `json:"chart_agents,omitempty"`
 }
 
 // turnTickerCap is I3's fixed cap on the turn ticker: "capped at 50 lines".
@@ -313,7 +324,25 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time, bu
 		BucketSeconds:        bs,
 		Chart:                buildChart(events, cfg, windowStart, now, bs),
 		Turns:                buildTurns(events, cfg, windowStart, now, turnTickerCap),
+		ChartAgents:          buildChartAgents(events, windowStart, now),
 	}
+}
+
+// buildChartAgents maps every session_id buildChart would place into a
+// Chart bucket to its agent, from the identical events/window/isTurn filter
+// buildChart itself uses (last write wins; a session's agent never changes
+// mid-life). Kept uncapped and separate from Turns on purpose: Turns is
+// capped to turnTickerCap for the ticker, and a caller that needs full
+// per-session coverage (nothing about the ticker) must not inherit that cap.
+func buildChartAgents(events []schema.Event, windowStart, now time.Time) map[string]string {
+	m := map[string]string{}
+	for _, e := range events {
+		if !isTurn(e) || e.At.IsZero() || e.At.Before(windowStart) || e.At.After(now) {
+			continue
+		}
+		m[e.SessionID] = e.Agent
+	}
+	return m
 }
 
 // BuildTurns is buildTurns exported with no cap, for a caller that needs

@@ -2,6 +2,99 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-28, bug fix: session colour locked grey before its vendor was known, v0.4.0-alpha.6
+
+Bug fix on `main` after alpha.5, reported live by Wilco: a Cowork session drew grey in the burn
+chart, its legend dot and its session card, while the vendor strip correctly showed Cowork blue
+and the legend's own text correctly read "cowork". Read `02_roadmap\2026-09-28_ws2_vendor_colour_
+families.md` (the rule: one colour family per vendor, everywhere) and `page.html` before touching
+anything, per Wilco's own hub-reading hypothesis, which held up end to end: `sessionColor(sid,
+agent)` computes a session's colour once and caches it in `sessionColorMap` forever, by design
+("stable for life" - a session must keep the same shade its whole life). The burn chart's own
+`by_session` rendering loop (`renderBars`) calls `sessionColor(sid, agentBySession[sid])` for
+every sid a chart bucket names, including one whose vendor `agentBySessionMap` does not know yet;
+`AGENT_COLOR[undefined]` misses, the old code fell back to `HARNESS_HUE.other` (grey, `#66788c`)
+and cached that grey under the sid immediately, before the real vendor was ever resolved. Once
+cached, `reserveSessionShades` and `sessionColor`'s own fallback both short-circuit on
+"`sessionColorMap[sid]` already set", so the session never recolours, and the session card
+(`sessionColor(s.session_id, s.agent)`, `s.agent` by then correct) reuses the same wrong cached
+value.
+
+Found why `agentBySessionMap` can lack a session `buildChart`'s own `by_session` bucket already
+names: `agentBySessionMap`'s only fallback for a session gone from `sessions` (not currently
+"running", `BuildSnapshot`'s own running-window check) used to be `snap.turns` - but
+`internal/live`'s `Turns` is capped at `turnTickerCap` (50) for I3's own ticker, while
+`buildChart` aggregates every turn in the 30-minute window uncapped. A busy window (more than 50
+turns across all sessions - easy with one chatty Claude Code session alone) can crowd a quieter
+session's own turns out of that cap entirely, even though `buildChart` still drew its bars - the
+exact same class of bug review already caught once for `BuildTurns` itself, 2026-09-24
+(`TestBuildTurns_NoCapOverTickerLimit`), just reappearing for a second consumer of `Turns` that
+also needed the uncapped view.
+
+Fix, both ends. `page.html`: `assignSessionColor` now returns `null` and touches no state
+(`sessionRankMap`, `vendorSessionCounts`, `sessionColorMap`) while `AGENT_COLOR[agent]` is not yet
+a known vendor, instead of falling back to grey and caching it; `reserveSessionShades` skips
+reserving a shade slot at all for a sid whose vendor isn't known yet (previously it reserved a
+slot into a `vendor='other'` bucket permanently); `sessionColor`'s own fallback path likewise
+returns `HARNESS_HUE.other` uncached in that case. Every caller keeps retrying next tick until the
+vendor resolves, then colours and caches for life exactly as originally intended.
+`internal/live/live.go`: new `buildChartAgents` mirrors `buildChart`'s own event/window/`isTurn`
+filter, uncapped, into a new `Snapshot.ChartAgents` field (`json:"chart_agents"`);
+`agentBySessionMap(sessions, turns, chartAgents)` now layers `chartAgents` as the lowest-priority
+base (covers every sid `buildChart` can ever bucket), `turns` overrides it, the recursive
+`sessions` walk overrides both - so the frontend always has a real answer for any sid the chart
+names, not just the newest 50 turns' worth. New `TestBuildSnapshot_ChartAgentsCoversSessionBeyondTurnCap`
+(`internal/live/live_test.go`) reproduces the cap gap directly: a 60-turn "busy" session and one
+much older "quiet" turn, `quiet` absent from both `Sessions` (not running) and `Turns` (capped
+out), `ChartAgents["quiet"]` still resolves.
+
+`check_d15.go` extended with a two-tick fake-mode scenario (`__bdevEnterFakeMode`/
+`__bdevPaintFake`, no live data): tick 1 paints a session whose tokens are only in the chart's
+`by_session` bucket, absent from `sessions`/`turns`/`chart_agents` (simulating "vendor not known
+yet" purely at the JS layer); tick 2 repaints with the same session now present in `sessions`.
+Asserts the post-fix colour differs from tick 1's, and chart == card == legend dot (a new
+`data-session` attribute added to the legend item's own span to make the dot queryable). The
+existing hue-vs-vendor-strip tolerance check gained a saturation-vs-vendor-strip check alongside
+it: `HARNESS_HUE.other`'s own hue (~211.6deg) sits only ~1.6deg from Cowork's (~210deg), so hue
+alone would not have caught a regression back to this exact bug for a Cowork session specifically
+- grey's saturation (~0.16) sits far below any real vendor base (>=0.65), which is what actually
+rules it out.
+
+Fresh, independent review (Claude Opus 5.5, read-only, before commit): confirmed the root-cause
+diagnosis (traced every caller of `assignSessionColor` and every write into `sessionColorMap`/
+`vendorShadeOwner`, found no remaining path that caches a colour before the vendor is known;
+confirmed `DefaultRunningWindow` is 600s and a busy Claude Code session can produce 50 turns in a
+few minutes, so an idle/paused Cowork session easily meets the exact three conditions the bug
+needs at once). One Important finding, fixed: the extended `d15` check reused a fixed
+`fake-late-1` session id, but uicheck attaches to whatever window it already launched rather than
+relaunching one per check, so `sessionColorMap` (page-global, nothing clears it between fake-mode
+runs) survives from one `d15` run to the next in that same window - a second run would find
+`fake-late-1` already cached with its real Cowork shade, making tick 1 return that shade instead
+of a fresh grey guess and false-failing the regression guard, not because the fix regressed but
+because the scenario's own precondition no longer held. Fixed with a per-run-unique id
+(`fake-late-<UnixNano()>`); confirmed by running `d15 d15` back to back against one already-open
+window, both clean. Two minor hardenings from the same review, both applied: `renderBars`' sort
+comparator (`sessionRankMap[a.sid] - sessionRankMap[b.sid]`) now falls back to `Infinity` for an
+unranked sid instead of computing `NaN` from an `undefined` subtraction (a session mid-way through
+resolving its vendor has no rank yet, since `assignSessionColor` only sets one once it actually
+colours); a stale cross-reference in `live.go`'s own new `ChartAgents` comment corrected to point
+at `page.html`'s `agentBySessionMap` comment instead of a nonexistent one. Three findings noted as
+pre-existing, not touched: `buildChartAgents`' "last write wins" on a cross-vendor session_id
+collision (an already-existing edge case elsewhere in this codebase's own tests, `buildChart`
+already merges both vendors' tokens under the one sid anyway, so no new corruption); the sessions
+walk in `agentBySessionMap` overwriting a good agent with an empty one if `Session.Agent` were
+ever `""` (never happens today, every adapter sets it); the `sessionColor` fallback path's own
+"rare" comment undercounting how often it actually runs (true today independent of this diff).
+
+Full verify pass green, re-run after the review's own two fixes: `go vet ./...`, `go test
+./... -count=1` (all 27 packages, including the two new tests), `.\build.ps1`, `node --check` on
+`page.html`'s extracted script, and `scripts\uicheck.ps1 d0`-`d17` (one `d7` failure on the full
+sweep - "fullscreen likely never engaged" - confirmed transient by an immediate solo re-run,
+clean; the same desktop-contention pattern the alpha.2/alpha.3 entries above already document, not
+a code regression). `d15` additionally run twice back to back (`d15 d15`) against the same
+already-open window to prove the review's own repeat-run fix, both clean. Committed as
+`v0.4.0-alpha.6`, not pushed or tagged.
+
 ## 2026-09-28, WS2 follow-up fix: gap-break threshold vs hidden sampling cadence, v0.4.0-alpha.5
 
 Small fix on `main` after alpha.4 (`a7b398e`, pushed and tagged), same day, per the alpha.4

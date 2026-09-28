@@ -296,6 +296,43 @@ ignored), it just no longer does anything.
 
 ## BurnMon Dev (`burnmon-dev` merged into `main` at `f7f1c26`; this and later work commits on `main` directly)
 
+`v0.4.0-alpha.6`: bug fix (2026-09-28, same day as alpha.4/alpha.5), reported live by Wilco - a
+Cowork session's burn-chart segment, legend dot and session card all drew HARNESS_HUE.other's
+grey while the vendor strip and the legend's own text both correctly read Cowork. Root cause:
+`page.html`'s `sessionColor(sid, agent)` caches a session's colour once, forever, by design
+("stable for life"); the burn chart's own `by_session` rendering loop can call it for a sid
+whose vendor `agentBySessionMap` does not know yet (its last turn aged out of the running window,
+and/or its own turns aged out of `Turns`' 50-turn ticker cap, while `buildChart` - uncapped -
+still drew its bars), so the very first call locked in `HARNESS_HUE.other` under that sid
+forever, even once the real vendor resolved on a later tick. Fixed both ends: `assignSessionColor`
+now returns without touching `sessionColorMap`/`vendorShadeOwner` at all while `AGENT_COLOR[agent]`
+is not yet a known vendor (retried every tick until it is, then coloured and cached for life as
+originally intended), and `internal/live`'s new `buildChartAgents`/`Snapshot.ChartAgents` gives
+`agentBySessionMap` an uncapped, always-current session-to-agent map (the same events/window/
+`isTurn` filter `buildChart` itself uses) instead of relying on the ticker-capped `Turns` alone
+for a session gone from `Sessions`. New `TestBuildSnapshot_ChartAgentsCoversSessionBeyondTurnCap`
+(`internal/live`) reproduces the cap gap directly (a busy 60-turn session crowds a quiet session's
+one old turn out of both `Sessions` and `Turns`, `ChartAgents` still has it). `check_d15.go`
+extended: a second fake-mode paint proves a session whose tokens land in the chart bucket one or
+more ticks before its vendor is known recolours to a real vendor shade (chart == card == legend
+dot) once it arrives, rather than staying locked grey; the hue-vs-vendor-strip tolerance check
+gained a saturation check alongside it, since `HARNESS_HUE.other`'s own hue sits only ~1.6deg
+from Cowork's, so hue alone would not have caught a regression back to this exact bug for a
+Cowork session. A fresh, independent review (Claude Opus 5.5, read-only, before commit) confirmed
+the diagnosis and fix, found no remaining path that caches or reserves a colour before the vendor
+is known, and one Important finding fixed here: the extended `d15` check reused a fixed
+`fake-late-1` session id, so a second run against the same already-running window (uicheck
+attaches rather than relaunching) found it already cached from the first run and false-failed
+the regression guard - fixed with a per-run unique id (`fake-late-<UnixNano>`); confirmed by
+running `d15 d15` back to back against one window, both clean. Two minor hardenings from the same
+review: `renderBars`' sort comparator now treats an unranked session (mid-way through resolving
+its vendor) as sorting last instead of computing `NaN` from an `undefined` rank subtraction; a
+stale cross-reference in `live.go`'s own new comment corrected. `go vet ./...`, `go test
+./... -count=1`, `.\build.ps1`, `node --check` on the page JS, and `uicheck d0`-`d17` all green
+(one `d7` failure on the full sweep, confirmed transient by an immediate solo re-run - the same
+desktop-contention pattern the alpha.2/alpha.3 entries above already document, not a code
+regression). Not pushed, tagged or merged.
+
 `v0.4.0-alpha.5`: WS2 follow-up fix (2026-09-28, same day as alpha.4) - alpha.4's own gap-break
 threshold (a hard-coded 5s in `page.html`) hid every minimized stretch on the System chart and
 the process-groups sparklines, because hidden sampling runs at `app.go`'s own

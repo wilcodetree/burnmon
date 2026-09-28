@@ -592,7 +592,13 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     Object.keys(openSids).forEach(function(sid){
       if(sessionColorMap[sid]) return; // already coloured, stable for life
       var agent = agentBySession[sid];
-      var vendor = agent || 'other';
+      // Skip reserving a slot at all while agent is not yet known (found by
+      // review, 2026-09-28, same bug assignSessionColor's own guard below
+      // fixes): reserving here unconditionally used to lock this sid into a
+      // vendor-'other' slot it would keep forever once the real vendor
+      // arrived, since sessionColorMap[sid] would already be set by then.
+      if(!AGENT_COLOR[agent]) return;
+      var vendor = agent;
       var slots = vendorShadeOwner[vendor] || (vendorShadeOwner[vendor] = SESSION_SHADE_L.map(function(){ return null; }));
       var freeIdx = slots.indexOf(null);
       var shadeIdx = freeIdx !== -1 ? freeIdx : (vendorSessionCounts[vendor] || 0) % SESSION_SHADE_L.length;
@@ -601,10 +607,21 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     });
   }
 
+  // assignSessionColor only ever writes sessionColorMap[sid] once agent
+  // resolves to a real vendor (found by review, 2026-09-28: a session whose
+  // vendor is not yet known - the chart's own by_session buckets can name a
+  // sid before agentBySessionMap's turns/sessions inputs know it - used to
+  // fall back to HARNESS_HUE.other here and get cached under that grey
+  // forever, since every caller only ever checks "is this sid already
+  // coloured", never "was it coloured with a real vendor". Returning null
+  // instead of caching a guess means every caller keeps retrying next tick,
+  // and the session gets its real vendor's shade, for life, the moment its
+  // agent is known.
   function assignSessionColor(sid, agent, vendor, shadeIdx){
+    var base = AGENT_COLOR[agent];
+    if(!base) return null;
     sessionRankMap[sid] = sessionColorOrder++;
     vendorSessionCounts[vendor] = (vendorSessionCounts[vendor] || 0) + 1;
-    var base = AGENT_COLOR[agent] || HARNESS_HUE.other;
     var hsl = hexToHSL(base);
     sessionColorMap[sid] = hslToHex(hsl.h, hsl.s, SESSION_SHADE_L[shadeIdx]);
     return sessionColorMap[sid];
@@ -617,10 +634,13 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // already dropped it - round-robin, no live-slot tracking, same as this
   // page's very first pass; rare enough (a session would need to start and
   // fully end between two snapshot polls) that a live-open-session
-  // collision is not the concern the rewrite above targets.
+  // collision is not the concern the rewrite above targets. Returns
+  // HARNESS_HUE.other uncached while agent is not yet known, same reasoning
+  // as assignSessionColor's own guard.
   function sessionColor(sid, agent){
     if(sessionColorMap[sid]) return sessionColorMap[sid];
-    var vendor = agent || 'other';
+    if(!AGENT_COLOR[agent]) return HARNESS_HUE.other;
+    var vendor = agent;
     var shadeIdx = (vendorSessionCounts[vendor] || 0) % SESSION_SHADE_L.length;
     return assignSessionColor(sid, agent, vendor, shadeIdx);
   }
@@ -791,14 +811,20 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // buckets can name, not just the top-level running sessions: a session
   // that stopped within the 30-min chart window is gone from snap.sessions
   // but still has bars, and a subagent never appears at the top level at
-  // all (it nests under its parent's Subagents). Walking sessions
-  // recursively covers the first case only while it is still running;
-  // snap.turns (every real turn in the chart window, running or not) is
-  // the fallback that covers both, so it is applied first and the
-  // recursive walk fills in anything turns missed (e.g. a session with no
-  // turn yet).
-  function agentBySessionMap(sessions, turns){
+  // all (it nests under its parent's Subagents). chartAgents (v0.4.0-
+  // alpha.6, internal/live's own buildChartAgents) is the base layer: the
+  // same events/window buildChart itself uses, so it covers every sid that
+  // can ever appear in a Chart bucket, uncapped. turns is layered on top -
+  // real turn data once available - and the recursive walk of the
+  // currently-running sessions wins last (found by review, 2026-09-28: the
+  // fallback used to be snap.turns alone, but turns is capped at 50 for
+  // I3's own ticker, so a busy window could crowd a quieter session's turn
+  // out of it entirely, leaving agentBySessionMap with nothing for a sid
+  // the chart still drew bars for - the exact gap that let page.html's
+  // sessionColor lock a wrong grey shade in for life).
+  function agentBySessionMap(sessions, turns, chartAgents){
     var m = {};
+    Object.keys(chartAgents || {}).forEach(function(sid){ m[sid] = chartAgents[sid]; });
     (turns || []).forEach(function(t){ m[t.session_id] = t.agent; });
     (function walk(list){
       (list || []).forEach(function(s){
@@ -864,7 +890,17 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         var c = bySession[sid];
         var tok = (c.fresh || 0) + (c.cache_write || 0) + (c.cache_read || 0) + (c.output || 0);
         return { sid: sid, tok: tok };
-      }).filter(function(s){ return s.tok > 0; }).sort(function(a, b){ return sessionRankMap[a.sid] - sessionRankMap[b.sid]; });
+      }).filter(function(s){ return s.tok > 0; }).sort(function(a, b){
+        // rank(sid) falls back to Infinity, not undefined (found by review,
+        // 2026-09-28): a session whose vendor is still unknown this tick has
+        // no rank yet (assignSessionColor only sets one once it actually
+        // colours a session) - undefined-undefined is NaN, which sort()
+        // treats as "equal", leaving that bucket's own ordering engine-
+        // defined for as long as the vendor stays unresolved, instead of
+        // just sorting it after every already-ranked session.
+        var ra = sessionRankMap[a.sid], rb = sessionRankMap[b.sid];
+        return (ra === undefined ? Infinity : ra) - (rb === undefined ? Infinity : rb);
+      });
     });
     var max = 1;
     perBucket.forEach(function(list){
@@ -962,7 +998,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     var items = sids.map(function(sid, i){
       var label = labels[i];
       if(labelCounts[label] > 1) label += ' #' + esc(sid.slice(-4));
-      return '<span class="legenditem"><span class="dot" style="background:' + sessionColor(sid, agentBySession[sid]) + '"></span>' +
+      return '<span class="legenditem" data-session="' + esc(sid) + '"><span class="dot" style="background:' + sessionColor(sid, agentBySession[sid]) + '"></span>' +
         label + '<b>' + fmtTokens(totals[sid]) + '</b></span>';
     });
     cropToFit(el, items);
@@ -1563,7 +1599,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // from the shared snapshot's own burn field instead of its own poll.
   function renderBurnPanels(burn){
     if(!burn) return;
-    var agentBySession = agentBySessionMap(burn.sessions, burn.turns);
+    var agentBySession = agentBySessionMap(burn.sessions, burn.turns, burn.chart_agents);
     var projectBySession = projectBySessionMap(burn.sessions);
     reserveSessionShades(burn.sessions, agentBySession);
     renderBars(burn.chart, agentBySession);

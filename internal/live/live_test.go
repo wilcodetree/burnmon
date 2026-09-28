@@ -296,6 +296,59 @@ func TestBuildTurns_NoCapOverTickerLimit(t *testing.T) {
 	}
 }
 
+// TestBuildSnapshot_ChartAgentsCoversSessionBeyondTurnCap is the regression
+// for the WS2 vendor-colour follow-up (v0.4.0-alpha.6, 2026-09-28): a
+// session can be gone from both Sessions (not running any more) and Turns
+// (its one turn aged out of turnTickerCap once 60 turns from a busier
+// session crowd the window) while still holding bars in Chart, since
+// buildChart aggregates every turn in the window, uncapped. Before
+// ChartAgents existed, page.html's agentBySessionMap had no way left to
+// learn that session's vendor for as long as it stayed in the chart's
+// tail, which is exactly the gap that let a session render the grey
+// "unknown vendor" colour and cache it there for life.
+func TestBuildSnapshot_ChartAgentsCoversSessionBeyondTurnCap(t *testing.T) {
+	now := time.Now().UTC()
+	events := []schema.Event{
+		// "quiet": one turn 25 minutes ago - inside the 30-minute chart
+		// window, well outside the running window, so it drops out of
+		// Sessions; its own turn is also the oldest in the window, so it is
+		// the first one the 50-turn cap drops.
+		{Vendor: "openai", Agent: "codex", SessionID: "quiet", RequestID: "quiet:0",
+			Model: "gpt-5-codex", At: now.Add(-25 * time.Minute), Input: 40, Output: 10},
+	}
+	for i := 0; i < 60; i++ {
+		events = append(events, schema.Event{
+			Vendor: "anthropic", Agent: "claude-code", SessionID: "busy", RequestID: "busy:" + string(rune('a'+i)),
+			Model: "claude-sonnet-5", At: now.Add(time.Duration(i-59) * time.Second), Input: 100, Output: 50,
+		})
+	}
+	snap := BuildSnapshot(events, testConfig(), now)
+
+	for _, s := range snap.Sessions {
+		if s.SessionID == "quiet" {
+			t.Fatalf("test setup: want quiet gone from Sessions (not running), got %+v", s)
+		}
+	}
+	for _, te := range snap.Turns {
+		if te.SessionID == "quiet" {
+			t.Fatalf("test setup: want quiet's turn capped out of Turns, got it at Turn %d", te.Turn)
+		}
+	}
+	var quietHasBars bool
+	for _, b := range snap.Chart {
+		if _, ok := b.BySession["quiet"]; ok {
+			quietHasBars = true
+		}
+	}
+	if !quietHasBars {
+		t.Fatal("test setup: want quiet to still hold bars somewhere in Chart")
+	}
+
+	if got := snap.ChartAgents["quiet"]; got != "codex" {
+		t.Fatalf("ChartAgents[%q] = %q, want %q (uncapped, unlike Turns)", "quiet", got, "codex")
+	}
+}
+
 // TestSnapshotChangesOnAppend is the v0.1 Step 3 done-when: "a test feeds a
 // fixture append to a temp trail and asserts the snapshot changes." Parses a
 // real trail file through the claude adapter twice, incrementally, exactly
