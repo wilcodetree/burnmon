@@ -11,3 +11,6 @@ testdata/uicheck/out/
 # internal planning notes and internal-rollout material, not part of the public repo
 docs/
 dist/
+
+# stray WebView2 caches created with a mis-encoded user-data path (2026-09-28)
+/*/EBWebView/
