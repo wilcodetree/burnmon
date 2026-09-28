@@ -27,8 +27,12 @@ vendor colours fixes, main in `C:\ZND\projects\burnmon`, v0.4.0-alpha.4. Never u
 
 ## Proof
 
-- uicheck with fake samples: 10 minutes of data puts the first point at about one third of the
-  width from the left (report the pixel ratio); a 60 s gap gives a break; the labels match the
-  burn chart's labels for the same `now`.
+- uicheck with fake samples: 10 minutes of data up to now puts the first point at about two
+  thirds of the width from the left (corrected 2026-09-28: the first version of this spec said
+  "one third", which was wrong; the alpha.4 session implemented the correct two thirds); a 60 s
+  gap gives a break; the labels match the burn chart's labels for the same `now`.
+- Amended 2026-09-28 (v0.4.0-alpha.5): item 4's fixed 5 s break threshold hid every minimized
+  stretch, because hidden sampling runs at 10 s. The break threshold is now 2.5 times the
+  hidden sample interval (25 s), taken from the Go constant, not hard-coded in the page.
 - Screenshot of the System chart with fake data, committed under
   `C:\ZND\projects\burnmon\04_assets\reference\2026-09-28_vendor_colours\` next to the colour one.
