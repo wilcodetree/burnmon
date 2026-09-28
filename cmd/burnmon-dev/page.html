@@ -200,9 +200,13 @@ tbody tr.vrow:hover{background:var(--panel2)}
 tr.vexpand td{padding:6px 8px 8px 24px; color:var(--txt); font-size:11px; background:#0d1219; border-top:1px dashed var(--bd)}
 tr.vexpand b{font-variant-numeric:tabular-nums}
 
-/* activity + harness heatmap, section 4: side by side */
+/* activity + harness heatmap, section 4: side by side. Activity sizes to its
+   own content (Wilco, 2026-09-28: the old fixed 40% left a dead gap right of
+   the grid on wide windows); the harness heatmap takes the rest. The
+   activity grid crops its oldest weeks only when the row cannot also give
+   the harness panel ACTIVITY_HARNESS_MIN_PX (renderHeatmap). */
 .splitrow{display:flex; gap:4px; flex:0 0 auto}
-.splitrow > .panel:first-child{flex:0 0 40%; min-width:0}
+.splitrow > .panel:first-child{flex:0 0 auto; min-width:0}
 .splitrow > .panel:last-child{flex:1; min-width:0}
 @media (max-width: 899px){
   .splitrow{flex-direction:column}
@@ -862,11 +866,12 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // dropping any now-excess bar elements and growing to add new ones,
   // same as the segment reconciliation within each bar.
   var burnBarEls = [];
-  function renderBars(chart, agentBySession){
+  function renderBars(chart, agentBySession, projectBySession, bucketSeconds){
     var el = document.getElementById('burnBars');
     if(!el) return;
     chart = chart || [];
     agentBySession = agentBySession || {};
+    projectBySession = projectBySession || {};
 
     // Assign (or confirm) every session's own stable colour/rank before
     // sorting, including a bucket where it has 0 tokens, so rank stays
@@ -933,7 +938,30 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         seg.style.height = pct.toFixed(1) + '%';
         seg.style.background = sessionColor(s.sid, agentBySession[s.sid]);
       });
+      bar.title = burnBarTitle(chart[bi], list, agentBySession, projectBySession, bucketSeconds);
     });
+  }
+
+  // burnBarTitle (Wilco, 2026-09-28): hover text for one burn bar, same
+  // native title tooltip as both heatmaps. First line: the bucket's time
+  // span, total tokens and cost. Then one line per session, biggest first,
+  // with the token split (in = fresh, cache = write + read, out = output).
+  function burnBarTitle(bucket, list, agentBySession, projectBySession, bucketSeconds){
+    var from = new Date(bucket.at);
+    var to = new Date(from.getTime() + (bucketSeconds || 60) * 1000);
+    var span = fmtHM(from) + ' to ' + fmtHM(to);
+    if(!list.length) return span + ': no activity';
+    var bySession = bucket.by_session || {};
+    var total = list.reduce(function(a, s){ return a + s.tok; }, 0);
+    var lines = [span + ': ' + fmtTokens(total) + ' tok, ' + fmtCost(bucket.cost)];
+    list.slice().sort(function(a, b){ return b.tok - a.tok; }).forEach(function(s){
+      var c = bySession[s.sid] || {};
+      lines.push((agentBySession[s.sid] || 'other') + ' ' + shortSessionLabel(projectBySession[s.sid], s.sid) + ': ' +
+        fmtTokens(s.tok) + ' (in ' + fmtTokens(c.fresh || 0) +
+        ', cache ' + fmtTokens((c.cache_write || 0) + (c.cache_read || 0)) +
+        ', out ' + fmtTokens(c.output || 0) + ')');
+    });
+    return lines.join('\n');
   }
 
   // renderBurnAxis draws the x-axis labels every 5 minutes (section 2),
@@ -1215,6 +1243,10 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // convention, used elsewhere for the same "week" concept), one column
   // per week, oldest first, 182 days (26 weeks) ending today.
   var lastHeatmapPayload = null;
+  // ACTIVITY_HARNESS_MIN_PX: the narrowest the harness heatmap gets before
+  // the Activity grid starts dropping its oldest weeks (label 116px plus
+  // about 18 one-minute columns).
+  var ACTIVITY_HARNESS_MIN_PX = 300;
 
   // renderHeatmap: no-scroll patch section 3 crops to as many whole weeks
   // as the panel's own width fits (newest on the right, oldest cropped on
@@ -1270,7 +1302,17 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     }
     if(activeEl) activeEl.textContent = activeDays + ' active days';
 
-    var fitWeeks = Math.max(1, Math.floor(grid.clientWidth / 11));
+    // The Activity panel sizes to its content (CSS .splitrow), so its own
+    // clientWidth is no longer the budget: take the row's width, minus the
+    // harness panel's minimum and the 4px row gap when side by side, minus
+    // this panel's own chrome (heatmapwrap padding 20px + border 2px).
+    var row = document.getElementById('activityHeatmapRow');
+    var budget = grid.clientWidth;
+    if(row){
+      var stacked = getComputedStyle(row).flexDirection === 'column';
+      budget = row.clientWidth - 22 - (stacked ? 0 : 4 + ACTIVITY_HARNESS_MIN_PX);
+    }
+    var fitWeeks = Math.max(1, Math.floor((budget + 2) / 11));
     if(cols.length > fitWeeks) cols = cols.slice(-fitWeeks);
 
     var max = 1;
@@ -1316,7 +1358,16 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
         lastRight = left + el.scrollWidth;
       });
     }
+
+    // The harness heatmap crops to its own clientWidth, which just changed
+    // if this grid gained or lost columns; re-crop it now instead of waiting
+    // for its next tick.
+    if(cols.length !== lastHeatmapCols){
+      lastHeatmapCols = cols.length;
+      if(lastProcessGroupsHistory && lastProcessGroupsHistory.length) renderHarnessHeatmap(lastProcessGroupsHistory);
+    }
   }
+  var lastHeatmapCols = -1;
 
   // renderTicker (section 5): one dense line per turn, newest first, click
   // opens the turn detail popup. Headline patch section 1: the ticker is
@@ -1602,7 +1653,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     var agentBySession = agentBySessionMap(burn.sessions, burn.turns, burn.chart_agents);
     var projectBySession = projectBySessionMap(burn.sessions);
     reserveSessionShades(burn.sessions, agentBySession);
-    renderBars(burn.chart, agentBySession);
+    renderBars(burn.chart, agentBySession, projectBySession, burn.bucket_seconds);
     renderBurnAxis(burn.chart, burn.bucket_seconds);
     renderBurnLegend(burn.chart, agentBySession, projectBySession);
     renderSessionCards(burn.sessions);
