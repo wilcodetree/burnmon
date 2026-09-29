@@ -198,3 +198,116 @@ func TestWatcher_PollsWSLRootOnAppend(t *testing.T) {
 		t.Fatalf("want 2 notifications after an append, got %d", n)
 	}
 }
+
+// TestTail_HeldOpenFileAppends guards the WS2 follow-up's item 2: a file
+// its writer keeps open (Codex holds a rollout open for the whole chat)
+// must still reach onChange on every append, through the tail poll alone.
+// The watcher gets no native backend root, so no directory notification
+// can satisfy this test; only pollTailOnce can.
+func TestTail_HeldOpenFileAppends(t *testing.T) {
+	dir := t.TempDir()
+	c := &changeCollector{}
+	w, err := New(nil, nil, c.onChange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Stop()
+	w.nativeRoots = []string{dir} // tail-only: no ReadDirectoryChangesW handle on dir
+
+	path := filepath.Join(dir, "rollout-open.jsonl")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close() // held open, like Codex, for the whole test
+
+	count := func() int {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return len(c.paths)
+	}
+	w.Track(path)
+	w.Track(filepath.Join(t.TempDir(), "elsewhere.jsonl")) // outside the root, ignored
+
+	w.pollTailOnce() // first look fires once, so the caller ingests from its cursor
+	if n := count(); n != 1 {
+		t.Fatalf("after first look: %d calls, want 1", n)
+	}
+	for turn := 1; turn <= 3; turn++ {
+		if _, err := f.WriteString(`{"turn":` + strconv.Itoa(turn) + "}\n"); err != nil {
+			t.Fatal(err)
+		}
+		w.pollTailOnce()
+		if n := count(); n != 1+turn {
+			t.Fatalf("after append %d: %d calls, want %d", turn, n, 1+turn)
+		}
+	}
+	w.pollTailOnce() // no append: no call
+	if n := count(); n != 4 {
+		t.Fatalf("idle tick fired: %d calls, want 4", n)
+	}
+}
+
+// TestTail_TickerSeesHeldOpenAppend runs the real 2-second ticker end to
+// end against a held-open file.
+func TestTail_TickerSeesHeldOpenAppend(t *testing.T) {
+	dir := t.TempDir()
+	c := &changeCollector{}
+	w, err := New([]string{dir}, nil, c.onChange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Start()
+	defer w.Stop()
+
+	path := filepath.Join(dir, "rollout-open.jsonl")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	w.Track(path)
+	time.Sleep(tailInterval + 500*time.Millisecond) // first look done
+	c.mu.Lock()
+	c.paths = nil
+	c.mu.Unlock()
+	if _, err := f.WriteString(`{"turn":1}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(t, path, 2*tailInterval+time.Second)
+}
+
+func TestTail_CapKeepsMostRecent(t *testing.T) {
+	dir := t.TempDir()
+	c := &changeCollector{}
+	w, err := New(nil, nil, c.onChange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Stop()
+	w.nativeRoots = []string{dir}
+	base := time.Now()
+	for i := 0; i < tailCap+5; i++ {
+		p := filepath.Join(dir, "f"+strconv.Itoa(i)+".jsonl")
+		if err := os.WriteFile(p, []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		w.tail[p] = &tailEntry{active: base.Add(time.Duration(i) * time.Second), size: -1}
+	}
+	stale := filepath.Join(dir, "stale.jsonl")
+	w.tail[stale] = &tailEntry{active: base.Add(-2 * tailWindow), size: -1}
+	w.pollTailOnce()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.paths) != tailCap {
+		t.Fatalf("%d files polled, want the cap %d", len(c.paths), tailCap)
+	}
+	for _, p := range c.paths {
+		if p == filepath.Join(dir, "f0.jsonl") || p == stale {
+			t.Fatalf("%s polled, want it dropped (oldest past the cap, or expired)", p)
+		}
+	}
+	if _, ok := w.tail[stale]; ok {
+		t.Fatal("expired entry still tracked")
+	}
+}

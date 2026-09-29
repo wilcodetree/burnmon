@@ -131,6 +131,12 @@ type Snapshot struct {
 	// silently starve that fallback of a session's agent, the same class of
 	// bug review already caught once for BuildTurns itself, 2026-09-24.
 	ChartAgents map[string]string `json:"chart_agents,omitempty"`
+	// ChartProjects is ChartAgents for the project path (the legend's short
+	// label), same events and window. WS2 follow-up (2026-09-29, item 3): a
+	// Codex session with bars in the chart but no longer "running" read
+	// "codex rollout-" in the legend although its events carried a cwd,
+	// because the page only knew projects of running sessions.
+	ChartProjects map[string]string `json:"chart_projects,omitempty"`
 }
 
 // turnTickerCap is I3's fixed cap on the turn ticker: "capped at 50 lines".
@@ -325,7 +331,22 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time, bu
 		Chart:                buildChart(events, cfg, windowStart, now, bs),
 		Turns:                buildTurns(events, cfg, windowStart, now, turnTickerCap),
 		ChartAgents:          buildChartAgents(events, windowStart, now),
+		ChartProjects:        buildChartProjects(events, windowStart, now),
 	}
+}
+
+// buildChartProjects maps every session_id buildChartAgents covers to its
+// last non-empty project path, same filter; a session with no project on
+// any charted event is left out (the page labels it by agent and id).
+func buildChartProjects(events []schema.Event, windowStart, now time.Time) map[string]string {
+	m := map[string]string{}
+	for _, e := range events {
+		if e.Project == "" || !isTurn(e) || e.At.IsZero() || e.At.Before(windowStart) || e.At.After(now) {
+			continue
+		}
+		m[e.SessionID] = e.Project
+	}
+	return m
 }
 
 // buildChartAgents maps every session_id buildChart would place into a

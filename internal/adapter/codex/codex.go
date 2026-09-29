@@ -67,6 +67,24 @@ func DefaultSourcesWithOptions(scanWSL bool) []string {
 // Roots implements adapter.Adapter.
 func (Adapter) Roots() []string { return DefaultSourcesWithOptions(true) }
 
+// RecentRollouts lists the rollouts under roots' day folders for today and
+// yesterday (local), the files a still-open Codex chat can be writing to.
+// Codex keeps a rollout open for the whole chat and its appends raise no
+// change notice (WS2 follow-up, 2026-09-29), so the live watcher's tail
+// poll is seeded with these at startup: a chat opened before BurnMon
+// started has no other way into the tail set until the next full rescan.
+func RecentRollouts(roots []string, now time.Time) []string {
+	var out []string
+	for _, day := range []time.Time{now.In(time.Local), now.In(time.Local).AddDate(0, 0, -1)} {
+		for _, root := range roots {
+			dir := filepath.Join(root, day.Format("2006"), day.Format("01"), day.Format("02"))
+			matches, _ := filepath.Glob(filepath.Join(dir, "rollout-*.jsonl"))
+			out = append(out, matches...)
+		}
+	}
+	return out
+}
+
 // logZstSiblings logs (does not read) a rollout-*.jsonl.zst compressed
 // sibling next to an uncompressed rollout, per the spec: "logged and
 // skipped in v0.1" (openai/codex issue #24948 notes newer builds may write
@@ -300,6 +318,22 @@ func toolCallOutputBytes(output any) int64 {
 	return 0
 }
 
+// requestID keys one token_count line. Older rollouts carry a top-level
+// "ordinal" on every line and keep that key, so no stored event changes
+// identity. Current builds (VS Code extension, cli_version
+// 0.155.0-alpha.16.3, seen 2026-09-29) write no ordinal at all, which used
+// to give every turn the key ":0" and let the store's upsert collapse a
+// whole session into one event. The fallback is the line's byte offset in
+// the file, "b"-prefixed so it can never collide with an ordinal key: it is
+// the same whether the file is read in one pass or resumed from a cursor,
+// unlike a line counter, which restarts at every incremental read.
+func requestID(sessionID string, obj map[string]any, lineStart int64) string {
+	if ordinal, ok := asFloat(obj["ordinal"]); ok {
+		return sessionID + ":" + strconv.FormatInt(int64(ordinal), 10)
+	}
+	return sessionID + ":b" + strconv.FormatInt(lineStart, 10)
+}
+
 // Parse reads path from byte offset from to EOF and returns one Event per
 // token_count line found, one ToolCall per function_call/custom_tool_call
 // payload (S2: both families, not just "function_call" as the spec's prose
@@ -357,6 +391,7 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 			return nil, nil, from, readErr
 		}
 		lineLen := int64(len(rawLine))
+		lineStart := offset
 		line := strings.TrimSpace(rawLine)
 		if line == "" {
 			offset += lineLen
@@ -458,13 +493,12 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 			continue
 		}
 
-		ordinal, _ := asFloat(obj["ordinal"])
 		e := schema.Event{
 			Vendor:    "openai",
 			Agent:     "codex",
 			Surface:   surface,
 			SessionID: sessionID,
-			RequestID: sessionID + ":" + strconv.FormatInt(int64(ordinal), 10),
+			RequestID: requestID(sessionID, obj, lineStart),
 			Project:   cwd,
 			Model:     model,
 			Title:     title,

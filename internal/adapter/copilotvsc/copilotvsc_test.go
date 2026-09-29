@@ -1,6 +1,9 @@
 package copilotvsc
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -76,4 +79,120 @@ func TestPollOnce_Fixture(t *testing.T) {
 type eventByRequest struct {
 	input, output int64
 	model         string
+}
+
+// TestTail_IncrementalMatchesFullRead appends the fixture to a temp file in
+// two halves, plus a partial line, and checks Tail's two polls together
+// name the same requests, with the same sessions, as one PollOnce over the
+// whole fixture: the session id must carry across the poll boundary.
+func TestTail_IncrementalMatchesFullRead(t *testing.T) {
+	raw, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := PollOnce(fixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSession := map[string]string{}
+	for _, e := range want {
+		wantSession[e.RequestID] = e.SessionID
+	}
+
+	lines := bytes.SplitAfter(raw, []byte("\n"))
+	half := len(lines) / 2
+	first := bytes.Join(lines[:half], nil)
+	rest := bytes.Join(lines[half:], nil)
+
+	path := filepath.Join(t.TempDir(), "copilot-otel.jsonl")
+	if err := os.WriteFile(path, first, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var tail Tail
+	got := map[string]string{}
+	poll := func() int {
+		events, err := tail.Poll(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range events {
+			got[e.RequestID] = e.SessionID
+		}
+		return len(events)
+	}
+	poll()
+	cut := len(rest) - 10 // leave the last line partial for one poll
+	appendBytes(t, path, rest[:cut])
+	poll()
+	appendBytes(t, path, rest[cut:])
+	poll()
+	if n := poll(); n != 0 {
+		t.Fatalf("idle poll returned %d events, want 0", n)
+	}
+	if len(got) != len(wantSession) {
+		t.Fatalf("tail saw %d requests, full read %d", len(got), len(wantSession))
+	}
+	for id, sid := range wantSession {
+		if got[id] != sid {
+			t.Fatalf("request %s: session %q via tail, %q via full read", id, got[id], sid)
+		}
+	}
+}
+
+// TestTail_ResetsWhenFileShrinksOrIsReplaced covers the two restart cases:
+// a file truncated below the offset, and a new file at the same path.
+func TestTail_ResetsWhenFileShrinksOrIsReplaced(t *testing.T) {
+	raw, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "copilot-otel.jsonl")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var tail Tail
+	full, err := tail.Poll(path)
+	if err != nil || len(full) != 10 {
+		t.Fatalf("first poll: %d events, err %v; want 10", len(full), err)
+	}
+
+	// Shrink: rewrite with the first half only, smaller than the offset.
+	lines := bytes.SplitAfter(raw, []byte("\n"))
+	firstHalf := bytes.Join(lines[:len(lines)/2], nil)
+	if err := os.WriteFile(path, firstHalf, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	shrunk, err := tail.Poll(path)
+	if err != nil || len(shrunk) == 0 {
+		t.Fatalf("after shrink: %d events, err %v; want a re-read from byte 0", len(shrunk), err)
+	}
+
+	// Replace: a different file, same path, larger than the old offset.
+	other := filepath.Join(dir, "other.jsonl")
+	if err := os.WriteFile(other, append(append([]byte{}, raw...), raw...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(other, path); err != nil {
+		t.Fatal(err)
+	}
+	replaced, err := tail.Poll(path)
+	if err != nil || len(replaced) != 10 {
+		t.Fatalf("after replace: %d events, err %v; want 10 from a re-read from byte 0", len(replaced), err)
+	}
+}
+
+func appendBytes(t *testing.T, path string, b []byte) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.Write(b); err != nil {
+		t.Fatal(err)
+	}
 }

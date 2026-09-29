@@ -2,6 +2,19 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-09-29, WS2 follow-up: Codex live tail and collapsed turns, v0.4.0-alpha.8
+
+Spec `02_roadmap6-09-29_ws2_codex_live_tail.md`, items 0 to 5, on `main`. Item 0 proved on
+the real file first: 26 `token_count` lines, 1 stored event for that session. Codex rows keyed
+by `ordinal` when present, else by the line's byte offset; every collapsed `:0` row (11) removed
+and its file re-read from byte 0, on every Collect. A 2 s tail poll reads held-open files' sizes
+by handle, since Codex's appends raise no change notice. Legend label fixed via per-chart
+projects. Copilot in VS Code tails its OTel file (about 490 ms per poll before, 0 to 24 ms
+after). Codex month 165,847,499 tokens before the re-ingest, 176,203,422 right after. A
+15-minute real run: 13 turns, each in the store within about 2 s, file mtimes untouched.
+Review by a fresh Opus agent, three medium findings fixed. Numbers and caveats: `STATUS.md`'s
+alpha.8 entry. Not committed.
+
 ## 2026-09-28, bug fix: session colour locked grey before its vendor was known, v0.4.0-alpha.6
 
 Bug fix on `main` after alpha.5, reported live by Wilco: a Cowork session drew grey in the burn

@@ -82,7 +82,8 @@ var workspaceAttrCandidates = []string{
 
 // PollOnce reads path (the VS Code otel.outfile the README's two settings
 // produce) from the start and returns one Event per distinct
-// gen_ai.response.id seen, last write wins in file order. No offset: like
+// gen_ai.response.id seen, last write wins in file order. Both apps now
+// poll through Tail below instead; PollOnce stays for a one-shot read. No offset: like
 // Hermes and Copilot CLI, this is a plain 5-second poll of the whole file,
 // not an incremental tail (5-second poll, per the spec's own "like Hermes"
 // phrasing); UpsertEvents' own dedup (largest output per RequestID) makes a
@@ -109,49 +110,131 @@ func PollOnce(path string) ([]schema.Event, error) {
 func parse(r io.Reader) ([]schema.Event, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
-
-	sessionID := ""
-	var order []string
-	byRequest := map[string]schema.Event{}
-
+	c := newCollector("")
 	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		var rec logRecord
-		if err := json.Unmarshal(line, &rec); err != nil || rec.Attributes == nil {
-			// A metrics record, a blank "{}" line, or a malformed/partial
-			// line (the file still being written): skip, not fatal.
-			continue
-		}
-
-		eventName, _ := rec.Attributes["event.name"].(string)
-		switch eventName {
-		case "copilot_chat.session.start":
-			if sid, ok := rec.Attributes["session.id"].(string); ok && sid != "" {
-				sessionID = sid
-			}
-		case "gen_ai.client.inference.operation.details":
-			e, ok := inferenceEvent(rec, sessionID)
-			if !ok {
-				continue
-			}
-			if _, seen := byRequest[e.RequestID]; !seen {
-				order = append(order, e.RequestID)
-			}
-			byRequest[e.RequestID] = e // last write wins per request
-		}
+		c.line(scanner.Bytes())
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+	return c.events(), nil
+}
 
-	events := make([]schema.Event, 0, len(order))
-	for _, id := range order {
-		events = append(events, byRequest[id])
+// collector turns log-record lines into Events, one per distinct
+// gen_ai.response.id, last write wins in line order. sessionID is the
+// session the next inference line belongs to: the last
+// copilot_chat.session.start seen, carried across Tail polls.
+type collector struct {
+	sessionID string
+	order     []string
+	byRequest map[string]schema.Event
+}
+
+func newCollector(sessionID string) *collector {
+	return &collector{sessionID: sessionID, byRequest: map[string]schema.Event{}}
+}
+
+func (c *collector) line(line []byte) {
+	if len(bytes.TrimSpace(line)) == 0 {
+		return
 	}
-	return events, nil
+	var rec logRecord
+	if err := json.Unmarshal(line, &rec); err != nil || rec.Attributes == nil {
+		// A metrics record, a blank "{}" line, or a malformed/partial
+		// line (the file still being written): skip, not fatal.
+		return
+	}
+
+	eventName, _ := rec.Attributes["event.name"].(string)
+	switch eventName {
+	case "copilot_chat.session.start":
+		if sid, ok := rec.Attributes["session.id"].(string); ok && sid != "" {
+			c.sessionID = sid
+		}
+	case "gen_ai.client.inference.operation.details":
+		e, ok := inferenceEvent(rec, c.sessionID)
+		if !ok {
+			return
+		}
+		if _, seen := c.byRequest[e.RequestID]; !seen {
+			c.order = append(c.order, e.RequestID)
+		}
+		c.byRequest[e.RequestID] = e // last write wins per request
+	}
+}
+
+func (c *collector) events() []schema.Event {
+	events := make([]schema.Event, 0, len(c.order))
+	for _, id := range c.order {
+		events = append(events, c.byRequest[id])
+	}
+	return events
+}
+
+// Tail is PollOnce with a byte offset kept between calls (WS2 follow-up,
+// 2026-09-29, item 5): PollOnce re-read the whole OTel file every 5
+// seconds, and the file only grows (46 MB on Wilco's laptop that day, about
+// half a second of JSON decoding per poll). Tail reads only the complete
+// lines appended since its last call, carrying the current session id
+// across calls. It starts over from byte 0 when the path changes, the file
+// shrinks, or the path now names a different file (VS Code replaced it).
+// The offset lives in memory, so the first Poll after an app start reads
+// the whole file once; the store's upsert (largest output per request)
+// makes that re-read a no-op for what is already stored. Not safe for
+// concurrent use; each app's single poll goroutine owns one.
+type Tail struct {
+	path      string
+	file      os.FileInfo // identity of the file offset belongs to
+	offset    int64
+	sessionID string
+}
+
+// Poll returns the Events in the lines appended to path since the last
+// call. path == "" and a missing file both return (nil, nil), as PollOnce.
+func (t *Tail) Poll(path string) ([]schema.Event, error) {
+	if path == "" {
+		return nil, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if path != t.path || t.file == nil || !os.SameFile(t.file, fi) || fi.Size() < t.offset {
+		t.path, t.offset, t.sessionID = path, 0, ""
+	}
+	t.file = fi
+	if fi.Size() == t.offset {
+		return nil, nil
+	}
+	if _, err := f.Seek(t.offset, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	c := newCollector(t.sessionID)
+	r := bufio.NewReaderSize(f, 64*1024)
+	consumed := t.offset
+	for {
+		line, err := r.ReadBytes('\n')
+		if err == io.EOF {
+			break // a trailing partial line stays for the next call
+		}
+		if err != nil {
+			return nil, err
+		}
+		consumed += int64(len(line))
+		c.line(line)
+	}
+	t.offset = consumed
+	t.sessionID = c.sessionID
+	return c.events(), nil
 }
 
 func inferenceEvent(rec logRecord, sessionID string) (schema.Event, bool) {

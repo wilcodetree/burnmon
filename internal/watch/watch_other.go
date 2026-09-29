@@ -151,3 +151,13 @@ func (b *fsnotifyBackend) handleEvent(ev fsnotify.Event) {
 		b.onChange(ev.Name)
 	}
 }
+
+// sizeByHandle is the tail poll's size read. Outside Windows an open
+// file's size is current either way, so a plain Stat does.
+func sizeByHandle(path string) (int64, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return fi.Size(), nil
+}

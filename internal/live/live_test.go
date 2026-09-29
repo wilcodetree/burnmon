@@ -411,3 +411,29 @@ func TestSnapshotChangesOnAppend(t *testing.T) {
 		t.Fatal("want the appended turn to land in a chart bucket")
 	}
 }
+
+// TestBuildSnapshot_ChartProjectsCoversStoppedSession guards the WS2
+// follow-up's item 3 (2026-09-29): a Codex session with bars in the chart
+// but no longer running must still carry its project to the page, which
+// otherwise labelled it by the first 8 characters of its id, "rollout-".
+func TestBuildSnapshot_ChartProjectsCoversStoppedSession(t *testing.T) {
+	now := time.Now().UTC()
+	events := []schema.Event{
+		{Vendor: "openai", Agent: "codex", SessionID: "rollout-x", RequestID: "rollout-x:b100",
+			Model: "gpt-5-codex", Project: `C:\ZND\projects\siteoffice`, At: now.Add(-20 * time.Minute), Input: 40, Output: 10},
+		{Vendor: "openai", Agent: "codex", SessionID: "rollout-y", RequestID: "rollout-y:b100",
+			Model: "gpt-5-codex", At: now.Add(-20 * time.Minute), Input: 40, Output: 10},
+	}
+	snap := BuildSnapshot(events, testConfig(), now)
+	for _, s := range snap.Sessions {
+		if s.SessionID == "rollout-x" {
+			t.Fatal("test setup: want rollout-x gone from Sessions (not running)")
+		}
+	}
+	if got := snap.ChartProjects["rollout-x"]; got != `C:\ZND\projects\siteoffice` {
+		t.Fatalf("ChartProjects[rollout-x] = %q, want its cwd", got)
+	}
+	if _, ok := snap.ChartProjects["rollout-y"]; ok {
+		t.Fatal("ChartProjects holds a session with no project; want it left out")
+	}
+}

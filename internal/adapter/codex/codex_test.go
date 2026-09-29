@@ -315,3 +315,65 @@ func TestNameAndRoots(t *testing.T) {
 	}
 	_ = a.Roots() // must not panic; a fresh CI box legitimately has zero folders
 }
+
+// TestParseNoOrdinalKeysByByteOffset guards item 0 of the 2026-09-29 WS2
+// follow-up: current Codex builds (VS Code extension, cli_version
+// 0.155.0-alpha.16.3, confirmed on a real rollout) write no top-level
+// "ordinal" on any line, so every turn used to get RequestID sessionID+":0"
+// and the store's upsert collapsed a whole session into one event. The
+// fallback key is the line's byte offset in the file, which must come out
+// identical whether the file is read in one pass or resumed mid-file.
+func TestParseNoOrdinalKeysByByteOffset(t *testing.T) {
+	a := Adapter{}
+	path := filepath.Join("..", "..", "..", "testdata", "codex", "three-turns-no-ordinal.jsonl")
+
+	all, _, end, err := a.Parse(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("one pass: got %d events, want 3 (one per token_count line)", len(all))
+	}
+	seen := map[string]bool{}
+	for _, e := range all {
+		if strings.HasSuffix(e.RequestID, ":0") {
+			t.Fatalf("RequestID %q still collapses to :0", e.RequestID)
+		}
+		if seen[e.RequestID] {
+			t.Fatalf("duplicate RequestID %q", e.RequestID)
+		}
+		seen[e.RequestID] = true
+	}
+
+	// Two incremental passes, split right after the first token_count line
+	// (line 3), the way the live watcher reads a file still being written.
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var split int64
+	for i, lines := 0, 0; i < len(raw); i++ {
+		if raw[i] == '\n' {
+			lines++
+			if lines == 3 {
+				split = int64(i + 1)
+				break
+			}
+		}
+	}
+	second, _, off2, err := a.Parse(path, split)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off2 != end {
+		t.Fatalf("resumed pass offset %d, want %d", off2, end)
+	}
+	if len(second) != 2 {
+		t.Fatalf("resumed pass: got %d events, want 2", len(second))
+	}
+	for _, e := range second {
+		if !seen[e.RequestID] {
+			t.Fatalf("resumed pass RequestID %q differs from the one-pass key set %v", e.RequestID, seen)
+		}
+	}
+}

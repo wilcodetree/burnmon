@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"burnmon/internal/adapter/codex"
 	"burnmon/internal/adapter/copilotcli"
 	"burnmon/internal/adapter/copilotvsc"
 	"burnmon/internal/adapter/hermes"
@@ -36,7 +37,7 @@ import (
 )
 
 const (
-	version     = "0.4.0-alpha.7"
+	version     = "0.4.0-alpha.8"
 	windowTitle = "BurnMon Dev"
 	mutexName   = `Local\burnmon-dev-app`
 )
@@ -258,6 +259,11 @@ func (a *app) startLiveWatch(nativeClaudeRoots, nativeCodexRoots []string) {
 		log.Println("could not start the live watcher:", err)
 		return
 	}
+	// WS2 follow-up (2026-09-29): a file whose cursor moves is tail-polled,
+	// and today's and yesterday's Codex rollouts are seeded every minute,
+	// since an open Codex chat raises no change notice of its own.
+	a.cache.SetOnAdvance(wt.Track)
+	wt.SetTailSeed(func() []string { return codex.RecentRollouts(nativeCodexRoots, time.Now()) })
 	wt.Start()
 	a.liveWatcher = wt
 }
@@ -338,11 +344,12 @@ func startCopilotVSCPoll(a *app, st *store.Store) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+		var tail copilotvsc.Tail // WS2 follow-up item 5: new lines only, not the whole file
 		for range ticker.C {
 			a.mu.Lock()
 			cfg := a.cfg
 			a.mu.Unlock()
-			events, err := copilotvsc.PollOnce(cfg.CopilotVSCodeOtelFile)
+			events, err := tail.Poll(cfg.CopilotVSCodeOtelFile)
 			if err != nil {
 				log.Println("copilot vscode poll:", err)
 				continue

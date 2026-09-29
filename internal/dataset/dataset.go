@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"burnmon/internal/adapter"
@@ -220,6 +221,19 @@ type Cache struct {
 	// (see cmd/burnmon's app.rebuild and startLiveWatch, SESSION_LOG.md).
 	RootsByAdapter map[string][]string
 	rootsMu        sync.RWMutex
+
+	// onAdvance, set through SetOnAdvance, is called with every file whose
+	// cursor an ingest pass moved forward.
+	onAdvance atomic.Pointer[func(path string)]
+}
+
+// SetOnAdvance registers fn to be called with every file whose cursor an
+// ingest pass moves forward. cmd wires it to watch.Watcher.Track, so a file
+// that just grew is tail-polled (WS2 follow-up, 2026-09-29, item 2). Atomic
+// because the live watcher's IngestFile calls may already be running when
+// it is set.
+func (c *Cache) SetOnAdvance(fn func(path string)) {
+	c.onAdvance.Store(&fn)
 }
 
 // SeedNativeRoots sets RootsByAdapter's native (non-WSL) entries before any
@@ -432,6 +446,7 @@ func filesUnderAny(files, roots []string) []string {
 // existed. See Collect's own comment.
 const toolCallsBackfillMetaKey = "tool_calls_backfilled_v1"
 
+
 // Registered adapters. v0.1 Step 1 wired only Claude; Step 2 adds Codex
 // alongside it without touching this loop's shape.
 var adapters = []adapter.Adapter{claude.Adapter{}, codex.Adapter{}}
@@ -568,6 +583,13 @@ func (c *Cache) ingest(cfg *pricing.Config, files []string, trustSlow map[string
 		if err := c.Store.SetCursor(f, newOffset, fi.ModTime(), fi.Size()); err != nil {
 			return fmt.Errorf("dataset: set cursor for %s: %w", f, err)
 		}
+		// startOffset > 0: only a file that grew past a cursor counts as
+		// live. A first read or a forced full re-read moves every file from
+		// 0 at once and would crowd the tail's 50-file cap with history
+		// (found by review, 2026-09-29).
+		if fn := c.onAdvance.Load(); fn != nil && startOffset > 0 && newOffset > startOffset {
+			(*fn)(f)
+		}
 		if progress != nil {
 			progress(i+1, total)
 		}
@@ -617,6 +639,18 @@ func (c *Cache) Collect(cfg *pricing.Config, opts CollectOpts, progress func(don
 	backfilling := backfillDone != "1"
 	if backfilling {
 		opts.ForceFull = true
+	}
+
+	// WS2 follow-up (2026-09-29, item 0): undo any Codex ":0" collapse, so
+	// its rollouts are re-read from byte 0 under the fixed key below. Run on
+	// every Collect, not once behind a meta flag: an older binary sharing
+	// this store (burnmon.exe built before the fix) would otherwise collapse
+	// new turns again with nothing left to clean them. The query is one
+	// indexed pass and a no-op once the store is clean.
+	if nEvents, nCursors, err := c.Store.ResetCollapsedCodexSessions(); err != nil {
+		return Payload{}, fmt.Errorf("dataset: reset collapsed codex sessions: %w", err)
+	} else if nEvents > 0 || nCursors > 0 {
+		log.Printf("codex collapse reset: removed %d collapsed event(s), %d cursor(s) reset for a full re-read", nEvents, nCursors)
 	}
 
 	sourceListStart := time.Now()

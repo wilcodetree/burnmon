@@ -853,12 +853,16 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   }
 
   // projectBySessionMap: same recursive walk as agentBySessionMap, for the
-  // legend's short session label (live.Session.Project).
-  function projectBySessionMap(sessions){
+  // legend's short session label (live.Session.Project). chartProjects
+  // (internal/live's buildChartProjects, WS2 follow-up 2026-09-29) is the
+  // base layer, so a session that has bars but is no longer running still
+  // gets its project instead of a bare id.
+  function projectBySessionMap(sessions, chartProjects){
     var m = {};
+    Object.keys(chartProjects || {}).forEach(function(sid){ m[sid] = chartProjects[sid]; });
     (function walk(list){
       (list || []).forEach(function(s){
-        m[s.session_id] = s.project || '';
+        if(s.project || !m[s.session_id]) m[s.session_id] = s.project || '';
         walk(s.subagents);
       });
     })(sessions);
@@ -998,12 +1002,15 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   }
 
   // shortSessionLabel: a session's project folder's own last path segment
-  // (schema.Event.Project, carried onto live.Session), falling back to a
-  // truncated session id when a session has no project recorded yet.
+  // (schema.Event.Project, carried onto live.Session), falling back to "#"
+  // plus the session id's last 4 characters when a session has no project
+  // at all, the duplicate-label rule's own suffix (WS2 follow-up,
+  // 2026-09-29: the old fallback, the id's first 8 characters, read
+  // "rollout-" for every Codex session, since every rollout id starts so).
   function shortSessionLabel(project, sid){
     var p = (project || '').replace(/[\\/]+$/, '');
     var base = p ? p.split(/[\\/]/).pop() : '';
-    var label = base || sid.slice(0, 8);
+    var label = base || ('#' + sid.slice(-4));
     return label.length > 16 ? label.slice(0, 15) + '…' : label;
   }
 
@@ -1672,7 +1679,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   function renderBurnPanels(burn){
     if(!burn) return;
     var agentBySession = agentBySessionMap(burn.sessions, burn.turns, burn.chart_agents);
-    var projectBySession = projectBySessionMap(burn.sessions);
+    var projectBySession = projectBySessionMap(burn.sessions, burn.chart_projects);
     reserveSessionShades(burn.sessions, agentBySession);
     renderBars(burn.chart, agentBySession, projectBySession, burn.bucket_seconds);
     renderBurnAxis(burn.chart, burn.bucket_seconds);

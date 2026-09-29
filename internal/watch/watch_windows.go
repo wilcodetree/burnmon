@@ -18,9 +18,17 @@ import (
 // enough to see a new file, a write to an existing one, and a rename into
 // place (Codex and Claude both write session files by create-then-append,
 // never rename-into-place, but a rename is cheap to also catch).
+//
+// FILE_NOTIFY_CHANGE_SIZE (WS2 follow-up, 2026-09-29, item 1): an append
+// to a file its writer holds open (Codex keeps a rollout open for the
+// whole chat) does not move last-write, so LAST_WRITE alone never reports
+// it. Size changes are also reported only when the cache flushes, so this
+// narrows the gap rather than closing it; the tail poll (tail.go) is the
+// real fix.
 const notifyMask = windows.FILE_NOTIFY_CHANGE_FILE_NAME |
 	windows.FILE_NOTIFY_CHANGE_DIR_NAME |
-	windows.FILE_NOTIFY_CHANGE_LAST_WRITE
+	windows.FILE_NOTIFY_CHANGE_LAST_WRITE |
+	windows.FILE_NOTIFY_CHANGE_SIZE
 
 // bufSize is the overlapped read buffer per root. 64KB is the largest size
 // still guaranteed to work over SMB (the same ceiling fsnotify's own
@@ -402,4 +410,26 @@ func (b *windowsRecursiveBackend) Close() {
 	}
 	b.wg.Wait()
 	windows.CloseHandle(b.port)
+}
+
+// sizeByHandle opens path for attributes only, sharing read, write and
+// delete so the writer is never blocked, and reads its size from the open
+// handle (GetFileInformationByHandle), the tail poll's source of truth.
+func sizeByHandle(path string) (int64, error) {
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return 0, err
+	}
+	h, err := windows.CreateFile(p, windows.FILE_READ_ATTRIBUTES,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil, windows.OPEN_EXISTING, 0, 0)
+	if err != nil {
+		return 0, err
+	}
+	defer windows.CloseHandle(h)
+	var info windows.ByHandleFileInformation
+	if err := windows.GetFileInformationByHandle(h, &info); err != nil {
+		return 0, err
+	}
+	return int64(info.FileSizeHigh)<<32 | int64(info.FileSizeLow), nil
 }

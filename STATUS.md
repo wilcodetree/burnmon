@@ -296,6 +296,75 @@ ignored), it just no longer does anything.
 
 ## BurnMon Dev (`burnmon-dev` merged into `main` at `f7f1c26`; this and later work commits on `main` directly)
 
+`v0.4.0-alpha.8`: WS2 follow-up, Codex sessions held open never reached the live watcher, plus
+the Copilot in VS Code tail (`02_roadmap\2026-09-29_ws2_codex_live_tail.md`, items 0 to 5).
+Shared ingest code changed, so `burnmon.exe` (still `0.3.2`) gets the same fixes once rebuilt.
+
+- **Item 0, collapsed Codex turns (data):** current Codex builds (VS Code extension,
+  `cli_version` 0.155.0-alpha.16.3) write no top-level `ordinal`, so every turn got the key
+  `sessionID:0` and the upsert kept one event per session. Proof before the fix, on
+  `rollout-2026-09-29T16-58-26-...5264.jsonl`: 26 `token_count` lines in the file (27 a few
+  minutes later, Codex still writing), 1 Codex event in the store for that session. The
+  store held 11 such `:0` rows: the two rollouts of 2026-09-29 (whose lines lack `ordinal`)
+  and nine `guardian_review` sub-run rollouts of 2026-09-22/23 whose lines carry `ordinal`
+  today but were still stored collapsed (for example 2 events for a file with 17 turns);
+  how those nine came to be stored as `:0` was not established. Fix: `requestID` keeps the
+  ordinal key, else `sessionID:b<line byte offset>`, stable across incremental reads.
+  `store.ResetCollapsedCodexSessions` deletes every `:0` Codex row and its file's cursor so
+  the next ingest re-reads it from byte 0; `Collect` runs it on every pass (not once behind a
+  meta flag, review finding: an unfixed binary on the shared store could collapse again).
+  After: 0 `:0` rows, all 11 sessions match their files' `token_count` counts. Codex month
+  (local September, vendor-strip token definition): 165,847,499 tokens in 1,492 events
+  before, 176,203,422 in 1,655 right after the re-ingest (Codex kept writing, so today's
+  part keeps growing). Backup of the store before the re-ingest:
+  `%LOCALAPPDATA%\burnmon\burnmon.db.bak-2026-09-29-alpha8`.
+- **Item 1:** `FILE_NOTIFY_CHANGE_SIZE` added to the watch mask.
+- **Item 2, tail poll (`internal\watch\tail.go`):** every 2 s, each tracked native `.jsonl`
+  is opened for attributes and its size read from the handle; a moved size fires the same
+  `IngestFile` a notification does. Tracked: files a notification named, files whose cursor
+  an ingest moved past a non-zero start (a first or forced full read does not count, review
+  finding: it would crowd the cap), and today's and yesterday's Codex rollouts, re-seeded
+  every minute so an idle chat never drops out. 60 min window, cap 50, cap hit logged at most
+  every 10 min.
+- **Item 3, label:** this rollout's `session_meta` does carry `cwd`. The "rollout-" label came
+  from the page knowing projects only for running sessions (the collapsed event was 13 min
+  old, so not running). `live.Snapshot.ChartProjects` now gives every charted session's
+  project; a session with no project at all reads agent plus `#` and the id's last 4.
+- **Item 4:** follows from 0 and 2; the vendor strip's 60 s refresh reads the store.
+- **Item 5, Copilot in VS Code:** `copilotvsc.Tail` keeps the offset and current session id in
+  memory, resets on a path change, a shrink or a replaced file (`os.SameFile`). Poll time on
+  the real 46.7 MB file: about 490 ms per poll before (five runs, 474 to 515 ms), after 478 ms
+  once at start and then 0 to 24 ms per poll. Vendor strip "Copilot (VS Code)" TODAY: the
+  strip's SQL gives 230,585 tokens in 16 requests, equal to the file's own today total. The 0
+  Wilco saw at 18:36 was the strip's first build at the 18:35:44 restart, which ran before the
+  Copilot poll's first tick; the next 60 s refresh counts them.
+
+Proof. Real run 19:16:28 to 19:31:26 (15 min), alpha.8 running, a Codex chat in VS Code kept
+open by Codex itself, no file touched (both rollouts still showed LastWriteTime 16:58:26 and
+18:28:31 afterwards while they grew by megabytes): 13 turns, every one in the store within
+the same once-a-second sampling pass (the sampler's loop took about 2 s per pass), 0 of 445
+samples with the store behind the file, including the first turn after a 12 min idle gap.
+The burn chart reads the store every 1 s tick, so "in the chart within 5 s" follows from
+this; it was not screenshotted turn by turn. Vendor strip Codex TODAY (its own SQL) 12,896,168
+tokens in 161 events, equal to the sum of `last_token_usage.total_tokens` over today's 161
+`token_count` lines. Codex month after the run: 179,584,148 tokens in 1,681 events. Unit
+tests: `TestParseNoOrdinalKeysByByteOffset`, `TestResetCollapsedCodexSessions`,
+`TestTail_HeldOpenFileAppends` (file held open by the test while it appends, no directory
+watch on it, so only the tail can pass it), `TestTail_TickerSeesHeldOpenAppend`,
+`TestTail_CapKeepsMostRecent`, `TestTail_IncrementalMatchesFullRead` (mutation-checked: fails
+when the session id is not carried), `TestTail_ResetsWhenFileShrinksOrIsReplaced`,
+`TestBuildSnapshot_ChartProjectsCoversStoppedSession`. `go vet ./...` and `go test ./...`
+green; `uicheck d0`-`d22` green, with `d11` (tick cadence) failing twice right after the
+build (two ticks 153 and 174 ms apart, while the startup backfill took 26 s and `AllEvents`
+6.6 s against 0.3 s an hour earlier, fresh exes being scanned) and passing on the third run.
+A fresh read-only Opus review before handover: no blocking bug; its three medium findings
+(one-shot reset gate, idle chat expiring from the tail, cap crowded by a full re-read) are
+fixed as described above. Known, not fixed: a notification and the tail can ingest the same
+append twice at once (harmless, the upsert is idempotent; seen in the log as two identical
+"2244 bytes read" lines); the reset can in theory race a live ingest of the same file in the
+first seconds after start (milliseconds window); a Codex rewrite of an existing rollout would
+shift byte-offset keys. Not committed, pushed or tagged.
+
 `v0.4.0-alpha.7`: WS2 smooth tick, System gaps, System and To Do layout, harness labels,
 System boxes grid (`02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md`, items 1 to 5).
 Measured on the real store, before and after, with a per-minute perf log (`cmd\burnmon-dev\perf.go`).

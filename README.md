@@ -16,12 +16,16 @@ renamed and extended from v0.2 onward. Repo:
 
 - **Claude Code** and **Cowork** (Claude's desktop agent mode): `claude-code-sessions`
   transcripts, on Windows, macOS, Linux and inside WSL.
-- **Codex** CLI and Desktop: rollout transcripts, native and WSL roots.
+- **Codex** CLI, Desktop and the VS Code extension: rollout transcripts, native and WSL
+  roots. Codex keeps a rollout open for the whole chat, and Windows sends no change notice
+  for appends to a file held open, so every recently active transcript is also re-checked
+  every 2 seconds by its size.
 - **Hermes**: its local SQLite `messages` database, polled every 5 seconds.
 - **GitHub Copilot CLI**: its own SQLite session store, polled every 5 seconds; a session's
   numbers update live, the same as every other adapter.
 - **GitHub Copilot Chat in VS Code**: the JSON file its own OpenTelemetry export writes,
-  polled every 5 seconds. Off by default: VS Code sends no telemetry anywhere until you
+  polled every 5 seconds; each poll reads only the lines added since the last one (the
+  whole file once after a start). Off by default: VS Code sends no telemetry anywhere until you
   turn these two settings on yourself, in `settings.json`:
 
       "github.copilot.chat.otel.enabled": true,
@@ -179,7 +183,7 @@ built and cross-compiled, never run on real macOS or Linux hardware.
 
 ## BurnMon Dev
 
-`burnmon-dev.exe` (`v0.4.0-alpha.7`) is a second, developer-facing window: what running
+`burnmon-dev.exe` (`v0.4.0-alpha.8`) is a second, developer-facing window: what running
 AI agents burn (tokens, cost, turns) on top, what the laptop does (CPU, per-core heat
 grid, memory, disk, network, GPU, harness process groups) below, on one time axis, so a
 performance problem and a token spike show up together. It reuses `burnmon.exe`'s own

@@ -68,6 +68,14 @@ type Watcher struct {
 	wslMtime   map[string]time.Time // path -> last seen mtime, for the poll loop
 	wslStarted bool
 
+	// nativeRoots bounds what the tail poll (tail.go) may track.
+	nativeRoots []string
+	tailMu      sync.Mutex
+	tail        map[string]*tailEntry
+	// tailCapLogged is touched only by the tail goroutine.
+	tailCapLogged time.Time
+	tailSeed      func() []string // set before Start, see SetTailSeed
+
 	stop chan struct{}
 	wg   sync.WaitGroup
 }
@@ -78,17 +86,24 @@ type Watcher struct {
 // onChange fires once per detected write, debounced only by the backend's
 // own event coalescing.
 func New(nativeRoots, wslRoots []string, onChange OnChange) (*Watcher, error) {
-	native, err := newNativeBackend(onChange)
+	w := &Watcher{
+		onChange:    onChange,
+		wslRoots:    append([]string(nil), wslRoots...),
+		wslMtime:    map[string]time.Time{},
+		nativeRoots: append([]string(nil), nativeRoots...),
+		tail:        map[string]*tailEntry{},
+		stop:        make(chan struct{}),
+	}
+	// A native notification also marks its file for the tail poll, so a
+	// file created while the watcher runs is tailed from then on.
+	native, err := newNativeBackend(func(path string) {
+		w.Track(path)
+		onChange(path)
+	})
 	if err != nil {
 		return nil, err
 	}
-	w := &Watcher{
-		native:   native,
-		onChange: onChange,
-		wslRoots: append([]string(nil), wslRoots...),
-		wslMtime: map[string]time.Time{},
-		stop:     make(chan struct{}),
-	}
+	w.native = native
 	for _, root := range nativeRoots {
 		// Startup only: the initial full backfill (cmd/burnmon's
 		// a.rebuild, run right after this) ingests every existing file
@@ -106,9 +121,17 @@ func New(nativeRoots, wslRoots []string, onChange OnChange) (*Watcher, error) {
 }
 
 // Start runs the WSL poll loop in the background, if any WSL roots were
-// given. The native backend's own event loop is already running by the
-// time New returns. Safe to call once; call Stop to end both.
+// given, and the native tail poll (tail.go), if any native roots were. The
+// native backend's own event loop is already running by the time New
+// returns. Safe to call once; call Stop to end all of them.
 func (w *Watcher) Start() {
+	if len(w.nativeRoots) > 0 {
+		w.wg.Add(1)
+		go func() {
+			defer w.wg.Done()
+			w.runTail()
+		}()
+	}
 	w.wslMu.Lock()
 	hasWSLRoots := len(w.wslRoots) > 0
 	if hasWSLRoots {

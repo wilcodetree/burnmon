@@ -890,6 +890,86 @@ func (s *Store) DeleteEventsForOtherPaths(keepPaths []string) error {
 	return tx.Commit()
 }
 
+// ResetCollapsedCodexSessions undoes the Codex ":0" collapse (WS2
+// follow-up, 2026-09-29, item 0): a rollout whose token_count lines carry
+// no top-level "ordinal" used to key every turn as sessionID+":0", so the
+// upsert kept one event for the whole session. A real token_count line
+// never has ordinal 0 (that is always the session_meta line), so every
+// Codex row keyed exactly sessionID+":0" is such a collapsed row. This
+// deletes those rows and the cursors of their transcripts, so the next
+// ingest re-reads each file from byte 0 under the fixed key; rows the same
+// sessions already hold under a real ordinal key stay and are re-upserted
+// unchanged. Returns how many rows and cursors it removed.
+func (s *Store) ResetCollapsedCodexSessions() (events, cursors int, err error) {
+	rows, err := s.db.Query(`SELECT session_id FROM events
+WHERE vendor = 'openai' AND agent = 'codex' AND request_id = session_id || ':0'`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: list collapsed codex sessions: %w", err)
+	}
+	collapsed := map[string]bool{}
+	for rows.Next() {
+		var sid string
+		if err := rows.Scan(&sid); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+		collapsed[sid] = true
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, 0, err
+	}
+	rows.Close()
+	if len(collapsed) == 0 {
+		return 0, 0, nil
+	}
+
+	pathRows, err := s.db.Query(`SELECT path FROM cursors`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: list cursor paths: %w", err)
+	}
+	var paths []string
+	for pathRows.Next() {
+		var p string
+		if err := pathRows.Scan(&p); err != nil {
+			pathRows.Close()
+			return 0, 0, err
+		}
+		if collapsed[sessionIDFromPath(p)] {
+			paths = append(paths, p)
+		}
+	}
+	if err := pathRows.Err(); err != nil {
+		pathRows.Close()
+		return 0, 0, err
+	}
+	pathRows.Close()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	for sid := range collapsed {
+		res, err := tx.Exec(`DELETE FROM events WHERE vendor = 'openai' AND agent = 'codex' AND session_id = ? AND request_id = ?`, sid, sid+":0")
+		if err != nil {
+			return 0, 0, fmt.Errorf("store: delete collapsed %s: %w", sid, err)
+		}
+		n, _ := res.RowsAffected()
+		events += int(n)
+	}
+	for _, p := range paths {
+		if _, err := tx.Exec(`DELETE FROM cursors WHERE path = ?`, p); err != nil {
+			return 0, 0, fmt.Errorf("store: delete cursor for %s: %w", p, err)
+		}
+		cursors++
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return events, cursors, nil
+}
+
 // sessionIDFromPath mirrors the claude adapter's own session id derivation
 // (the transcript file's base name, extension stripped).
 func sessionIDFromPath(path string) string {

@@ -880,3 +880,57 @@ func TestDailyTokenTotals_DSTEarlyMorning(t *testing.T) {
 		}
 	}
 }
+
+func TestResetCollapsedCodexSessions(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	at := time.Date(2026, 9, 29, 16, 0, 0, 0, time.UTC)
+	ev := func(agent, sid, rid string) schema.Event {
+		return schema.Event{Vendor: "openai", Agent: agent, SessionID: sid, RequestID: rid, At: at, Input: 10, Output: 1}
+	}
+	if err := st.UpsertEvents([]schema.Event{
+		ev("codex", "rollout-a", "rollout-a:0"),  // collapsed, no ordinal
+		ev("codex", "rollout-b", "rollout-b:0"),  // collapsed row beside real ones
+		ev("codex", "rollout-b", "rollout-b:15"), // real ordinal key, must stay
+		ev("codex", "rollout-c", "rollout-c:12"), // healthy session, untouched
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{`C:\s\rollout-a.jsonl`, `C:\s\rollout-b.jsonl`, `C:\s\rollout-c.jsonl`} {
+		if err := st.SetCursor(p, 100, at, 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	events, cursors, err := st.ResetCollapsedCodexSessions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if events != 2 || cursors != 2 {
+		t.Fatalf("removed %d events, %d cursors; want 2 and 2", events, cursors)
+	}
+	got, err := st.AllEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := map[string]bool{}
+	for _, e := range got {
+		left[e.RequestID] = true
+	}
+	if len(left) != 2 || !left["rollout-b:15"] || !left["rollout-c:12"] {
+		t.Fatalf("events left = %v, want rollout-b:15 and rollout-c:12", left)
+	}
+	if _, _, _, ok, _ := st.Cursor(`C:\s\rollout-a.jsonl`); ok {
+		t.Fatal("cursor for rollout-a still present, file would not be re-read")
+	}
+	if _, _, _, ok, _ := st.Cursor(`C:\s\rollout-c.jsonl`); !ok {
+		t.Fatal("cursor for healthy rollout-c was removed")
+	}
+	if e, c, err := st.ResetCollapsedCodexSessions(); err != nil || e != 0 || c != 0 {
+		t.Fatalf("second run removed %d/%d (err %v), want a no-op", e, c, err)
+	}
+}

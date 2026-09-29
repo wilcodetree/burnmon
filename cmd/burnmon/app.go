@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"burnmon/internal/adapter/codex"
 	"burnmon/internal/adapter/copilotcli"
 	"burnmon/internal/adapter/copilotvsc"
 	"burnmon/internal/adapter/hermes"
@@ -157,6 +158,11 @@ func (a *app) startLiveWatch(nativeClaudeRoots, nativeCodexRoots []string) {
 		log.Println("could not start the live watcher:", err)
 		return
 	}
+	// WS2 follow-up (2026-09-29): a file whose cursor moves is tail-polled,
+	// and today's and yesterday's Codex rollouts are seeded every minute,
+	// since an open Codex chat raises no change notice of its own.
+	a.cache.SetOnAdvance(wt.Track)
+	wt.SetTailSeed(func() []string { return codex.RecentRollouts(nativeCodexRoots, time.Now()) })
 	wt.Start()
 	a.liveWatcher = wt
 }
@@ -271,11 +277,11 @@ func startCopilotCLIPoll(a *app, st *store.Store) {
 // startCopilotVSCPoll starts A4's 5-second Copilot-in-VS-Code poll, a no-op
 // when burnmon.json carries no copilot_vscode_otel_file (the two VS Code
 // settings in the README are not set up, or the config just doesn't name
-// where they write to). Same shape as startHermesPoll/startCopilotCLIPoll:
-// PollOnce re-reads the whole file every call (see internal/adapter/
-// copilotvsc's own doc comment on why this is a plain poll, not an
-// incremental tail) and the store's upsert (largest output per RequestID)
-// makes an unchanged re-read a no-op.
+// where they write to). Same shape as startHermesPoll/startCopilotCLIPoll,
+// except that copilotvsc.Tail reads only the lines appended since the last
+// tick (WS2 follow-up, 2026-09-29, item 5; it used to re-read the whole,
+// ever-growing file every call) and the store's upsert (largest output per
+// RequestID) makes the one full read after a start a no-op for stored rows.
 func startCopilotVSCPoll(a *app, st *store.Store) {
 	a.mu.Lock()
 	path := a.cfg.CopilotVSCodeOtelFile
@@ -286,11 +292,12 @@ func startCopilotVSCPoll(a *app, st *store.Store) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+		var tail copilotvsc.Tail // WS2 follow-up item 5: new lines only, not the whole file
 		for range ticker.C {
 			a.mu.Lock()
 			cfg := a.cfg
 			a.mu.Unlock()
-			events, err := copilotvsc.PollOnce(cfg.CopilotVSCodeOtelFile)
+			events, err := tail.Poll(cfg.CopilotVSCodeOtelFile)
 			if err != nil {
 				log.Println("copilot vscode poll:", err)
 				continue
