@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	version     = "0.4.0-alpha.6"
+	version     = "0.4.0-alpha.7"
 	windowTitle = "BurnMon Dev"
 	mutexName   = `Local\burnmon-dev-app`
 )
@@ -160,6 +160,9 @@ type app struct {
 	sysHistMu     sync.Mutex
 	sysHistBuf    []sysmon.Sample
 	groupsHistBuf []sysmon.ProcessGroupSample
+	// sysHistDropped/groupsHistDropped: pruneFront's own counters.
+	sysHistDropped    int
+	groupsHistDropped int
 	// todoStatusGen guards a real (if narrow) race between the 30s status
 	// loop below and bdevTodoLogin's own success path (main.go): both write
 	// todoStatusCache from an independent read of the outside world (a disk
@@ -170,6 +173,9 @@ type app struct {
 	// moved since it started skips its own write rather than clobbering a
 	// fresher one (found by review, 2026-09-25).
 	todoStatusGen int
+
+	// perf is WS2 alpha.7's measurement log (perf.go).
+	perf snapshotPerf
 }
 
 // closedDayRows returns the per-day token/cost rows for every day strictly
@@ -501,22 +507,49 @@ func (a *app) startSampling() {
 		// comparison, not a real sample - so that part is not worth
 		// avoiding on its own).
 		var lastSampleAt time.Time
+		// prevClocks/prevSampleTs back the alpha.7 gap log (perf.go).
+		var prevClocks clockPair
+		var prevSampleTs time.Time
 		for range ticker.C {
 			if a.hidden.Load() && time.Since(lastSampleAt) < hiddenSampleInterval {
 				continue
 			}
+			passStart := time.Now()
 			sm, err := a.sampler.Tick()
+			sysDur := time.Since(passStart)
 			if err != nil {
 				log.Println("sysmon sample:", err)
 				continue
 			}
+			lockStart := time.Now()
 			a.mu.Lock()
 			cfg := a.cfg
 			a.mu.Unlock()
+			lockWait := time.Since(lockStart)
+			procStart := time.Now()
 			groups, gerr := a.procSampler.Tick(cfg.CopilotVSCodeOtelFile != "")
+			procDur := time.Since(procStart)
 			if gerr != nil {
 				log.Println("process sample:", gerr)
 			}
+			if pass := time.Since(passStart); pass > 2*time.Second {
+				tt := a.sampler.LastTiming()
+				log.Printf("sample loop slow: pass=%v sampler=%v (cpu_mem=%v disk_io=%v net=%v pdh=%v) proc=%v cfg_lock_wait=%v hidden=%v",
+					pass.Round(time.Millisecond), sysDur.Round(time.Millisecond),
+					tt.CPUMem.Round(time.Millisecond), tt.DiskIO.Round(time.Millisecond),
+					tt.Net.Round(time.Millisecond), tt.PDH.Round(time.Millisecond),
+					procDur.Round(time.Millisecond), lockWait.Round(time.Millisecond), a.hidden.Load())
+			}
+			clocks := readClocks()
+			if !prevSampleTs.IsZero() {
+				if gap := sm.Ts.Sub(prevSampleTs); gap > histGapThreshold {
+					log.Printf("sample gap: %v from %s to %s slept=%v hidden=%v %s last_pass=%v",
+						gap.Round(time.Millisecond), prevSampleTs.Format("15:04:05"), sm.Ts.Format("15:04:05"),
+						sleptBetween(prevClocks, clocks).Round(time.Millisecond), a.hidden.Load(), powerState(),
+						time.Since(passStart).Round(time.Millisecond))
+				}
+			}
+			prevClocks, prevSampleTs = clocks, sm.Ts
 			lastSampleAt = time.Now()
 			if firstSample {
 				firstSample = false
@@ -532,25 +565,29 @@ func (a *app) startSampling() {
 			// sysHistBuf/groupsHistBuf: WS2 alpha.3 item 3's own in-memory
 			// history, a true 1s resolution for the main chart and the
 			// process-groups sparklines/harness heatmap (see sysHistWindow's
-			// own doc comment above). Pruned by reslicing forward from the
-			// first entry at or after the cutoff - no copy, the dropped
-			// prefix is simply unreachable through this slice header until
-			// append's own growth eventually recycles the backing array.
+			// own doc comment above). Pruned from the first entry at or after
+			// the cutoff by pruneFront (history_delta.go, alpha.7 item 1.5):
+			// a reslice, plus a copy to a fresh slice once the dropped prefix
+			// would otherwise outgrow what is kept.
+			histLockStart := time.Now()
 			a.sysHistMu.Lock()
+			if wait := time.Since(histLockStart); wait > 500*time.Millisecond {
+				log.Printf("sample loop: sysHistMu wait %v", wait.Round(time.Millisecond))
+			}
 			a.sysHistBuf = append(a.sysHistBuf, sm)
 			cutoff := sm.Ts.Add(-sysHistWindow)
 			dropSys := 0
 			for dropSys < len(a.sysHistBuf) && a.sysHistBuf[dropSys].Ts.Before(cutoff) {
 				dropSys++
 			}
-			a.sysHistBuf = a.sysHistBuf[dropSys:]
+			a.sysHistBuf = pruneFront(a.sysHistBuf, dropSys, &a.sysHistDropped)
 			if gerr == nil {
 				a.groupsHistBuf = append(a.groupsHistBuf, groups...)
 				dropGroups := 0
 				for dropGroups < len(a.groupsHistBuf) && a.groupsHistBuf[dropGroups].Ts.Before(cutoff) {
 					dropGroups++
 				}
-				a.groupsHistBuf = a.groupsHistBuf[dropGroups:]
+				a.groupsHistBuf = pruneFront(a.groupsHistBuf, dropGroups, &a.groupsHistDropped)
 			}
 			a.sysHistMu.Unlock()
 		}

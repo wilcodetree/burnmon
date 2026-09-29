@@ -3,6 +3,7 @@
 package sysmon
 
 import (
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -56,21 +57,69 @@ type Sampler struct {
 	prevNet *gnet.IOCountersStat
 	prevAt  time.Time
 	pdh     pdhState
-	tick    int
 
-	lastWifi WifiSample
+	// last is the phase timing of the most recent Tick (LastTiming).
+	last TickTiming
+	tick int
 
-	// lastDisks, prevSlowIO and prevSlowAt back the per-drive breakdown's own
-	// slower cadence (slowRefreshEvery): prevSlowIO/prevSlowAt are the
-	// IOCounters snapshot and timestamp from the last time that breakdown
-	// ran, not from the previous 2s tick, so its own read/write rates are
-	// computed over its own (longer) interval.
-	lastDisks  []DiskSample
-	prevSlowIO map[string]disk.IOCountersStat
-	prevSlowAt time.Time
+	// slow is the per-drive breakdown and wifi reading (section 6's
+	// "disks"/"network" boxes), refreshed by its own goroutine
+	// (runSlowRefresh), never inside Tick: WS2 alpha.7 item 2 found the
+	// sample loop stalled for up to 3 minutes on 2026-09-29 while the rest
+	// of the process kept running, and the only slow pass logged was inside
+	// Tick, where disk.Usage (no timeout) and a netsh spawn used to run.
+	// Tick asks for a refresh every slowRefreshEvery ticks and reads
+	// whatever the last one found.
+	slowReq chan struct{}
+	// slowBusy counts refresh requests dropped in a row because the last
+	// one is still running, so a refresh that hangs for good is logged
+	// while it hangs, not only once it returns.
+	slowBusy int
+	slowMu  sync.Mutex
+	slowOut struct {
+		disks []DiskSample
+		wifi  WifiSample
+	}
 }
 
 func NewSampler() *Sampler { return &Sampler{} }
+
+// runSlowRefresh serves Tick's refresh requests one at a time; a request
+// that arrives while one is still running is dropped (slowReq holds one),
+// so a stalled drive delays only the Disks/Wifi readout, never a sample.
+// prevIO/prevAt are its own IOCounters snapshot and time, so per-drive
+// rates cover its own interval.
+func (s *Sampler) runSlowRefresh() {
+	var prevIO map[string]disk.IOCountersStat
+	var prevAt time.Time
+	for range s.slowReq {
+		start := time.Now()
+		io, ioErr := disk.IOCounters()
+		elapsed := 0.0
+		if !prevAt.IsZero() {
+			elapsed = start.Sub(prevAt).Seconds()
+		}
+		disks := collectDiskSamples(io, ioErr, prevIO, elapsed)
+		if ioErr == nil {
+			prevIO = io
+		}
+		prevAt = start
+		drivesDur := time.Since(start)
+		wifi := readWifi()
+		wifiDur := time.Since(start) - drivesDur
+		if total := time.Since(start); total > 2*time.Second {
+			log.Printf("sysmon: slow drive/wifi refresh: %v (drives=%v wifi=%v)",
+				total.Round(time.Millisecond), drivesDur.Round(time.Millisecond), wifiDur.Round(time.Millisecond))
+		}
+		s.slowMu.Lock()
+		s.slowOut.disks, s.slowOut.wifi = disks, wifi
+		s.slowMu.Unlock()
+	}
+}
+
+// LastTiming is how long each phase of the most recent Tick took, for
+// burnmon-dev's slow-pass log (WS2 alpha.7 item 2).
+func (s *Sampler) LastTiming() TickTiming { return s.last }
 
 // Tick takes one system-wide sample. The first call after NewSampler has
 // zero disk/network rates, since a rate needs two points; every later call
@@ -84,6 +133,13 @@ func (s *Sampler) Tick() (Sample, error) {
 
 	var sm Sample
 	sm.Ts = now
+	var tm TickTiming
+	mark := time.Now()
+	lap := func(d *time.Duration) {
+		t := time.Now()
+		*d = t.Sub(mark)
+		mark = t
+	}
 
 	if v, err := cpu.Percent(0, false); err == nil && len(v) > 0 {
 		sm.CPUPct = v[0]
@@ -99,6 +155,7 @@ func (s *Sampler) Tick() (Sample, error) {
 		sm.SwapUsedMB = float64(sw.Used) / (1 << 20)
 		sm.SwapTotalMB = float64(sw.Total) / (1 << 20)
 	}
+	lap(&tm.CPUMem)
 
 	io, ioErr := disk.IOCounters()
 	if ioErr == nil {
@@ -115,24 +172,30 @@ func (s *Sampler) Tick() (Sample, error) {
 		}
 	}
 
-	// Per-drive breakdown and wifi (section 6's "disks"/"network" boxes):
-	// both run only every slowRefreshEvery ticks (see that constant's own
-	// comment), never on tick 0. Between refreshes, the samples carry
-	// whatever the last slow refresh found.
+	lap(&tm.DiskIO)
+
+	// Per-drive breakdown and wifi: requested every slowRefreshEvery ticks
+	// (see that constant's own comment), never on tick 0, and run by
+	// runSlowRefresh, not here. Between refreshes, and while one is still
+	// running, the samples carry whatever the last refresh found.
 	if s.tick > 0 && s.tick%slowRefreshEvery == 0 {
-		slowElapsed := now.Sub(s.prevSlowAt).Seconds()
-		if s.prevSlowAt.IsZero() {
-			slowElapsed = 0
+		if s.slowReq == nil {
+			s.slowReq = make(chan struct{}, 1)
+			go s.runSlowRefresh()
 		}
-		s.lastDisks = collectDiskSamples(io, ioErr, s.prevSlowIO, slowElapsed)
-		if ioErr == nil {
-			s.prevSlowIO = io
+		select {
+		case s.slowReq <- struct{}{}:
+			s.slowBusy = 0
+		default:
+			s.slowBusy++
+			if s.slowBusy%12 == 0 {
+				log.Printf("sysmon: drive/wifi refresh still running, %d requests skipped", s.slowBusy)
+			}
 		}
-		s.prevSlowAt = now
-		s.lastWifi = readWifi()
 	}
-	sm.Disks = s.lastDisks
-	sm.Wifi = s.lastWifi
+	s.slowMu.Lock()
+	sm.Disks, sm.Wifi = s.slowOut.disks, s.slowOut.wifi
+	s.slowMu.Unlock()
 	s.tick++
 	if ioErr == nil {
 		s.prevIO = io
@@ -147,7 +210,9 @@ func (s *Sampler) Tick() (Sample, error) {
 		s.prevNet = &cur
 	}
 
+	lap(&tm.Net)
 	pt := s.pdh.readTick()
+	lap(&tm.PDH)
 	if pt.ok {
 		sm.CPUQueue = pt.cpuQueue
 		sm.CPUPerfPct = pt.cpuPerfPct
@@ -160,6 +225,7 @@ func (s *Sampler) Tick() (Sample, error) {
 	}
 
 	s.prevAt = now
+	s.last = tm
 	return sm, nil
 }
 

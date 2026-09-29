@@ -17,3 +17,6 @@ func (s *Sampler) Tick() (Sample, error) {
 		CPUQueue: -1, CPUPerfPct: -1, DiskQueueLen: -1, DiskLatMs: -1, HardFaults: -1,
 	}, nil
 }
+
+// LastTiming mirrors the Windows sampler; always zero here.
+func (s *Sampler) LastTiming() TickTiming { return TickTiming{} }

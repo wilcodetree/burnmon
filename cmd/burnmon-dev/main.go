@@ -168,6 +168,7 @@ func main() {
 		st: st, cfg: cfg, initialCollectDone: make(chan struct{}),
 	}
 	a.cache.Store = st
+	a.perf.startPerfLog()
 	a.startSampling()
 	a.startRetentionPrune(devCfg.RetentionDays)
 	// Backgrounded (found by review, 2026-09-25): startSlowRefreshers' own
@@ -213,6 +214,15 @@ func main() {
 	if hasSavedState {
 		initialWidth, initialHeight = uint(savedState.Width), uint(savedState.Height)
 	}
+	// WEBVIEW2_USER_DATA_FOLDER (alpha.7, found 2026-09-29): go-webview2
+	// (pkg/edge/chromium.go) passes DataPath to WebView2Loader as an inline
+	// windows.StringToUTF16Ptr that nothing keeps alive, and the loader reads
+	// it after the Go buffer can already be freed and reused, so some launches
+	// got a user-data folder named after whatever heap text was there (prompt
+	// and session-path fragments), created relative to the working directory.
+	// The loader also reads this environment variable, which lives in the
+	// process environment, not in Go memory, so the folder is always wv2Dir.
+	_ = os.Setenv("WEBVIEW2_USER_DATA_FOLDER", wv2Dir)
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath: wv2Dir,
 		WindowOptions: webview2.WindowOptions{
@@ -328,6 +338,14 @@ func main() {
 		SysmonHistory        []sysmon.Sample             `json:"sysmon_history"`
 		ProcessGroupsNow     []sysmon.ProcessGroupSample `json:"process_groups_now"`
 		ProcessGroupsHistory []sysmon.ProcessGroupSample `json:"process_groups_history"`
+
+		// SysmonHistoryDelta/ProcessGroupsDelta (alpha.7 item 1): true when
+		// the matching history field holds only samples after the page's own
+		// cursor, to append to its ring; false means replace the ring.
+		// uicheck's fake snapshots omit both, so they stay full replaces.
+		SysmonHistoryDelta bool `json:"sysmon_history_delta"`
+		ProcessGroupsDelta bool `json:"process_groups_history_delta"`
+
 		Burn                 live.Snapshot               `json:"burn"`
 		VendorStrip          vendorstrip.Payload         `json:"vendor_strip"`
 		ActivityHeatmap      heatmapPayload              `json:"activity_heatmap"`
@@ -342,7 +360,7 @@ func main() {
 		// own 60s refresh to move.
 		HeadlineToday int64 `json:"headline_today"`
 	}
-	if err := w.Bind("bdevSnapshotNow", func() (snapshotPayload, error) {
+	if err := w.Bind("bdevSnapshotNow", func(cursor snapshotCursor) (snapshotPayload, error) {
 		now := time.Now()
 
 		a.mu.Lock()
@@ -370,27 +388,28 @@ func main() {
 		// further down to live.ChartWindow here (groupsHistBuf's own
 		// window already matches what the sparklines/heatmap want, see
 		// sysHistWindow's doc comment).
+		// alpha.7 item 1: only what the page does not hold yet
+		// (history_delta.go), so the payload stays constant instead of
+		// growing with the buffers.
 		a.sysHistMu.Lock()
-		sysHistCutoff := now.Add(-live.ChartWindow)
-		sysHistory := make([]sysmon.Sample, 0, len(a.sysHistBuf))
-		for _, s := range a.sysHistBuf {
-			if !s.Ts.Before(sysHistCutoff) {
-				sysHistory = append(sysHistory, s)
-			}
-		}
-		groupsHistory := append([]sysmon.ProcessGroupSample(nil), a.groupsHistBuf...)
+		sysHistory, sysFull := sysHistSince(a.sysHistBuf, cursor.SysSince, now.Add(-live.ChartWindow))
+		groupsHistory, groupsFull := groupsHistSince(a.groupsHistBuf, cursor.GroupsSince)
 		a.sysHistMu.Unlock()
 
+		tEvents := time.Now()
 		events, err := st.EventsSince(now.Add(-live.ChartWindow))
 		if err != nil {
 			return snapshotPayload{}, err
 		}
+		tBurn := time.Now()
 		burn := live.BuildSnapshot(events, &cfg, now)
+		tTotals := time.Now()
 		if err := live.ApplySessionTotals(burn.Sessions, st, &cfg); err != nil {
 			log.Println("bdevSnapshotNow: session totals:", err)
 		}
+		tDone := time.Now()
 
-		return snapshotPayload{
+		payload := snapshotPayload{
 			Now:       now.UnixMilli(),
 			RefreshMs: devCfg.RefreshMs,
 			HistGapMs: histGapThreshold.Milliseconds(),
@@ -399,17 +418,31 @@ func main() {
 				BaseClockGHz: sysmon.BaseClockGHz(),
 			},
 			SysmonHistory:        sysHistory,
+			SysmonHistoryDelta:   !sysFull,
 			ProcessGroupsNow:     latestGroups,
 			ProcessGroupsHistory: groupsHistory,
+			ProcessGroupsDelta:   !groupsFull,
 			Burn:                 burn,
 			VendorStrip:          vendorStrip,
 			ActivityHeatmap:      heatmapPayload{Rows: heatmapRows},
 			Todo:                 todoStatus,
 			TodoTasks:            todoTasks,
 			HeadlineToday:        a.headlineTodayMonotonic(vendorStrip.Total, vendorStrip.GeneratedAt, events, now),
-		}, nil
+		}
+		if a.perf.record(time.Since(now), tBurn.Sub(tEvents), tTotals.Sub(tBurn), tDone.Sub(tTotals), len(sysHistory), len(groupsHistory)) {
+			a.perf.setSize(payload)
+		}
+		return payload, nil
 	}); err != nil {
 		log.Println("could not bind bdevSnapshotNow:", err)
+	}
+
+	// bdevPerfReport (WS2 alpha.7 measurement): page.html's own once-a-minute
+	// round-trip and dropped-paint summary, written to the app log.
+	if err := w.Bind("bdevPerfReport", func(r pagePerfReport) {
+		logPagePerf(r)
+	}); err != nil {
+		log.Println("could not bind bdevPerfReport:", err)
 	}
 
 	// bdevTurnDetail: the turn ticker's click-through popup (UI review patch
@@ -593,6 +626,25 @@ func main() {
 	// startSlowRefreshers' own 300s background loop (app.go); either way,
 	// the page just paints whatever bdevSnapshotNow's own todo_tasks field
 	// carries on its next tick.
+
+	// Dispatch heartbeat (alpha.7, found in the 90-minute after run on
+	// 2026-09-29): go-webview2's Dispatch queues its func and wakes the UI
+	// thread with one PostThreadMessage(WM_APP), which only w.Run's own
+	// GetMessage loop handles. A Win32 modal loop (a window drag or resize,
+	// a menu) pulls that thread message off the queue and drops it, so the
+	// queued func, here a bdevSnapshotNow resolve, waits until some later
+	// Dispatch gets through: 67s on 2026-09-29, and forever before alpha.7,
+	// when nothing else dispatched while the page waited on that one call.
+	// A no-op Dispatch every second means a lost wakeup costs at most a
+	// second once the modal loop has ended (inside it, the heartbeat's own
+	// WM_APP is dropped too), for every binding, not just the render tick.
+	go func() {
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		for range t.C {
+			w.Dispatch(func() {})
+		}
+	}()
 
 	startUICheckServer(w)
 

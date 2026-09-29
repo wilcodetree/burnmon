@@ -179,7 +179,7 @@ built and cross-compiled, never run on real macOS or Linux hardware.
 
 ## BurnMon Dev
 
-`burnmon-dev.exe` (`v0.4.0-alpha.6`) is a second, developer-facing window: what running
+`burnmon-dev.exe` (`v0.4.0-alpha.7`) is a second, developer-facing window: what running
 AI agents burn (tokens, cost, turns) on top, what the laptop does (CPU, per-core heat
 grid, memory, disk, network, GPU, harness process groups) below, on one time axis, so a
 performance problem and a token spike show up together. It reuses `burnmon.exe`'s own
@@ -194,6 +194,12 @@ responsive down to a single compact column.
   size, position, maximized state and monitor are remembered and restored if that monitor
   still exists.
 - **F11** toggles fullscreen; **Esc** also leaves it.
+- **One tick**: every panel repaints from one snapshot a second. The System chart and
+  process-group history arrive as deltas (only samples the page does not hold yet), so
+  the payload stays the same size however long the window runs. A late snapshot skips
+  its paint, but never for more than 2 ticks in a row: a slow moment shows as lag, not
+  a frozen screen. The drive and wifi readout refreshes on its own, so a slow `netsh`
+  or a stalled drive can no longer hold up a system sample.
 - **Minimized**: painting stops and the whole System zone's own sampler (system reading
   and process-group walk together) slows to one sample per 10s; both resume immediately,
   with one fresh render, the moment the window is restored.
@@ -206,7 +212,9 @@ responsive down to a single compact column.
   `burnmon-dev.json` turns it on. Its own device-code sign-in (shows the code and URL in
   the panel, opens the browser), its own token cache under
   `%LOCALAPPDATA%\burnmon\`, separate from `burnmon.exe`. Read-only, and scrolls rather
-  than cropping once there are more tasks than fit; task text is live only, never written
+  than cropping once there are more tasks than fit; while it is shown, the System chart
+  gives up 30% of its height and To Do fills the bottom of the window (a window too small
+  for To Do still drops it first, as before); task text is live only, never written
   to an export, a log or a committed screenshot.
 - **Export**: the header's "EXPORT" button, or
   `burnmon-dev.exe export --since --until --out DIR [--redact]` (`--since`/`--until` take

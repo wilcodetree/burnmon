@@ -237,7 +237,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 
 /* harness x minute heatmap, phase 3 */
 .heatrow{display:flex; align-items:center; gap:6px; margin-bottom:2px}
-.heatrow-label{width:110px; flex:0 0 auto; font-size:11px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.heatrow-label{flex:0 0 auto; font-size:11px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .heatrow-cells{display:flex; gap:1px; flex-wrap:nowrap}
 
 /* system panel, section 6: perfadvisor layout, smoother and a little smaller */
@@ -280,6 +280,14 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .sysbox .line{font-size:11px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .sysbox .line b{color:#fff; font-variant-numeric:tabular-nums}
 .sysbox .dim{color:var(--dim)}
+/* alpha.7 item 5: Memory, Disks and Network share one row pattern (value
+   line, its bar, a dim detail line) on one fixed row height, so row N sits
+   at the same height in all three boxes whatever the drive count; the
+   boxes already stretch to the tallest one (.sysbottom's own flex row). A
+   bar row is the same height as a text row, its bar centred in it. */
+.sysrows{display:grid; grid-auto-rows:16px; row-gap:2px; align-items:center}
+.sysrows > .line{margin:0; line-height:16px}
+.sysrows > .sysbar{margin:0}
 
 /* process groups, section 7: name/CPU/RAM/IO-per-second share the left half,
    the trend column takes at most the other half (headline patch section 2:
@@ -306,6 +314,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 /* Microsoft To Do panel, section 9: off by default, full width, sits below
    the two-column layout too (a sibling of main, not inside either zone). */
 .todopanel{flex:0 1 auto; max-height:200px; margin:0 4px 4px; display:none; flex-direction:column}
+/* alpha.7 item 3: with To Do visible, applyTodoGrow (script below) sets the
+   System chart to 70% of the height it measured without this class and
+   hands the freed height to this panel, which then fills the bottom of the
+   window; .todobody keeps its own scroll. Never applied with To Do off. */
+body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
 .todobody{flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:6px 10px; display:flex; flex-direction:column; gap:3px}
 .todorow{flex:0 0 auto; display:flex; gap:8px; align-items:baseline; font:11.5px/1.4 var(--mono); white-space:nowrap; overflow:hidden}
 .todorow .due{color:var(--dim); flex:0 0 auto}
@@ -418,20 +431,20 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       <div class="sysbottom">
         <div class="sysbox" id="boxMemory">
           <h4>Memory</h4>
-          <div class="sysbar"><i style="background:var(--blu)"></i></div>
-          <div class="line" id="memLine1">-</div>
-          <div class="line dim" id="memLine2">-</div>
-          <div class="line dim" id="memLine3">-</div>
+          <div class="sysrows">
+            <div class="line" id="memLine1">-</div>
+            <div class="sysbar"><i style="background:var(--blu)"></i></div>
+            <div class="line dim" id="memLine2">-</div>
+            <div class="line dim" id="memLine3">-</div>
+          </div>
         </div>
         <div class="sysbox" id="boxDisks">
           <h4>Disks</h4>
-          <div id="disksBody"></div>
+          <div class="sysrows" id="disksBody"></div>
         </div>
         <div class="sysbox" id="boxNetwork">
           <h4>Network</h4>
-          <div class="line" id="netDown">-</div>
-          <div class="line" id="netUp">-</div>
-          <div class="line dim" id="netWifi">-</div>
+          <div class="sysrows" id="netBody"></div>
         </div>
       </div>
     </div>
@@ -1243,10 +1256,18 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // convention, used elsewhere for the same "week" concept), one column
   // per week, oldest first, 182 days (26 weeks) ending today.
   var lastHeatmapPayload = null;
+  // HARNESS_LABEL_PX/HARNESS_ROW_GAP_PX (alpha.7 item 4): the harness
+  // heatmap's label column and the row gap after it. The one source for
+  // both the label's own inline width (renderHarnessHeatmap) and the width
+  // it subtracts before fitting minute cells, so the two cannot drift. 150px
+  // fits "BurnMon Dev (WebView2)", the longest label today, at 11px; anything
+  // longer still ends in an ellipsis. .heatrow's own gap stays 6px in CSS.
+  var HARNESS_LABEL_PX = 150;
+  var HARNESS_ROW_GAP_PX = 6;
   // ACTIVITY_HARNESS_MIN_PX: the narrowest the harness heatmap gets before
-  // the Activity grid starts dropping its oldest weeks (label 116px plus
-  // about 18 one-minute columns).
-  var ACTIVITY_HARNESS_MIN_PX = 300;
+  // the Activity grid starts dropping its oldest weeks (label 156px plus
+  // about 18 one-minute columns; raised by 40px with the label, alpha.7).
+  var ACTIVITY_HARNESS_MIN_PX = 340;
 
   // renderHeatmap: no-scroll patch section 3 crops to as many whole weeks
   // as the panel's own width fits (newest on the right, oldest cropped on
@@ -1866,16 +1887,37 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     el.innerHTML = html;
   }
 
+  // renderNetworkBox (alpha.7 item 5, Wilco's mock-up 2026-09-29): the
+  // Disks rhythm of value, bar, detail. Down has an empty detail row, so up
+  // sits level with a second drive's value line; the SSID line is up's
+  // detail row, with the signal bar under it. Down and
+  // up scale to their own peak over the System chart's window (sysRing, the
+  // same rule as the chart's "disk and net scaled to own peak"); the signal
+  // bar is the signal percent, and without Wi-Fi only its text shows.
+  function netPeak(key, cur){
+    var peak = cur || 0;
+    for(var i = 0; i < sysRing.length; i++){ var v = sysRing[i][key] || 0; if(v > peak) peak = v; }
+    return peak;
+  }
+  function netBarHtml(pct, color){
+    return '<div class="sysbar"><i style="width:' + Math.max(0, Math.min(100, pct)).toFixed(0) + '%;background:' + color + '"></i></div>';
+  }
   function renderNetworkBox(sm){
-    var down = document.getElementById('netDown');
-    if(down) down.innerHTML = 'down <b>' + fmtBytes(sm.NetDownBps) + '</b>';
-    var up = document.getElementById('netUp');
-    if(up) up.innerHTML = 'up <b>' + fmtBytes(sm.NetUpBps) + '</b>';
-    var wifi = document.getElementById('netWifi');
-    if(wifi){
-      var w = sm.Wifi || {};
-      wifi.textContent = w.OK && w.Connected ? (w.SSID + ' · signal ' + w.SignalPct + '%') : (w.OK ? 'wifi disconnected' : '');
+    var el = document.getElementById('netBody');
+    if(!el) return;
+    var downPeak = netPeak('NetDownBps', sm.NetDownBps), upPeak = netPeak('NetUpBps', sm.NetUpBps);
+    var html = '<div class="line">down <b>' + fmtBytes(sm.NetDownBps) + '</b></div>' +
+      netBarHtml(downPeak > 0 ? 100 * (sm.NetDownBps || 0) / downPeak : 0, 'var(--yel)') +
+      '<div class="line"></div>' +
+      '<div class="line">up <b>' + fmtBytes(sm.NetUpBps) + '</b></div>' +
+      netBarHtml(upPeak > 0 ? 100 * (sm.NetUpBps || 0) / upPeak : 0, 'var(--yel)');
+    var w = sm.Wifi || {};
+    if(w.OK && w.Connected){
+      html += '<div class="line dim">' + esc(w.SSID) + ' &middot; signal ' + w.SignalPct + '%</div>' + netBarHtml(w.SignalPct, 'var(--blu)');
+    } else if(w.OK){
+      html += '<div class="line dim">wifi disconnected</div>';
     }
+    el.innerHTML = html;
   }
 
   // renderSysmonPanels (section 5): the system zone's per-tick render,
@@ -2085,7 +2127,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // No-scroll patch section 3: crops to as many whole minutes as the row's
   // own available width fits, newest on the right, the same analytical
   // (clientWidth / per-cell px) approach renderHeatmap uses above -
-  // heatrow-label is a fixed 110px plus the row's own 6px gap
+  // heatrow-label is HARNESS_LABEL_PX plus the row's own HARNESS_ROW_GAP_PX
   // (.heatrow/.heatrow-label), and each cell is 9px plus a 1px gap
   // (.heatrow-cells). Headline patch section 3: each cell also carries a
   // hover title in the same style as the Activity heatmap above (HARNESS_AGENTS
@@ -2165,7 +2207,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       Object.keys(byHarness[h]).forEach(function(m){ if(byHarness[h][m] > max) max = byHarness[h][m]; });
     });
 
-    var availableWidth = el.clientWidth - 116; // 110px label + 6px row gap
+    var availableWidth = el.clientWidth - HARNESS_LABEL_PX - HARNESS_ROW_GAP_PX;
     var fitMinutes = Math.max(1, Math.floor(availableWidth / 10)); // 9px cell + 1px gap
     // maxMin anchors to the shared tick's own now, not this cache's own
     // newest row (found by review, 2026-09-25: anchoring to the data's own
@@ -2180,7 +2222,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     var html = '';
     harnesses.forEach(function(h){
       var label = HARNESS_LABEL[h] || h;
-      html += '<div class="heatrow"><span class="heatrow-label">' + label + '</span><span class="heatrow-cells">';
+      html += '<div class="heatrow" style="gap:' + HARNESS_ROW_GAP_PX + 'px"><span class="heatrow-label" style="width:' + HARNESS_LABEL_PX + 'px">' + label + '</span><span class="heatrow-cells">';
       for(var m = fromMin; m <= maxMin; m++){
         var v = byHarness[h][m] || 0;
         var op = v > 0 ? (0.12 + 0.85 * Math.min(1, v / max)) : 0;
@@ -2380,10 +2422,48 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   };
   window.__bdevExitFakeMode = function(){
     bdevFakeMode = false;
+    // The rings hold fake rows now; an empty ring sends cursor 0, so the
+    // next real tick gets the full window back instead of a delta on top.
+    sysRing = []; groupsRing = [];
+    lastAppliedSeq = tickSeq; // an answer to a call made before fake mode is stale
     tick();
     scheduleTick(tickRefreshMs);
   };
-  window.__bdevPaintFake = function(snap){ paintTick(snap); };
+  window.__bdevPaintFake = function(snap){ absorbHistory(snap); paintTick(snap); };
+
+  // sysRing/groupsRing (alpha.7 item 1): this page's own copy of the System
+  // chart's and the process groups' history. bdevSnapshotNow sends only the
+  // samples after the newest one held here (history_delta.go) and flags
+  // that with *_delta; an unflagged answer replaces the ring. Both rings
+  // prune the way app.go prunes sysHistBuf/groupsHistBuf: the system ring
+  // to the chart window before the snapshot's now (the old server-side
+  // trim), the groups ring to SYS_HIST_WINDOW_MS before the same now (app.go
+  // cuts at its newest sample's time, at most a tick earlier).
+  var sysRing = [];
+  var groupsRing = [];
+  var SYS_HIST_WINDOW_MS = 60 * 60 * 1000;
+  function rowMs(r){ return new Date(r.Ts).getTime(); }
+  function ringNewestMs(ring){ return ring.length ? rowMs(ring[ring.length - 1]) : 0; }
+  function mergeRing(ring, rows, isDelta){
+    rows = rows || [];
+    if(!isDelta) return rows.slice();
+    var newest = ringNewestMs(ring);
+    for(var i = 0; i < rows.length; i++){
+      if(rowMs(rows[i]) > newest) ring.push(rows[i]);
+    }
+    return ring;
+  }
+  function pruneRing(ring, cutoffMs){
+    var drop = 0;
+    while(drop < ring.length && rowMs(ring[drop]) < cutoffMs) drop++;
+    if(drop) ring.splice(0, drop);
+    return ring;
+  }
+  function absorbHistory(snap){
+    sysRing = pruneRing(mergeRing(sysRing, snap.sysmon_history, snap.sysmon_history_delta), snap.now - HIST_WINDOW_MS);
+    groupsRing = mergeRing(groupsRing, snap.process_groups_history, snap.process_groups_history_delta);
+    pruneRing(groupsRing, snap.now - SYS_HIST_WINDOW_MS);
+  }
 
   // paintMark timestamps a panel's own paint (performance.now(), a
   // monotonic clock unaffected by clock changes) into a small ring buffer:
@@ -2427,7 +2507,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     window.__bdevHistGapMs = HIST_GAP_MS;
     trackChange('sysmon', snap.sysmon);
     renderSysmonPanels(snap.sysmon); paintMark('sysmon');
-    lastSysmonHistory = snap.sysmon_history || [];
+    lastSysmonHistory = sysRing;
     lastSysmonNow = snap.now;
     lastHistWindowStart = (snap.burn && snap.burn.window_start) ? new Date(snap.burn.window_start).getTime() : (snap.now - 30 * 60 * 1000);
     renderHistoryChart(lastSysmonHistory, lastHistWindowStart); paintMark('sysmonHistory');
@@ -2436,7 +2516,7 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     renderHeadline(snap.headline_today); paintMark('headline');
     renderHeatmap(snap.activity_heatmap); paintMark('activityHeatmap');
     lastProcessGroupsNow = snap.process_groups_now || [];
-    lastProcessGroupsHistory = snap.process_groups_history || [];
+    lastProcessGroupsHistory = groupsRing;
     trackChange('processGroups', lastProcessGroupsNow);
     renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, snap.now); paintMark('processGroups');
     renderHarnessHeatmap(lastProcessGroupsHistory, snap.now, (snap.burn && snap.burn.turns) || []); paintMark('harnessHeatmap');
@@ -2457,13 +2537,74 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
   // tick picks up anything backfill adds after.
   var firstTickDone = false;
 
+  // perfWin (WS2 alpha.7 measurement): this page's own view of every tick
+  // over the current minute, sent to the Go log once a minute through
+  // bdevPerfReport. noPaintStreak counts consecutive ticks that did not
+  // paint (late answer, or a tick skipped because the last was still in
+  // flight); a paint resets it.
+  var perfWin = { rts: [], late: 0, inFlight: 0, abandoned: 0, paints: 0, maxStreak: 0, maxGap: 0 };
+  var noPaintStreak = 0;
+  var lastPaintAt = performance.now();
+  function perfNoPaint(){
+    noPaintStreak++;
+    if(noPaintStreak > perfWin.maxStreak) perfWin.maxStreak = noPaintStreak;
+  }
+  function perfPainted(){
+    var t = performance.now();
+    if(t - lastPaintAt > perfWin.maxGap) perfWin.maxGap = t - lastPaintAt;
+    lastPaintAt = t;
+    noPaintStreak = 0;
+    perfWin.paints++;
+  }
+  setInterval(function(){
+    var rts = perfWin.rts.slice().sort(function(a, b){ return a - b; });
+    function q(p){ return rts.length ? rts[Math.floor(p * (rts.length - 1))] : 0; }
+    var heap = (performance.memory && performance.memory.usedJSHeapSize) || 0;
+    if(window.bdevPerfReport) window.bdevPerfReport({
+      n: rts.length, p50: q(0.5), p95: q(0.95), max: q(1), late: perfWin.late, in_flight: perfWin.inFlight, abandoned: perfWin.abandoned,
+      paints: perfWin.paints, max_streak: perfWin.maxStreak, max_paint_gap_ms: perfWin.maxGap,
+      heap_mb: heap / 1048576, sys_rows: lastSysmonHistory.length, group_rows: lastProcessGroupsHistory.length,
+      hidden: document.hidden
+    });
+    perfWin = { rts: [], late: 0, inFlight: 0, abandoned: 0, paints: 0, maxStreak: noPaintStreak, maxGap: 0 };
+  }, 60000);
+
+  // tickSeq/tickInFlightSince/lastAppliedSeq (alpha.7, found in the
+  // 90-minute after run): a call still in flight after IN_FLIGHT_GIVE_UP
+  // ticks is abandoned and the next tick sends a fresh one, instead of
+  // waiting on it forever. On 2026-09-29 one bdevSnapshotNow answer sat 67s
+  // in go-webview2's dispatch queue (a lost UI-thread wakeup, see main.go's
+  // Dispatch heartbeat) and nothing painted meanwhile. An abandoned call
+  // may still answer later; answers are applied only in call order, so a
+  // late one can never replace newer rings or repaint an older moment.
+  // abandonedSeq: the one abandoned call still outstanding, if any. Bindings
+  // run synchronously on the UI thread (go-webview2), so an abandoned call
+  // is usually still being built, not lost; abandoning again before it
+  // settles would stack calls behind it when the Go side is genuinely slow.
+  var tickSeq = 0, tickInFlightSince = 0, lastAppliedSeq = 0, abandonedSeq = 0;
+  var IN_FLIGHT_GIVE_UP = 2;
   function tick(){
+    if(tickInFlight && !bdevFakeMode){
+      perfWin.inFlight++; perfNoPaint();
+      if(abandonedSeq || performance.now() - tickInFlightSince <= tickRefreshMs * IN_FLIGHT_GIVE_UP) return Promise.resolve();
+      abandonedSeq = tickSeq;
+      tickInFlight = false;
+      perfWin.abandoned++;
+    }
     if(tickInFlight || bdevFakeMode || !window.bdevSnapshotNow) return Promise.resolve();
     tickInFlight = true;
+    var mySeq = ++tickSeq;
     var startedAt = performance.now();
-    return window.bdevSnapshotNow().then(function(snap){
-      tickInFlight = false;
-      if(!snap || bdevFakeMode) return;
+    tickInFlightSince = startedAt;
+    return window.bdevSnapshotNow({ sys_since: ringNewestMs(sysRing), groups_since: ringNewestMs(groupsRing) }).then(function(snap){
+      if(mySeq === tickSeq) tickInFlight = false;
+      if(mySeq === abandonedSeq) abandonedSeq = 0;
+      perfWin.rts.push(performance.now() - startedAt);
+      if(!snap || bdevFakeMode || mySeq < lastAppliedSeq) return;
+      lastAppliedSeq = mySeq;
+      // Merged even when the paint below is skipped: the rings, and so the
+      // next cursor, always hold everything received.
+      absorbHistory(snap);
       if(snap.refresh_ms && snap.refresh_ms !== tickRefreshMs) scheduleTick(snap.refresh_ms);
       if(!firstTickDone){
         firstTickDone = true;
@@ -2475,10 +2616,15 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       // come back is stale enough (a slow store query, a GC pause) that
       // painting it now would show an old moment as if it were current;
       // wait for the next, on-time tick instead of painting late data.
-      if(performance.now() - startedAt > tickRefreshMs * 1.5) return;
-      requestAnimationFrame(function(){ paintTick(snap); });
+      // Never skip forever (alpha.7 item 1.3): once the last paint is over
+      // 2 ticks old, a late answer paints anyway, so a slow snapshot shows
+      // as lag instead of a frozen screen.
+      var arrived = performance.now();
+      if(arrived - startedAt > tickRefreshMs * 1.5 && arrived - lastPaintAt <= tickRefreshMs * 2){ perfWin.late++; perfNoPaint(); return; }
+      requestAnimationFrame(function(){ paintTick(snap); perfPainted(); });
     }).catch(function(err){
-      tickInFlight = false;
+      if(mySeq === tickSeq) tickInFlight = false;
+      if(mySeq === abandonedSeq) abandonedSeq = 0;
       console.error('bdevSnapshotNow failed', err);
     });
   }
@@ -2557,7 +2703,51 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
       renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
     }
   }
+  // applyTodoGrow/clearTodoGrow (alpha.7 item 3, Wilco 2026-09-29): with
+  // To Do visible, the System chart (.histwrap) gets 70% of the height it
+  // has in the plain layout at the same window size, and To Do takes the
+  // freed 30% at the bottom. Measured, not a CSS ratio: .histwrap is the
+  // system zone's only flex grower, so its plain height is whatever is
+  // left, and only a measurement says what 70% of that is. main shrinks by
+  // the freed amount; in one column the burn zone is pinned to its measured
+  // height so only the system zone gives it up (every panel below the chart
+  // moves up), in two columns the burn column shrinks by the same amount
+  // (its turn ticker is the only grower there), since To Do spans both. A
+  // grow that would make the page overflow is undone, so check_d9 and the
+  // drop order in applyPanelFit stay exactly as they were.
+  // __bdevTodoLayout is tools\uicheck's own read (check_d19.go).
+  window.__bdevTodoLayout = { applied: false, plainHistH: 0, histH: 0 };
+  function clearTodoGrow(){
+    document.body.classList.remove('todo-grow');
+    ['main', '.zone.burn', '.histwrap'].forEach(function(sel){
+      var el = document.querySelector(sel);
+      if(el) el.style.flex = '';
+    });
+  }
+  function applyTodoGrow(){
+    var todo = document.getElementById('todoPanel');
+    var hist = document.querySelector('.histwrap');
+    var mainEl = document.querySelector('main');
+    var burnZone = document.querySelector('.zone.burn');
+    var plainH = hist ? hist.getBoundingClientRect().height : 0;
+    window.__bdevTodoLayout = { applied: false, plainHistH: plainH, histH: plainH };
+    if(!todo || !hist || !mainEl || !burnZone) return;
+    if(getComputedStyle(todo).display === 'none' || plainH <= 0) return;
+    var freed = Math.round(plainH * 0.3);
+    var mainH = mainEl.getBoundingClientRect().height;
+    if(getComputedStyle(mainEl).flexDirection !== 'row'){
+      burnZone.style.flex = '0 0 ' + burnZone.getBoundingClientRect().height + 'px';
+    }
+    hist.style.flex = '0 0 ' + (plainH - freed) + 'px';
+    mainEl.style.flex = '0 0 ' + (mainH - freed) + 'px';
+    document.body.classList.add('todo-grow');
+    if(pageOverflows()){ clearTodoGrow(); return; }
+    window.__bdevTodoLayout = { applied: true, plainHistH: plainH, histH: hist.getBoundingClientRect().height };
+  }
   function applyPanelFit(){
+    var histBefore = document.querySelector('.histwrap');
+    var histHBefore = histBefore ? histBefore.getBoundingClientRect().height : 0;
+    clearTodoGrow();
     var candidates = FIT_CANDIDATE_IDS.map(function(id){ return document.getElementById(id); }).filter(Boolean);
     var wasDropped = {};
     candidates.forEach(function(el){ wasDropped[el.id] = el.classList.contains('fit-dropped'); el.classList.remove('fit-dropped'); });
@@ -2570,6 +2760,11 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
     candidates.forEach(function(el){
       if(wasDropped[el.id] && !stillDropped[el.id]) rerenderFitCandidate(el.id);
     });
+    applyTodoGrow();
+    // The chart canvas was drawn at the height it had before this pass;
+    // redraw it when the grow (or its undo) changed that height.
+    var histAfter = document.querySelector('.histwrap');
+    if(histAfter && Math.abs(histAfter.getBoundingClientRect().height - histHBefore) > 0.5) renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
   }
 
   // resize (and F11, which is itself a resize of the window's client area):

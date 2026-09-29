@@ -374,18 +374,21 @@ func (b *windowsRecursiveBackend) Close() {
 	for _, rr := range roots {
 		rr.mu.Lock()
 		rr.closed = true
-		wasReading := rr.reading
-		windows.CancelIoEx(rr.handle, nil)
-		windows.CloseHandle(rr.handle)
-		rr.mu.Unlock()
-		if wasReading {
+		if rr.reading {
 			// A read truly was outstanding at this instant (rr.reading is
 			// only ever true while one genuinely is, see run's own upkeep
 			// of it), so IOCP's contract guarantees exactly one more
 			// completion for it, cancelled or not; run's own alreadyClosed
-			// branch calls Done for it.
+			// branch calls Done for it. Added while rr.mu is still held
+			// (alpha.7, found as a flaky "negative WaitGroup counter"
+			// panic in this package's tests): run reads rr.closed under
+			// the same lock, so it can no longer reach that Done before
+			// this Add.
 			b.draining.Add(1)
 		}
+		windows.CancelIoEx(rr.handle, nil)
+		windows.CloseHandle(rr.handle)
+		rr.mu.Unlock()
 	}
 	b.draining.Wait()
 	if err := windows.PostQueuedCompletionStatus(b.port, 0, 0, nil); err != nil {

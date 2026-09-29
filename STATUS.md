@@ -296,6 +296,59 @@ ignored), it just no longer does anything.
 
 ## BurnMon Dev (`burnmon-dev` merged into `main` at `f7f1c26`; this and later work commits on `main` directly)
 
+`v0.4.0-alpha.7`: WS2 smooth tick, System gaps, System and To Do layout, harness labels,
+System boxes grid (`02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md`, items 1 to 5).
+Measured on the real store, before and after, with a per-minute perf log (`cmd\burnmon-dev\perf.go`).
+
+- **Freeze, cause 1 (payload growth):** `bdevSnapshotNow` returned the whole 30 min system
+  history and 60 min process-group history every second, and go-webview2 hands every result
+  back as one `ExecuteScript` of that size. Before (62 min): JSON grew to 4.38 MB, round trip
+  p50 148 ms (worst minute p95 352 ms, max 466 ms), WebView2 renderer 2,970 MB and JS heap
+  2,356 MB at minute 62, machine down to 3.5 GB free. Snapshot build itself stayed 1 to 7 ms,
+  so no burn cache was added (spec item 1.2's "if yes" did not hold). Fix: history as deltas
+  (`history_delta.go`), the page keeps its own rings, full window only on a first call, a
+  reload or a stale cursor; `pruneFront` copies once the dropped prefix outgrows what is kept.
+- **Freeze, cause 2 (lost answer), found in the first after run:** go-webview2's `Dispatch`
+  wakes the UI thread with one `PostThreadMessage(WM_APP)`; a Win32 modal loop (window drag,
+  resize, menu) drops it, and the queued resolve waited until another `Dispatch` got through:
+  67 s once in the 90 min run, reproduced on demand with a modal move loop (36 s). Before
+  alpha.7 nothing else dispatched, so the page froze for good, which matches Wilco's
+  2026-09-28 freeze (Go kept logging, header clock stuck). Fix: a 1 s no-op `Dispatch`
+  heartbeat (`main.go`) plus a page watchdog that abandons a call in flight for 2 ticks (at
+  most one abandoned call outstanding, answers applied in call order), plus the spec's
+  never-skip-forever paint rule.
+- **System chart gaps (item 2):** the persisted samples of 2026-09-29 10:01 to 10:13 show the
+  process awake (the persist loop kept writing the same stale process-group rows, 68 rows for
+  one timestamp) while the sample loop produced nothing for up to 2 min 56 s: not sleep. The
+  only slow pass logged was inside `sampler.Tick`; its phase log then named `netsh wlan show
+  interfaces` (2.1 s and 2.65 s, drives 2 ms). Fix: the drive and wifi refresh runs in its own
+  goroutine (`internal\sysmon\sample_windows.go` `runSlowRefresh`), logged when slow or when
+  it keeps running. After: 0 slow passes and 0 gaps over 25 s in 182 min of runs. Not
+  reproduced: the 3 minute stall itself did not recur, so the exact blocking call behind it
+  is inferred (netsh or `disk.Usage`, both now off the sample path), not observed.
+- **Layout (items 3 to 5):** with To Do visible the System chart takes 70% of its plain height
+  and To Do fills the bottom (ratio 0.700 to 0.701 at 1600x1000, 1920x1080, 2560x1300; at
+  1280x860 the existing drop order still drops To Do first, unchanged). Harness heatmap labels
+  150 px from one constant, every label in full. Memory, Disks and Network on one 18 px row
+  pitch, three network bars, matching Wilco's mock-up.
+- **Also fixed:** `internal\watch\watch_windows.go` Close raced its own reader (`draining.Add`
+  after unlocking, an intermittent "negative WaitGroup counter" panic in the package tests);
+  go-webview2 reads `DataPath` from a Go buffer it does not keep alive, so some launches made a
+  WebView2 profile folder in the working directory named after heap text (six such folders in
+  the repo root today, recycled): both apps now set `WEBVIEW2_USER_DATA_FOLDER`.
+
+Proof, spec targets: p95 round trip under 250 ms, met in both after runs (first after run:
+worst minute p95 99 ms, median 10 ms; verification run: worst 23 ms). No dropped-paint streak
+over 2 ticks: missed in the first after run (67 ticks, cause 2), met in the 92 min
+verification run (max 2, during a forced 5 s modal loop; 0 otherwise). Flat WebView2 working
+set in the second hour: missed in the first after run (128 to 207 MB), met in the verification
+run (223 MB at minute 62, 223 MB at minute 92, range 223 to 230). The verification run used
+the build before the review fixes, the `WEBVIEW2_USER_DATA_FOLDER` line and item 5; the final
+exe is covered by `go vet ./...`, `go test ./... -count=1` and `uicheck d0`-`d22` (d18 delta
+equals full, d19 To Do layout, d20 labels, d21 unanswered call, d22 box grid), not by a
+further long run. Screenshots: `04_assets\reference\2026-09-29_smooth_tick\`. Not committed,
+pushed or tagged.
+
 `v0.4.0-alpha.6`: bug fix (2026-09-28, same day as alpha.4/alpha.5), reported live by Wilco - a
 Cowork session's burn-chart segment, legend dot and session card all drew HARNESS_HUE.other's
 grey while the vendor strip and the legend's own text both correctly read Cowork. Root cause:

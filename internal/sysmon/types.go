@@ -76,3 +76,10 @@ type ProcessGroupSample struct {
 	MemMB   float64
 	IOBps   float64
 }
+
+// TickTiming is how long each phase of one Sampler.Tick took (WS2 alpha.7
+// item 2's slow-pass log). The drive and wifi refresh runs on its own
+// goroutine (runSlowRefresh), so it has no phase here.
+type TickTiming struct {
+	CPUMem, DiskIO, Net, PDH time.Duration
+}

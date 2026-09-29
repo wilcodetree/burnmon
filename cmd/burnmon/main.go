@@ -193,6 +193,15 @@ func main() {
 	}
 	a.cache.Store = st
 
+	// WEBVIEW2_USER_DATA_FOLDER (alpha.7, found 2026-09-29): go-webview2
+	// (pkg/edge/chromium.go) passes DataPath to WebView2Loader as an inline
+	// windows.StringToUTF16Ptr that nothing keeps alive, and the loader reads
+	// it after the Go buffer can already be freed and reused, so some launches
+	// got a user-data folder named after whatever heap text was there (prompt
+	// and session-path fragments), created relative to the working directory.
+	// The loader also reads this environment variable, which lives in the
+	// process environment, not in Go memory, so the folder is always wv2Dir.
+	_ = os.Setenv("WEBVIEW2_USER_DATA_FOLDER", wv2Dir)
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath: wv2Dir,
 		WindowOptions: webview2.WindowOptions{
