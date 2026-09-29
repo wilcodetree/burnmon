@@ -8,7 +8,7 @@
   --bg:#04060a; --panel:#0a0e14; --panel2:#10151d; --bd:#1c2532;
   --amber:#ffa028; --amber2:#ffc46b;
   --txt:#cfd8e3; --dim:#66788c;
-  --grn:#00d26a; --red:#ff4b4b; --blu:#4da6ff; --cyn:#38d3e3; --mag:#d68cf0; --yel:#ffd75f;
+  --grn:#00d26a; --red:#ff4b4b; --blu:#4da6ff; --cyn:#38d3e3; --mag:#d68cf0; --mag-dim:#a76dbb; --yel:#ffd75f;
   --mono:Consolas,"Cascadia Mono","IBM Plex Mono",monospace;
 }
 *{box-sizing:border-box}
@@ -1907,13 +1907,13 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     if(!el) return;
     var downPeak = netPeak('NetDownBps', sm.NetDownBps), upPeak = netPeak('NetUpBps', sm.NetUpBps);
     var html = '<div class="line">down <b>' + fmtBytes(sm.NetDownBps) + '</b></div>' +
-      netBarHtml(downPeak > 0 ? 100 * (sm.NetDownBps || 0) / downPeak : 0, 'var(--yel)') +
+      netBarHtml(downPeak > 0 ? 100 * (sm.NetDownBps || 0) / downPeak : 0, 'var(--mag)') +
       '<div class="line"></div>' +
       '<div class="line">up <b>' + fmtBytes(sm.NetUpBps) + '</b></div>' +
-      netBarHtml(upPeak > 0 ? 100 * (sm.NetUpBps || 0) / upPeak : 0, 'var(--yel)');
+      netBarHtml(upPeak > 0 ? 100 * (sm.NetUpBps || 0) / upPeak : 0, 'var(--mag)');
     var w = sm.Wifi || {};
     if(w.OK && w.Connected){
-      html += '<div class="line dim">' + esc(w.SSID) + ' &middot; signal ' + w.SignalPct + '%</div>' + netBarHtml(w.SignalPct, 'var(--blu)');
+      html += '<div class="line dim">' + esc(w.SSID) + ' &middot; signal ' + w.SignalPct + '%</div>' + netBarHtml(w.SignalPct, 'var(--mag-dim)');
     } else if(w.OK){
       html += '<div class="line dim">wifi disconnected</div>';
     }
