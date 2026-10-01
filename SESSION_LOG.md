@@ -1434,11 +1434,11 @@ except the pre-existing, out-of-scope `w8` above). `C:\dev\Work` untouched throu
 
 ## 2026-09-23, v0.3 V3-3c: monitor view like perfadvisor (U5)
 
-Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_monitor_view_patch.md` and both
-reference images in `C:\ZND\projects\burnmon\testdata\uicheck\reference\`
+Read `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_monitor_view_patch.md` and both
+reference images in `C:\ZND\50_projects\burnmon\testdata\uicheck\reference\`
 (`perfadvisor_history.png`, `monitor_mockup.jpg`), then perfadvisor's `graph()`
-(`C:\ZND\projects\perfadvisor\internal\tui\widgets.go`) and `graphLines()`
-(`C:\ZND\projects\perfadvisor\internal\tui\view.go`) before writing anything. Replaced U4's
+(`C:\ZND\50_projects\perfadvisor\internal\tui\widgets.go`) and `graphLines()`
+(`C:\ZND\50_projects\perfadvisor\internal\tui\view.go`) before writing anything. Replaced U4's
 one-block-per-minute strip with a real braille line chart: `internal\live\live.go`'s
 `BuildSnapshot` gained an optional `bucketSeconds` argument (variadic, so every existing
 3-arg call keeps its default 60-second/30-slot chart unchanged), threaded into `buildChart`,
@@ -1475,9 +1475,9 @@ but not its plain script globals; DOM-based counts do not have that problem. Spa
 short-lived read-only subagents in this same repo to get genuinely concurrent running
 sessions for the screenshot rather than fabricate data. Before/after screenshots (stashing
 just `template.html` to rebuild the pre-patch exe for a true "before", not a mockup):
-`C:\ZND\projects\burnmon\testdata\uicheck\out\u5-before-monitor-dev.png` (old bug: tiny
+`C:\ZND\50_projects\burnmon\testdata\uicheck\out\u5-before-monitor-dev.png` (old bug: tiny
 block strip top-right, labels cut off, "claude-code · claude-son") versus
-`C:\ZND\projects\burnmon\testdata\uicheck\out\u5-chart-monitor-dev.png` (full-width dark
+`C:\ZND\50_projects\burnmon\testdata\uicheck\out\u5-chart-monitor-dev.png` (full-width dark
 panel, "live burn, newest right", 5 overlaid braille series across 3 real running sessions,
 "scaled to peak 1.18M" right-aligned on the last legend row, minute labels 06:07..06:36
 fully visible after a fix for the last label clipping to its first character at the panel's
@@ -1891,7 +1891,7 @@ both green.
 
 ## 2026-09-23, v0.2.3: window check patch, W0 to W8
 
-Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.3_window_check_patch.md`. W0 first:
+Read `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.2.3_window_check_patch.md`. W0 first:
 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` (chromedp) does not
 reach the browser process on this laptop, confirmed with a clean process tree and by
 inspecting the actual `msedgewebview2.exe` (`--type=` absent, main/browser process) command
@@ -1936,7 +1936,7 @@ Committed locally, not yet tagged or pushed.
 
 ## 2026-09-23, v0.2.2: Now page patch, N1 to N6
 
-Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.2_now_page_patch.md` and worked N1
+Read `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.2.2_now_page_patch.md` and worked N1
 to N6 in order. Capability note up front, per the session prompt's own instruction to say so
 rather than skip verification silently: this session has no way to open or click the native
 WebView2 window burnmon.exe draws, so every item below was verified by proxy instead of by
@@ -2023,7 +2023,7 @@ end of this session's own reply, not run.
 
 ## 2026-09-23, v0.2.1: Refresh hang patch, measured
 
-Read `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.1_hang_patch.md`. Measured before
+Read `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.2.1_hang_patch.md`. Measured before
 fixing, against the real store (54 MB, 51,028 events, 1,719 sessions at the time),
 with a Claude Code and a Codex session running: added stage timing to `Collect`/`ingest`
 (source listing, WSL walk, per-file bytes for files over 10 MB, `DeleteEventsForOtherPaths`,
@@ -2271,7 +2271,7 @@ Copilot VS Code wiring (confirmed reachable via OTel, not wired in), and named g
 zero forecast weeks scored yet). Renamed claudecost.example.json to burnmon.example.json,
 owners table shown as an empty array with the rule syntax in a comment. Checked _board:
 board.json and board.html already carry no claudecost string and are generated
-externally by `C:\ZND\projects\siteoffice\board\render_board.py`, not hand-edited here;
+externally by `C:\ZND\50_projects\siteoffice\board\render_board.py`, not hand-edited here;
 nothing to update this pass. Fixed the SESSION_LOG.md title itself ("claudecost, session
 log" to "BurnMon, session log"); left every past entry's body text alone as history.
 One open call, per the brief's own instruction to stop and ask on any: the brief assumed
@@ -2379,7 +2379,7 @@ crash loop. No product code changed for either finding.
 
 A2 killed the plan's assumption on Wilco's live install (COPILOT_HOME `~/.copilot`,
 Copilot CLI running, PID observed live) plus the three fixture sessions he recorded
-today under `cwd = C:\ZND\projects\burnmon\testdata\copilot`, on two separate counts.
+today under `cwd = C:\ZND\50_projects\burnmon\testdata\copilot`, on two separate counts.
 First, the file: there is no `data.db`; the store is `session-store.db` (+ `-wal`/`-shm`,
 WAL mode). Second, the timing: usage is not written once at session close; table
 `assistant_usage_events(session_id, turn_index, model, input_tokens, output_tokens,
@@ -3000,7 +3000,7 @@ Gate: `go test ./...` and `.\build.ps1` both green.
 
 ## 2026-09-22, v0.1 Step 3: the Now page
 
-Landed the Now page minimum from `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
+Landed the Now page minimum from `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
 Step 3: `internal\watch` (fsnotify on native adapter roots, a 5-second poll on WSL roots),
 `internal\live` (the snapshot builder), a bound `bmLive()` in `cmd\burnmon`, `burnmon-cli.exe
 live -json`, a `context_window` table in the price book, and a new first tab "Now" in
@@ -3052,7 +3052,7 @@ git tag -a v0.1.0 -m "Step 3: the Now page"
 
 ## 2026-09-22, v0.1 Step 2: Codex adapter
 
-Landed `internal\adapter\codex` from `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
+Landed `internal\adapter\codex` from `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
 Step 2, reading `%USERPROFILE%\.codex\sessions` (or `$CODEX_HOME\sessions`) plus WSL distros,
 byte-offset incremental like the claude adapter, never a whole-file read. `internal\scan\wsl.go`
 was generalised (distroHomeSources/WSLHomeSources, parameterised on relPath and an override env
@@ -3110,7 +3110,7 @@ git tag -a v0.1.0-alpha.2 -m "Step 2: Codex adapter"
 
 ## 2026-09-22, v0.1 Step 1: schema, store, Claude adapter
 
-Landed the schema/store/adapter split from `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
+Landed the schema/store/adapter split from `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
 Step 1: `internal\schema.Event`, a SQLite-backed `internal\store` (events, cursors, meta,
 `modernc.org/sqlite`, no cgo), the `internal\adapter.Adapter` interface, and
 `internal\adapter\claude` (the Claude/Cowork parser moved out of `internal\scan\parse.go`
