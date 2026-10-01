@@ -7,13 +7,13 @@ midnight) - **Owner:** Wilco de Tree
 System-zone cadence, minimized RAM, To Do due dates in local time, d9 at 1920x1080, w1
 solo re-run) is committed on main, with a real gap a fresh review found and fixed before
 commit, one real-window item confirmed via direct evidence rather than assumed clean.
-**Read order:** this file, C:\ZND\projects\burnmon\SESSION_LOG.md's top entry
+**Read order:** this file, C:\ZND\50_projects\burnmon\SESSION_LOG.md's top entry
 (2026-09-27, "WS2 alpha.3 patch, v0.4.0-alpha.3"), STATUS.md's "BurnMon Dev" section.
-**Supersedes:** C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-27_ws2_alpha3_overnight_launched.md
+**Supersedes:** C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-27_ws2_alpha3_overnight_launched.md
 (the mid-flight "launched, not finished" brief written from the hub chat at 23:40 while
 this run was still in progress) and the "v0.4.0-alpha.3, later, no date" line it names in
-C:\ZND\projects\burnmon\02_roadmap\roadmap.md item 9 and
-C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_merged_workstream_closed.md.
+C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md item 9 and
+C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_merged_workstream_closed.md.
 
 ## 1. Headline
 
@@ -29,12 +29,12 @@ review fix). Not pushed, tagged, merged, rebased or reset.
 
 ## 2. What changed on disk
 
-- Committed in C:\ZND\projects\burnmon (branch main): one commit, WS2 alpha.3
+- Committed in C:\ZND\50_projects\burnmon (branch main): one commit, WS2 alpha.3
   (v0.4.0-alpha.3), on top of f7f1c26. Exact SHA: see this session's own git log after
   the commit lands (this brief is written just before that commit, per the session's own
   order: code, verify, real-window checks, review, fix, then commit).
 - Files touched (full paths, this session):
-  C:\ZND\projects\burnmon\cmd\burnmon-dev\app.go,
+  C:\ZND\50_projects\burnmon\cmd\burnmon-dev\app.go,
   ...\cmd\burnmon-dev\main.go, ...\cmd\burnmon-dev\page.html,
   ...\internal\sysmon\process_windows.go, ...\internal\sysmon\process_windows_test.go,
   ...\internal\todo\todo.go, ...\internal\todo\todo_test.go (new),
@@ -46,13 +46,13 @@ review fix). Not pushed, tagged, merged, rebased or reset.
   alongside the code) and the reference screenshot
   (...\04_assets\reference\2026-09-27_system_panel\system_panel_core_bars.png, committed
   per the session's own instructions).
-- Left out of the commit, deliberately: C:\ZND\projects\burnmon\go.mod - a
+- Left out of the commit, deliberately: C:\ZND\50_projects\burnmon\go.mod - a
   pre-existing uncommitted change from before this session (confirmed a line-ending
   difference only, no real content diff), not needed by this session's own work, left for
   Wilco per the session's own instructions.
 - Untracked, not committed (evidence, not durable artifacts; their numbers are folded
   into STATUS.md/SESSION_LOG.md's own prose instead): six .log files under
-  C:\ZND\projects\burnmon\04_assets\2026-09-27_alpha3_*.log (the d0-d13 sweep, the w-check
+  C:\ZND\50_projects\burnmon\04_assets\2026-09-27_alpha3_*.log (the d0-d13 sweep, the w-check
   sweep, the w1-solo attempt, and four measurement runs, two superseded by a later,
   settled re-run each). The three other pre-existing hub_agent_update_2026-09-25 briefs
   and the 2026-09-26 ws2_merged_workstream_closed brief already sitting untracked in
@@ -173,19 +173,19 @@ to this patch).
 
 ## 8. Related files
 
-- Specs: C:\ZND\projects\burnmon\02_roadmap\2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md,
+- Specs: C:\ZND\50_projects\burnmon\02_roadmap\2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md,
   ...\2026-09-27_ws2_alpha3_bundle_and_overnight_rules.md
-- Superseded: C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-27_ws2_alpha3_overnight_launched.md
-- Prior brief: C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_performance_patch.md
-- Reference screenshot: C:\ZND\projects\burnmon\04_assets\reference\2026-09-27_system_panel\system_panel_core_bars.png
+- Superseded: C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-27_ws2_alpha3_overnight_launched.md
+- Prior brief: C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_performance_patch.md
+- Reference screenshot: C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-27_system_panel\system_panel_core_bars.png
 - Hub one-pager: C:\ZND\10_holding\01_projects\burnmon.md
 
 ## PowerShell commands for Wilco
 
 Push main once you are happy with the commit. Run in PowerShell, at
-C:\ZND\projects\burnmon:
+C:\ZND\50_projects\burnmon:
 
-    cd C:\ZND\projects\burnmon
+    cd C:\ZND\50_projects\burnmon
     git status --short
     git log --oneline -5
     git push origin main

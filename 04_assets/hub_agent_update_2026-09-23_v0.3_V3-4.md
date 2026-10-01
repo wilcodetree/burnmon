@@ -3,7 +3,7 @@
 **Date:** 2026-09-23 (v0.3 session V3-4) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** V3-4 (export K4, merge K5) is code-complete on main, tested and run for real on this laptop, not yet committed or tagged; hand-off for whoever commits and tags `v0.3.0-alpha.2` next.
-**Read order:** this file, C:\ZND\projects\burnmon\SESSION_LOG.md (top entry)
+**Read order:** this file, C:\ZND\50_projects\burnmon\SESSION_LOG.md (top entry)
 
 ## 1. Headline
 `burnmon-cli export` and `burnmon-cli merge` are both implemented, tested, and run for real
@@ -22,20 +22,20 @@ separators in the file; merged against a second export under a different label, 
 
 ## 2. What changed on disk
 - Committed: nothing yet. Every change below is an uncommitted working-tree edit in
-  C:\ZND\projects\burnmon (branch main).
+  C:\ZND\50_projects\burnmon (branch main).
 - New packages (full paths):
-  - C:\ZND\projects\burnmon\internal\export\export.go, export_test.go (K4)
-  - C:\ZND\projects\burnmon\internal\merge\merge.go, merge_test.go (K5)
-  - C:\ZND\projects\burnmon\internal\mergereport\mergereport.go, mergereport_test.go (K5's
+  - C:\ZND\50_projects\burnmon\internal\export\export.go, export_test.go (K4)
+  - C:\ZND\50_projects\burnmon\internal\merge\merge.go, merge_test.go (K5)
+  - C:\ZND\50_projects\burnmon\internal\mergereport\mergereport.go, mergereport_test.go (K5's
     report.html, static tables, no chart, no script)
 - Existing files touched:
-  - C:\ZND\projects\burnmon\internal\dataset\fromstore.go (new exported
+  - C:\ZND\50_projects\burnmon\internal\dataset\fromstore.go (new exported
     `ActiveTimeMinutes(events, cfg)`, the same K2 gap-sum algorithm applied directly to an
     arbitrary event slice rather than a whole session, for export's per-row active minutes)
-  - C:\ZND\projects\burnmon\cmd\burnmon-cli\main.go (`export` and `merge` subcommands wired into
+  - C:\ZND\50_projects\burnmon\cmd\burnmon-cli\main.go (`export` and `merge` subcommands wired into
     `main()`'s dispatch, `runExport`, `runMerge`)
-  - C:\ZND\projects\burnmon\SESSION_LOG.md (V3-4 paragraph)
-  - C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md (V3-4 ticked)
+  - C:\ZND\50_projects\burnmon\SESSION_LOG.md (V3-4 paragraph)
+  - C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md (V3-4 ticked)
 - Nothing touched in C:\dev\Work.
 
 ## 3. What did NOT happen (and why)
@@ -84,7 +84,7 @@ Nothing in the hub canonical files (STATUS, DEADLINES, portfolio, decisions.md) 
 from this brief alone. The v0.3 session prompts checklist is already ticked for V3-4.
 
 ## 7. Open flags for next session
-- Commit and tag are still Wilco's to run. Exact commands, from C:\ZND\projects\burnmon:
+- Commit and tag are still Wilco's to run. Exact commands, from C:\ZND\50_projects\burnmon:
 
 ```
 git add internal/export internal/merge internal/mergereport internal/dataset/fromstore.go cmd/burnmon-cli/main.go SESSION_LOG.md "02_roadmap/2026-09-23_v0.3_session_prompts.md" "04_assets/hub_agent_update_2026-09-23_v0.3_V3-4.md"
@@ -95,10 +95,10 @@ git tag v0.3.0-alpha.2
   (git push is a separate, deliberate step, not included above.)
 - V3-5 (Copilot VS Code A4, macOS/Linux builds B1) is next per the build order; V3-5's prompt
   needs Wilco to first copy his real Copilot VS Code OTel span file, prompt text stripped, into
-  `C:\ZND\projects\burnmon\testdata\copilotvsc\`.
+  `C:\ZND\50_projects\burnmon\testdata\copilotvsc\`.
 
 ## 8. Related files
-- Spec: C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md (section 2.2 K4/K5)
-- Wall rule: C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md (section 2.2 P6)
-- Prior brief: C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-3b.md
-- Session log: C:\ZND\projects\burnmon\SESSION_LOG.md
+- Spec: C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md (section 2.2 K4/K5)
+- Wall rule: C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md (section 2.2 P6)
+- Prior brief: C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-3b.md
+- Session log: C:\ZND\50_projects\burnmon\SESSION_LOG.md

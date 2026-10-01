@@ -3,7 +3,7 @@
 **Date:** 2026-09-29 - **Owner:** Wilco de Tree
 **Project:** BurnMon (BurnMon Dev, WS2)
 **Purpose:** BurnMon Dev v0.4.0-alpha.8 is code-complete and verified locally: Codex turns now reach BurnMon live, and every Codex session that had collapsed into one stored event has been re-read in full.
-**Read order:** this file, `C:\ZND\projects\burnmon\STATUS.md` (the `v0.4.0-alpha.8` entry), `C:\ZND\projects\burnmon\02_roadmap\2026-09-29_ws2_codex_live_tail.md`
+**Read order:** this file, `C:\ZND\50_projects\burnmon\STATUS.md` (the `v0.4.0-alpha.8` entry), `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-29_ws2_codex_live_tail.md`
 **Supersedes:** nothing (follows `hub_agent_update_2026-09-29_v0_4_0_alpha7_smooth_tick.md`)
 
 ## 1. Headline
@@ -11,9 +11,9 @@ v0.4.0-alpha.8 (spec items 0 to 5) is built and tested on `main` in the working 
 
 ## 2. What changed on disk
 - **Committed:** nothing. Wilco commits by hand (no git writes on `C:\ZND`).
-- **Modified:** `C:\ZND\projects\burnmon\internal\adapter\codex\codex.go`, `codex_test.go`; `C:\ZND\projects\burnmon\internal\adapter\copilotvsc\copilotvsc.go`, `copilotvsc_test.go`; `C:\ZND\projects\burnmon\internal\store\store.go`, `store_test.go`; `C:\ZND\projects\burnmon\internal\dataset\dataset.go`; `C:\ZND\projects\burnmon\internal\watch\watch.go`, `watch_windows.go`, `watch_other.go`, `watch_test.go`; `C:\ZND\projects\burnmon\internal\live\live.go`, `live_test.go`; `C:\ZND\projects\burnmon\cmd\burnmon\app.go`; `C:\ZND\projects\burnmon\cmd\burnmon-dev\app.go`, `page.html`; `C:\ZND\projects\burnmon\README.md`, `STATUS.md`, `SESSION_LOG.md`.
-- **New:** `C:\ZND\projects\burnmon\internal\watch\tail.go`; `C:\ZND\projects\burnmon\testdata\codex\three-turns-no-ordinal.jsonl`; this brief.
-- **Untracked, not mine:** `C:\ZND\projects\burnmon\02_roadmap\2026-09-29_ws2_codex_live_tail.md` (the spec).
+- **Modified:** `C:\ZND\50_projects\burnmon\internal\adapter\codex\codex.go`, `codex_test.go`; `C:\ZND\50_projects\burnmon\internal\adapter\copilotvsc\copilotvsc.go`, `copilotvsc_test.go`; `C:\ZND\50_projects\burnmon\internal\store\store.go`, `store_test.go`; `C:\ZND\50_projects\burnmon\internal\dataset\dataset.go`; `C:\ZND\50_projects\burnmon\internal\watch\watch.go`, `watch_windows.go`, `watch_other.go`, `watch_test.go`; `C:\ZND\50_projects\burnmon\internal\live\live.go`, `live_test.go`; `C:\ZND\50_projects\burnmon\cmd\burnmon\app.go`; `C:\ZND\50_projects\burnmon\cmd\burnmon-dev\app.go`, `page.html`; `C:\ZND\50_projects\burnmon\README.md`, `STATUS.md`, `SESSION_LOG.md`.
+- **New:** `C:\ZND\50_projects\burnmon\internal\watch\tail.go`; `C:\ZND\50_projects\burnmon\testdata\codex\three-turns-no-ordinal.jsonl`; this brief.
+- **Untracked, not mine:** `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-29_ws2_codex_live_tail.md` (the spec).
 - **Outside the repo:** store backup taken before the re-ingest, `C:\Users\WilcoDeTree\AppData\Local\burnmon\burnmon.db.bak-2026-09-29-alpha8`.
 
 ## 3. What did NOT happen (and why)
@@ -40,8 +40,8 @@ Nothing. All calls here are project-internal.
 ## 7. Open flags for next session
 - Commit and push alpha.8 (Wilco).
 - d11 flakiness under load: watch whether it recurs outside post-build runs.
-- Earlier open flags from the alpha.7 brief still stand, including the stale v0.3.2 header at the top of `C:\ZND\projects\burnmon\STATUS.md`.
+- Earlier open flags from the alpha.7 brief still stand, including the stale v0.3.2 header at the top of `C:\ZND\50_projects\burnmon\STATUS.md`.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-29_ws2_codex_live_tail.md`
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-29_v0_4_0_alpha7_smooth_tick.md`
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-29_ws2_codex_live_tail.md`
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-29_v0_4_0_alpha7_smooth_tick.md`

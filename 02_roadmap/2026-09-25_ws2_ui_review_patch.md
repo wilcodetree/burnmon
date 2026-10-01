@@ -1,7 +1,7 @@
 # WS2 patch: Wilco's UI review of BurnMon Dev (2026-09-25)
 
-Branch `burnmon-dev`, worktree `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev`.
-Parent brief: `C:\ZND\projects\burnmon\02_roadmap\2026-09-24_ws2_burnmon_dev.md`. This patch
+Branch `burnmon-dev`, worktree `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev`.
+Parent brief: `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-24_ws2_burnmon_dev.md`. This patch
 overrides it where they differ. Never use em dashes anywhere.
 
 Reference screenshots (copied by Wilco into the worktree):
@@ -72,7 +72,7 @@ Delete the panel. Keep the advisor rules: the export `summary.md` still uses the
 
 ## 9. Microsoft To Do panel at the bottom
 
-Port `C:\ZND\projects\perfadvisor\internal\todo\` (device code flow, `Tasks.Read
+Port `C:\ZND\50_projects\perfadvisor\internal\todo\` (device code flow, `Tasks.Read
 offline_access`, Graph v1.0) into `internal\todo\` with a source-commit note. Off by default,
 a config key in `burnmon-dev.json` turns it on. Own token cache under `%LOCALAPPDATA%\burnmon\`.
 Sign-in shows the code and URL in the panel and opens the browser. Read-only. Task data is live

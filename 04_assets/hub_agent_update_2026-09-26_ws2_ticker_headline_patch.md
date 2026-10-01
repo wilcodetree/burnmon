@@ -3,17 +3,17 @@
 **Date:** 2026-09-26 - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** report that the WS2 ticker/headline patch (sections 1-4 of the ticker/headline spec) is code-complete and committed on burnmon-dev, verified against the real running window, not yet released.
-**Read order:** this file, then C:\ZND\projects\burnmon\02_roadmap\2026-09-25_ws2_ticker_headline_patch.md, then SESSION_LOG.md top entry in the worktree.
-**Supersedes:** C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-25_burn_chart_no_scroll_patch.md (next patch in the same WS2 series; phase 5 there is still the same phase 5 pending here)
+**Read order:** this file, then C:\ZND\50_projects\burnmon\02_roadmap\2026-09-25_ws2_ticker_headline_patch.md, then SESSION_LOG.md top entry in the worktree.
+**Supersedes:** C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-25_burn_chart_no_scroll_patch.md (next patch in the same WS2 series; phase 5 there is still the same phase 5 pending here)
 
 ## 1. Headline
 The ticker/headline patch (turn ticker rows fixed-height and scrollable, process-groups trend column capped to half width, harness-heatmap hover text, headline reformatted and re-tweened, header gap widened) is code-complete and committed on branch burnmon-dev, verified with go vet, go test, a real build, and a real-window uicheck battery (d0-d12, all green, rerun in full after a fresh Opus review caught five real bugs mid-session). Not merged to main, not pushed, not tagged, version deliberately unchanged at 0.4.0-alpha.1.
 
 ## 2. What changed on disk
-- Committed in the burnmon repo (worktree C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev, branch burnmon-dev): 493a84d "v0.4 ticker/headline patch, sections 1-4" - cmd\burnmon-dev\page.html, tools\uicheck\check_d9.go, tools\uicheck\check_d12.go (new file), and four reference screenshots 04_assets\reference\2026-09-25_ui_review\11_ticker_broken.png, 12_process_groups.png, 13_heatmaps.png, 14_topbar.png.
+- Committed in the burnmon repo (worktree C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev, branch burnmon-dev): 493a84d "v0.4 ticker/headline patch, sections 1-4" - cmd\burnmon-dev\page.html, tools\uicheck\check_d9.go, tools\uicheck\check_d12.go (new file), and four reference screenshots 04_assets\reference\2026-09-25_ui_review\11_ticker_broken.png, 12_process_groups.png, 13_heatmaps.png, 14_topbar.png.
 - Committed, same branch: 516c24e "SESSION_LOG: v0.4 ticker/headline patch (sections 1-4) entry" - SESSION_LOG.md only.
-- Files touched (full paths, all inside the worktree above): C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\cmd\burnmon-dev\page.html, tools\uicheck\check_d9.go, tools\uicheck\check_d12.go, SESSION_LOG.md.
-- Untracked, left alone on purpose (pre-existing, not from this session): C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\5_topbar_target.jpg, 6_ticker_target.png, 7_perfadvisor_system.png, 8_current.jpg - the same four reference images the prior brief already flagged as out of scope; still untouched.
+- Files touched (full paths, all inside the worktree above): C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\cmd\burnmon-dev\page.html, tools\uicheck\check_d9.go, tools\uicheck\check_d12.go, SESSION_LOG.md.
+- Untracked, left alone on purpose (pre-existing, not from this session): C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\5_topbar_target.jpg, 6_ticker_target.png, 7_perfadvisor_system.png, 8_current.jpg - the same four reference images the prior brief already flagged as out of scope; still untouched.
 
 ## 3. What did NOT happen (and why)
 - Not merged to main, not pushed to any remote, not tagged - per house process and explicit instruction for this session.
@@ -35,7 +35,7 @@ Nothing. This is a project-internal implementation patch, not a cross-project, p
 
 ## 6. What the next hub read should update
 - C:\ZND\10_holding\01_projects\burnmon.md (the project one-pager): note that the ticker/headline patch (sections 1-4) landed on burnmon-dev on top of the burn-chart-no-scroll patch, phase 5 (release) still pending.
-- C:\ZND\projects\burnmon\02_roadmap\2026-09-25_ws2_ticker_headline_patch.md itself has no status field to update; SESSION_LOG.md in the worktree is the record of record for this patch own history.
+- C:\ZND\50_projects\burnmon\02_roadmap\2026-09-25_ws2_ticker_headline_patch.md itself has no status field to update; SESSION_LOG.md in the worktree is the record of record for this patch own history.
 - No This Week / Mission Deck item name was given for this session, so section 6 own done/in_progress/blocked line does not apply here; if BurnMon WS2 is tracked as a named deck item, the hub reader should match it against this brief rather than guessing an item ID here.
 
 ## 7. Open flags for next session
@@ -44,8 +44,8 @@ Nothing. This is a project-internal implementation patch, not a cross-project, p
 - Whether the panel-drop / display-scale behaviour flagged in the prior brief needs a follow-up still depends on what Wilco actually sees on his own two screens; unchanged from before, not re-investigated this session.
 
 ## 8. Related files
-- C:\ZND\projects\burnmon\02_roadmap\2026-09-25_ws2_ticker_headline_patch.md (the spec this patch follows)
-- C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\SESSION_LOG.md (top entry, full narrative of what changed and what the review caught)
-- C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-25_burn_chart_no_scroll_patch.md (the immediately prior brief in this same WS2 series, superseded by this one)
-- C:\ZND\projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md (the underlying BurnMon Dev design doc this patch sections build on)
-- C:\ZND\projects\burnmon\04_assets\reference\2026-09-25_ui_review\ (in the worktree at ...\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\ - the four newly committed screenshots plus the four still-untracked pre-existing ones)
+- C:\ZND\50_projects\burnmon\02_roadmap\2026-09-25_ws2_ticker_headline_patch.md (the spec this patch follows)
+- C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\SESSION_LOG.md (top entry, full narrative of what changed and what the review caught)
+- C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-25_burn_chart_no_scroll_patch.md (the immediately prior brief in this same WS2 series, superseded by this one)
+- C:\ZND\50_projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md (the underlying BurnMon Dev design doc this patch sections build on)
+- C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-25_ui_review\ (in the worktree at ...\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\ - the four newly committed screenshots plus the four still-untracked pre-existing ones)

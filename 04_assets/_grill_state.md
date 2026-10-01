@@ -1,6 +1,6 @@
 # Grill state: vendor-agnostic token and cost monitor
 
-Skill: grill-me-product. Started 2026-09-22 in the hub; moved to `C:\ZND\projects\burnmon\04_assets\` the same day (plan in `..\02_roadmap\`). Hub keeps only `01_projects\burnmon.md`, the portfolio row, decisions, DEADLINES.
+Skill: grill-me-product. Started 2026-09-22 in the hub; moved to `C:\ZND\50_projects\burnmon\04_assets\` the same day (plan in `..\02_roadmap\`). Hub keeps only `01_projects\burnmon.md`, the portfolio row, decisions, DEADLINES.
 
 ## Phase 0, fixed on 2026-09-22
 

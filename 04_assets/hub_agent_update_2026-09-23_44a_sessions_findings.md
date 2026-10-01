@@ -3,8 +3,8 @@
 **Date:** 2026-09-23 - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** report 44A (Sessions tab findings, I3) shipped and committed, tick recorded.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry), then
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md`.
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry), then
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md`.
 **Supersedes:** nothing (first brief for 44A; prior BurnMon brief was
 `hub_agent_update_2026-09-23_v0.2_43B_copilot_cli_otel.md`).
 
@@ -14,20 +14,20 @@ an expandable per-finding row, and an owner column/filter on the Sessions tab, b
 new `bmSessionInsight(sessionID)` bound function. Not yet pushed to the remote.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (branch `main`): `19c2d94` "feat: Sessions
+- **Committed** in `C:\ZND\50_projects\burnmon` (branch `main`): `19c2d94` "feat: Sessions
   tab findings, owner column (I3, 44A)".
 - **Not on any other branch.**
 - **Files touched** (full paths, all in the commit above):
-  - `C:\ZND\projects\burnmon\internal\live\live.go` (new `BuildSessionInsight`)
-  - `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (new `bmSessionInsight` binding, `insight` import)
-  - `C:\ZND\projects\burnmon\internal\report\template.html` (Sessions tab UI/JS: findings
+  - `C:\ZND\50_projects\burnmon\internal\live\live.go` (new `BuildSessionInsight`)
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (new `bmSessionInsight` binding, `insight` import)
+  - `C:\ZND\50_projects\burnmon\internal\report\template.html` (Sessions tab UI/JS: findings
     column, expandable finding rows, owner column/filter)
-  - `C:\ZND\projects\burnmon\SESSION_LOG.md` (prepended session paragraph)
-  - `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (44A ticked `[x]`)
+  - `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (prepended session paragraph)
+  - `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (44A ticked `[x]`)
 - **Untracked, pre-existing, not touched by this session** (so nothing is lost by omission):
-  `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2_43B_copilot_cli_otel.md`
+  `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2_43B_copilot_cli_otel.md`
   (already untracked before this session started) and a stray build artifact
-  `C:\ZND\projects\burnmon\burnmon.exe~`.
+  `C:\ZND\50_projects\burnmon\burnmon.exe~`.
 
 ## 3. What did NOT happen (and why)
 Not pushed to the remote; Wilco runs that step. `C:\dev\Work` was never touched. No v0.3
@@ -59,11 +59,11 @@ touching cross-project time, park/unpark, goal #3, company positioning, or CIPHE
 
 ## 7. Open flags for next session
 - 44B (forecast chart and gate, scoring week 1) is the next item in the build order.
-- The stray `C:\ZND\projects\burnmon\burnmon.exe~` build artifact is untracked and harmless
+- The stray `C:\ZND\50_projects\burnmon\burnmon.exe~` build artifact is untracked and harmless
   but was not cleaned up; flagging rather than deleting it unasked.
 - The commit above is local only; push is Wilco's manual step per house rules.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.3, I3)
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (44A prompt and checklist)
-- `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, this session's own log paragraph)
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.3, I3)
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (44A prompt and checklist)
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, this session's own log paragraph)

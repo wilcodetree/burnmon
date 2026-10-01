@@ -3,17 +3,17 @@
 **Date:** 2026-09-23 (45B, buffer/Done-when session) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** report the section 5 Done-when verification pass, one real bug fixed, one open copy flag, and the real-time constraint on forecast scoring's week numbering.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry), then `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist).
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry), then `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist).
 **Supersedes:** nothing.
 
 ## 1. Headline
 BurnMon v0.2's build checklist (39B through 45A) was already fully ticked when this session started, so 45B ran the spec's section 5 Done-when list against the built exe instead; all six items pass, one live house-rule violation (a bare em dash placeholder) was found and fixed, and one prose flag from 45A was left open rather than silently rewritten. Committed, not pushed.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (repo root): `a0f8879` "fix: em-dash placeholder on Sessions tab footer; 45B Done-when verification pass".
+- **Committed** in `C:\ZND\50_projects\burnmon` (repo root): `a0f8879` "fix: em-dash placeholder on Sessions tab footer; 45B Done-when verification pass".
 - **On a branch, not merged:** nothing, this is on `main` directly, matching the project's usual flow.
-- **Files touched** (full paths): `C:\ZND\projects\burnmon\internal\report\template.html` (one-line fix, line 983, em dash placeholder to `n/a` on the Sessions tab footer's average-cost cell), `C:\ZND\projects\burnmon\SESSION_LOG.md` (45B paragraph prepended), `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (45B ticked).
-- **Untracked / outside a repo:** none; the exe rebuild (`burnmon.exe`, `burnmon-cli.exe`) and generated reports under `C:\ZND\projects\burnmon\reports\` are gitignored build/output artifacts, not new source.
+- **Files touched** (full paths): `C:\ZND\50_projects\burnmon\internal\report\template.html` (one-line fix, line 983, em dash placeholder to `n/a` on the Sessions tab footer's average-cost cell), `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (45B paragraph prepended), `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (45B ticked).
+- **Untracked / outside a repo:** none; the exe rebuild (`burnmon.exe`, `burnmon-cli.exe`) and generated reports under `C:\ZND\50_projects\burnmon\reports\` are gitignored build/output artifacts, not new source.
 
 ## 3. What did NOT happen (and why)
 Not pushed: the commit sits on local `main` only, per the session prompt's own instruction to stop before committing and print the command; Wilco ran the commit himself after review, push is still his call. Not re-run: the "Overview tab" leftover copy in the About page (flagged already in 45A) was left as-is, since rewriting it is a judgment call about what the About section should say now, not a Done-when failure. Session 46A's own explicit "no em dash in user-facing strings" sweep was not run in full this session; only the one instance the Done-when check surfaced was fixed, the other seven em dashes (all inside the `#overview` section, explicitly retained as dead unrendered markup since 40B/41A) were left for that sweep since they never reach a user. Forecast scoring did not reach week 45 and cannot yet, see section 4.
@@ -37,4 +37,4 @@ Nothing. This session's only fix (an em dash placeholder) and its one open flag 
 - Commit `a0f8879` is local only; push is still Wilco's call.
 
 ## 8. Related files
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 5, Done when), `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist, 45B now ticked), `C:\ZND\projects\burnmon\SESSION_LOG.md` (45B entry, top of file), `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2_44b_forecast_chart_gate.md` (prior forecast brief), `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_45a_readme_status_pass.md` (prior brief that first flagged the Overview tab copy).
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 5, Done when), `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist, 45B now ticked), `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (45B entry, top of file), `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2_44b_forecast_chart_gate.md` (prior forecast brief), `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_45a_readme_status_pass.md` (prior brief that first flagged the Overview tab copy).

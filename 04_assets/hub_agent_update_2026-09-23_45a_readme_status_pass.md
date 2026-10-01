@@ -3,15 +3,15 @@
 **Date:** 2026-09-23 (session 45A) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** README/STATUS/docs pass for v0.2 (45A) is committed; one config-behaviour gap the brief assumed was fixed in code rather than mis-documented.
-**Read order:** this file, `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md` (2026-09-23, 45A entry)
+**Read order:** this file, `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (2026-09-23, 45A entry)
 **Supersedes:** nothing
 
 ## 1. Headline
 BurnMon's README.md and STATUS.md are rewritten for v0.2, `claudecost.example.json` is renamed to `burnmon.example.json`, and `burnmon.json`/`claudecost.json` config fallback now actually exists in code (it did not before this session). Committed to `main`, not yet pushed.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (repo `burnmon`, branch `main`): `968e569` "docs: README/STATUS v0.2 pass, burnmon.example.json, claudecost.json config fallback (45A)". This is an amend of an earlier commit `ba8fd4a` that landed with only the file-rename half of the change (a `git add` line failed silently on one bad pathspec and the rest never got staged); caught by checking `git show --stat HEAD` after the fact, fixed by staging the rest and `git commit --amend`. No other commit exists between these two; `968e569` is the one to read.
-- **Files touched** (full paths, all in `C:\ZND\projects\burnmon\`): `README.md` (full rewrite), `STATUS.md` (full rewrite), `SESSION_LOG.md` (title fixed, one entry prepended), `02_roadmap\2026-09-22_v0.2_session_prompts.md` (45A ticked), `cmd\burnmon\main.go` and `cmd\burnmon-cli\main.go` (added a `claudecost.json` fallback next to `burnmon.json`, same two lookup locations, `burnmon.json` always wins), `internal\pricing\pricing.go` (one comment string), `claudecost.example.json` renamed to `burnmon.example.json` (owners table shown as an empty array).
+- **Committed** in `C:\ZND\50_projects\burnmon` (repo `burnmon`, branch `main`): `968e569` "docs: README/STATUS v0.2 pass, burnmon.example.json, claudecost.json config fallback (45A)". This is an amend of an earlier commit `ba8fd4a` that landed with only the file-rename half of the change (a `git add` line failed silently on one bad pathspec and the rest never got staged); caught by checking `git show --stat HEAD` after the fact, fixed by staging the rest and `git commit --amend`. No other commit exists between these two; `968e569` is the one to read.
+- **Files touched** (full paths, all in `C:\ZND\50_projects\burnmon\`): `README.md` (full rewrite), `STATUS.md` (full rewrite), `SESSION_LOG.md` (title fixed, one entry prepended), `02_roadmap\2026-09-22_v0.2_session_prompts.md` (45A ticked), `cmd\burnmon\main.go` and `cmd\burnmon-cli\main.go` (added a `claudecost.json` fallback next to `burnmon.json`, same two lookup locations, `burnmon.json` always wins), `internal\pricing\pricing.go` (one comment string), `claudecost.example.json` renamed to `burnmon.example.json` (owners table shown as an empty array).
 - **Untracked, now committed:** `04_assets\hub_agent_update_2026-09-23_v0.2_44b_forecast_chart_gate.md` was sitting untracked from the prior (44B) session; it rode into this commit since it was staged alongside everything else. Its own content describes 44B's work, not this session's.
 
 ## 3. What did NOT happen (and why)
@@ -34,4 +34,4 @@ Nothing. This session's one open call (the config-fallback gap) was project-inte
 - 45B (buffer session) still needs to confirm forecast scoring actually wrote week 45's data and run the spec's "Done when" list end to end.
 
 ## 8. Related files
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (the spec this pass executes), `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (the exact session brief and checklist), `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md`.
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (the spec this pass executes), `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (the exact session brief and checklist), `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md`.

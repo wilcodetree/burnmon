@@ -6,8 +6,8 @@
 items pass with fresh evidence, all five section 6 VERIFY items resolved to a stated
 assumption and its UI label (or explicit absence of one), zero event loss confirmed
 against a genuine synthetic v0.1 schema, no fix needed.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, 46A),
-then `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist).
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, 46A),
+then `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist).
 **Supersedes:** nothing; the filename uses the real date (2026-09-23), not the session
 prompt's literal `2026-11-1X` placeholder, matching every other brief already in this
 project's `04_assets` and the house date-prefix rule. The roadmap's week numbers (39-46)
@@ -28,8 +28,8 @@ not tagged; commands below.
 
 - **Not committed.** This session's changes sit unstaged on local `main`, matching the
   session prompt's own instruction to stop before committing.
-- **Files touched** (full paths): `C:\ZND\projects\burnmon\SESSION_LOG.md` (46A paragraph
-  prepended), `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (46A
+- **Files touched** (full paths): `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (46A paragraph
+  prepended), `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (46A
   ticked), this brief (new).
 - **No source code changed.** The Done-when and VERIFY pass found no failing item, so the
   session's own rule ("fix what fails, nothing else") had nothing to apply to.
@@ -116,16 +116,16 @@ unchanged).
 
 ## 8. Related files
 
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (sections 5 and 6),
-`C:\ZND\projects\burnmon\SESSION_LOG.md` (46A entry, top of file),
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist, 46A
-now ticked), `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_45b_done_when_pass.md`
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (sections 5 and 6),
+`C:\ZND\50_projects\burnmon\SESSION_LOG.md` (46A entry, top of file),
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist, 46A
+now ticked), `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_45b_done_when_pass.md`
 (prior Done-when pass, 45B).
 
 ## Commands for Wilco (not run this session)
 
 ```powershell
-# runs in: PowerShell on the laptop, cwd C:\ZND\projects\burnmon
+# runs in: PowerShell on the laptop, cwd C:\ZND\50_projects\burnmon
 git add -A
 git commit -m "docs: 46A release candidate Done-when and VERIFY pass, no fix needed"
 git tag v0.2.0-rc.1

@@ -3,28 +3,28 @@
 **Date:** 2026-09-25 - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** report the UI review patch pass over BurnMon Dev (WS2): 7 commits on `burnmon-dev`, not pushed, plus the exact push commands for Wilco to run.
-**Read order:** this file, then `C:\ZND\projects\burnmon\02_roadmap\2026-09-25_ws2_ui_review_patch.md`, then `C:\ZND\projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md` section 11.
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-25_ws2_ui_review_patch.md`, then `C:\ZND\50_projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md` section 11.
 **Supersedes:** nothing (first brief for this patch pass)
 
 ## 1. Headline
 
-All 11 sections of Wilco de Tree's 2026-09-25 UI review patch are built, reviewed and committed on branch `burnmon-dev` in `C:\ZND\projects\burnmon` (code complete on branch, not merged, not pushed). Startup time dropped sharply as part of section 11: window creation from 18.67s to 0.80s, first full render from 19.08s to 1.03s, measured against the real local store both times.
+All 11 sections of Wilco de Tree's 2026-09-25 UI review patch are built, reviewed and committed on branch `burnmon-dev` in `C:\ZND\50_projects\burnmon` (code complete on branch, not merged, not pushed). Startup time dropped sharply as part of section 11: window creation from 18.67s to 0.80s, first full render from 19.08s to 1.03s, measured against the real local store both times.
 
 ## 2. What changed on disk
 
-Committed in `C:\ZND\projects\burnmon` (worktree `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev`), branch `burnmon-dev`, 7 commits on top of the already shipped v0.4 WS2 phase 0-4 work:
+Committed in `C:\ZND\50_projects\burnmon` (worktree `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev`), branch `burnmon-dev`, 7 commits on top of the already shipped v0.4 WS2 phase 0-4 work:
 
 - `7194f2f` - sections 1-8: top bar, burn chart (per-session stacked bars, CPU line overlay removed), vendor strip totals row, activity plus harness-heatmap split row, turn ticker with a click-through popup, a perfadvisor-style system panel, process-groups column tweaks, the "Today's Read" advisor panel deleted (its UI binding only; the advisor rule engine itself is unchanged and still runs inside the export bundle). Also includes section 11 step 1's startup-timing instrumentation, bundled in since it touched the same files.
 - `22c9e1a` - section 10: window size, position, maximized state and monitor now persist across launches; F11 toggles fullscreen and Esc leaves it (hand-rolled Win32, since go-webview2 exposes no placement API and WebView2/Chromium reserves F11 as a browser accelerator key); responsive CSS breakpoints at 900px and 1600px replace the never-finished two-viewport/tabs plan from the original design.
-- `b3be343` - section 9: an optional Microsoft To Do panel, off by default, ported from `C:\ZND\projects\perfadvisor\internal\todo\todo.go` with its own token cache and a StartLogin/FinishLogin split so sign-in never blocks the UI thread.
-- `7b63593` - a design-note-only commit: a section 11 addendum to `C:\ZND\projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md` covering the whole patch and correcting the now-superseded phase-1 viewport plan.
+- `b3be343` - section 9: an optional Microsoft To Do panel, off by default, ported from `C:\ZND\50_projects\perfadvisor\internal\todo\todo.go` with its own token cache and a StartLogin/FinishLogin split so sign-in never blocks the UI thread.
+- `7b63593` - a design-note-only commit: a section 11 addendum to `C:\ZND\50_projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md` covering the whole patch and correcting the now-superseded phase-1 viewport plan.
 - `e5cf3f7` - section 11 (rest): the native-root filesystem scan and the startup backfill moved from blocking window creation to a background goroutine started after the window and its own loading screen already exist. This is the change behind the startup numbers in section 1 above.
 - `1d7d3a6` - the matching `SESSION_LOG.md` entry.
 - `e9a7324` - removed one stray em dash a review missed in a code comment (`tools\uicheck\check_d7.go`).
 
-Files touched span `cmd\burnmon-dev\*.go`, `cmd\burnmon-dev\page.html`, `internal\sysmon\*.go` (new `Sample.SwapUsedMB`, `Disks`, `Wifi` fields, `BaseClockGHz()`, ported from perfadvisor source commit `main 2ed8046`), `internal\live\live.go` (new `TurnDetail.Cost` field), `internal\todo\todo.go` (new package), `internal\advisor\advisor.go` (comment only), `tools\uicheck\*.go` (new checks d4 through d7, `check_d0.go` rewritten, `win32.go`'s `bringToFront` hardened), and `C:\ZND\projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md`.
+Files touched span `cmd\burnmon-dev\*.go`, `cmd\burnmon-dev\page.html`, `internal\sysmon\*.go` (new `Sample.SwapUsedMB`, `Disks`, `Wifi` fields, `BaseClockGHz()`, ported from perfadvisor source commit `main 2ed8046`), `internal\live\live.go` (new `TurnDetail.Cost` field), `internal\todo\todo.go` (new package), `internal\advisor\advisor.go` (comment only), `tools\uicheck\*.go` (new checks d4 through d7, `check_d0.go` rewritten, `win32.go`'s `bringToFront` hardened), and `C:\ZND\50_projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md`.
 
-Untracked, not committed: `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\` (four reference screenshots Wilco copied into the worktree for this task). Left for Wilco to decide whether to commit.
+Untracked, not committed: `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\` (four reference screenshots Wilco copied into the worktree for this task). Left for Wilco to decide whether to commit.
 
 ## 3. What did NOT happen (and why)
 
@@ -57,24 +57,24 @@ Nothing. This is a project-internal UI/UX and startup-performance pass; no cross
 - Push `burnmon-dev` to `origin` (never the `mirror` remote, per this project's own remote policy) once Wilco has reviewed the diff. Exact command at the end of this brief.
 - Complete a real Microsoft To Do sign-in to verify section 9's task-list rendering against live data.
 - Re-run `uicheck` check `d7` once the workstation is unlocked and the screen resolution is stable, to close out the one check that could not complete in the final pass.
-- Decide whether to commit `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\` (currently untracked).
+- Decide whether to commit `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\` (currently untracked).
 - Consider tightening `scripts\uicheck-dev.ps1`'s own wait budgets (currently up to 120s for the eval port, 90s for backfill): both are now far more generous than the app's own actual startup time warrants, though neither is incorrect.
 
 ## 8. Related files
 
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-25_ws2_ui_review_patch.md` (the patch spec this whole session followed).
-- `C:\ZND\projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md` (design note, section 11 addendum added this session).
-- `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, 2026-09-25).
-- `C:\ZND\projects\burnmon\04_assets\reference\2026-09-25_ui_review\` (Wilco's own reference screenshots for this patch; untracked).
-- Screenshots from this session's own verification, local only, gitignored, not committed: `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\testdata\uicheck\out\`.
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-25_ws2_ui_review_patch.md` (the patch spec this whole session followed).
+- `C:\ZND\50_projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md` (design note, section 11 addendum added this session).
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, 2026-09-25).
+- `C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-25_ui_review\` (Wilco's own reference screenshots for this patch; untracked).
+- Screenshots from this session's own verification, local only, gitignored, not committed: `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\testdata\uicheck\out\`.
 
 ---
 
 ## Push command (not run this session, Wilco's own call)
 
-PowerShell, working directory `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev`:
+PowerShell, working directory `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev`:
 
-    cd C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev
+    cd C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev
     git push -u origin burnmon-dev
 
 Pushes to `origin` (`https://github.com/wilcodetree/burnmon.git`) only. Do not push or tag to the `mirror` remote (`ssh://cipher/~/znd-mirrors/burnmon.git`), per this project's own remote policy. Not merged into `main`; that is a separate decision once Wilco has reviewed the diff.

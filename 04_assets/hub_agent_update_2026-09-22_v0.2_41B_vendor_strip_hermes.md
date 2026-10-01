@@ -3,22 +3,22 @@
 **Date:** 2026-09-22 (session 41B) - **Owner:** Wilco de Tree
 **Project:** BurnRate (BurnMon)
 **Purpose:** Tell the hub that v0.2's vendor strip (P3) and Hermes adapter (A1) shipped and tagged, and that A1's design changed from the spec's own assumption after a live schema check.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, "2026-09-22, v0.2 41B"), then `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` sections 2.2 P3 and 2.5 A1.
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, "2026-09-22, v0.2 41B"), then `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` sections 2.2 P3 and 2.5 A1.
 **Supersedes:** nothing.
 
 ## 1. Headline
 Shipped and tagged `v0.2.0-alpha.2`: the Now page's per-vendor token strip (P3) and the Hermes adapter (A1). Committed, tagged and pushed by Wilco. Both `go test ./... -count=1` and `.\build.ps1` are green.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon`: `c53487c` "feat: vendor strip on Now, Hermes adapter as growing per-session events (P3, A1)". Tag `v0.2.0-alpha.2` on that commit, pushed to `origin/main` with tags.
+- **Committed** in `C:\ZND\50_projects\burnmon`: `c53487c` "feat: vendor strip on Now, Hermes adapter as growing per-session events (P3, A1)". Tag `v0.2.0-alpha.2` on that commit, pushed to `origin/main` with tags.
 - **Files touched** (full paths):
-  - `C:\ZND\projects\burnmon\internal\vendorstrip\vendorstrip.go` and `vendorstrip_test.go` (new package)
-  - `C:\ZND\projects\burnmon\internal\store\store.go` (new `VendorStripTotals` query)
-  - `C:\ZND\projects\burnmon\internal\adapter\hermes\hermes.go` and `hermes_test.go` (new package)
-  - `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (bound `bmVendorStrip`, added `startHermesPoll`)
-  - `C:\ZND\projects\burnmon\internal\report\template.html` (vendor strip table + 60s poll; no History/tab changes)
-  - `C:\ZND\projects\burnmon\testdata\hermes\hermes_fixture.db` (new, metadata-only fixture)
-  - `C:\ZND\projects\burnmon\SESSION_LOG.md`, `02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist ticks for 40B, 41A, 41B, the latter two of which had shipped and tagged in prior sessions but were never ticked)
+  - `C:\ZND\50_projects\burnmon\internal\vendorstrip\vendorstrip.go` and `vendorstrip_test.go` (new package)
+  - `C:\ZND\50_projects\burnmon\internal\store\store.go` (new `VendorStripTotals` query)
+  - `C:\ZND\50_projects\burnmon\internal\adapter\hermes\hermes.go` and `hermes_test.go` (new package)
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (bound `bmVendorStrip`, added `startHermesPoll`)
+  - `C:\ZND\50_projects\burnmon\internal\report\template.html` (vendor strip table + 60s poll; no History/tab changes)
+  - `C:\ZND\50_projects\burnmon\testdata\hermes\hermes_fixture.db` (new, metadata-only fixture)
+  - `C:\ZND\50_projects\burnmon\SESSION_LOG.md`, `02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist ticks for 40B, 41A, 41B, the latter two of which had shipped and tagged in prior sessions but were never ticked)
 - **On a branch, not merged:** nothing; straight to `main`, matching this project's own convention.
 - **Untracked / outside a repo:** nothing left over from this session.
 
@@ -48,7 +48,7 @@ Nothing. The "one Event per session, growing" call is project-internal (BurnMon'
 - Sessions 42A/42B (insight package: re-prefill, compaction, context runway, expensive-turn) are next per the build order, untouched by this brief.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (sections 2.2 P3, 2.5 A1)
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist, 41B line)
-- `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, full technical detail)
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (sections 2.2 P3, 2.5 A1)
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist, 41B line)
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, full technical detail)
 - Prior briefs in the same folder: `hub_agent_update_2026-09-22_v0.2_41A_history_page.md`, `..._40B_five_tabs.md`, `..._40A_tool_calls.md`, `..._39B_migrations_owner.md`

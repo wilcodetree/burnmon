@@ -3,7 +3,7 @@
 **Date:** 2026-09-23 - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** V3-5 (Copilot in VS Code, A4; macOS/Linux builds, B1) shipped and committed.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md`'s newest entry
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md`'s newest entry
 (2026-09-23, v0.3 V3-5) for the full detail.
 **Supersedes:** nothing
 
@@ -14,33 +14,33 @@ cross-compile for macOS and Linux (amd64 and arm64, `CGO_ENABLED=0`), both label
 untested. Two items left in the v0.3 build order (V3-6, release candidate, due 2026-10-09).
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (repo root): `7545d63` "v0.3 V3-5: Copilot in
+- **Committed** in `C:\ZND\50_projects\burnmon` (repo root): `7545d63` "v0.3 V3-5: Copilot in
   VS Code (A4) and macOS/Linux builds (B1)". 17 files changed.
 - **Not merged/pushed:** this is a local commit on `main`; per the session prompt's own
   rule, the session stops before tagging or pushing. Tag command to run when Wilco is
   ready: `git tag v0.3.0-beta.1` then `git push origin main --tags`.
-- **Files touched** (full paths): `C:\ZND\projects\burnmon\internal\adapter\copilotvsc\`
-  (new package), `C:\ZND\projects\burnmon\testdata\copilotvsc\copilotvsc_fixture.jsonl`
-  (new fixture), `C:\ZND\projects\burnmon\cmd\burnmon\app.go` (new, shared app logic),
-  `C:\ZND\projects\burnmon\cmd\burnmon\main_other.go` (new, darwin/linux entry point),
-  `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (trimmed to Windows-only WebView2 code),
-  `C:\ZND\projects\burnmon\.github\workflows\release.yml` (new release workflow),
-  `C:\ZND\projects\burnmon\internal\adapter\hermes\hermes.go`,
-  `C:\ZND\projects\burnmon\internal\scan\wsl_other.go`,
-  `C:\ZND\projects\burnmon\internal\vendorstrip\vendorstrip.go`,
-  `C:\ZND\projects\burnmon\internal\history\history.go`,
-  `C:\ZND\projects\burnmon\internal\pricing\pricing.go`,
-  `C:\ZND\projects\burnmon\internal\report\template.html`,
-  `C:\ZND\projects\burnmon\README.md`,
-  `C:\ZND\projects\burnmon\burnmon.example.json`,
-  `C:\ZND\projects\burnmon\SESSION_LOG.md`,
-  `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (V3-5 ticked).
+- **Files touched** (full paths): `C:\ZND\50_projects\burnmon\internal\adapter\copilotvsc\`
+  (new package), `C:\ZND\50_projects\burnmon\testdata\copilotvsc\copilotvsc_fixture.jsonl`
+  (new fixture), `C:\ZND\50_projects\burnmon\cmd\burnmon\app.go` (new, shared app logic),
+  `C:\ZND\50_projects\burnmon\cmd\burnmon\main_other.go` (new, darwin/linux entry point),
+  `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (trimmed to Windows-only WebView2 code),
+  `C:\ZND\50_projects\burnmon\.github\workflows\release.yml` (new release workflow),
+  `C:\ZND\50_projects\burnmon\internal\adapter\hermes\hermes.go`,
+  `C:\ZND\50_projects\burnmon\internal\scan\wsl_other.go`,
+  `C:\ZND\50_projects\burnmon\internal\vendorstrip\vendorstrip.go`,
+  `C:\ZND\50_projects\burnmon\internal\history\history.go`,
+  `C:\ZND\50_projects\burnmon\internal\pricing\pricing.go`,
+  `C:\ZND\50_projects\burnmon\internal\report\template.html`,
+  `C:\ZND\50_projects\burnmon\README.md`,
+  `C:\ZND\50_projects\burnmon\burnmon.example.json`,
+  `C:\ZND\50_projects\burnmon\SESSION_LOG.md`,
+  `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (V3-5 ticked).
 - **Untracked, left alone (not this session's work, concurrent with Wilco's own):**
-  `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md` (a U5 addition appeared
+  `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md` (a U5 addition appeared
   mid-session, not made by this session) and a new
-  `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_monitor_view_patch.md`; also
-  `C:\ZND\projects\burnmon\04_assets\_grill_state.md` and
-  `C:\ZND\projects\burnmon\DEADLINES.md` were already modified before this session started
+  `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_monitor_view_patch.md`; also
+  `C:\ZND\50_projects\burnmon\04_assets\_grill_state.md` and
+  `C:\ZND\50_projects\burnmon\DEADLINES.md` were already modified before this session started
   and were left as found, not folded into this commit.
 
 ## 3. What did NOT happen (and why)
@@ -90,7 +90,7 @@ it. Tag command once Wilco is ready: `git tag v0.3.0-beta.1 && git push origin m
 rule).
 
 ## 8. Related files
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md` (sections 2.3 A4, 2.4 B1),
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (V3-5 prompt and
-checklist), `C:\ZND\projects\burnmon\SESSION_LOG.md` (2026-09-23, v0.3 V3-5 entry, full
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md` (sections 2.3 A4, 2.4 B1),
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (V3-5 prompt and
+checklist), `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (2026-09-23, v0.3 V3-5 entry, full
 detail).

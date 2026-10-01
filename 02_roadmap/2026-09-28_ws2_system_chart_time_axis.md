@@ -1,7 +1,7 @@
 # WS2 follow-up: System line chart on a real 30-minute time axis
 
 Owner: Wilco (request 2026-09-28). Executor: the same follow-up session as the month labels and
-vendor colours fixes, main in `C:\ZND\projects\burnmon`, v0.4.0-alpha.4. Never use em dashes.
+vendor colours fixes, main in `C:\ZND\50_projects\burnmon`, v0.4.0-alpha.4. Never use em dashes.
 
 ## What is wrong today (read from the code)
 
@@ -35,4 +35,4 @@ vendor colours fixes, main in `C:\ZND\projects\burnmon`, v0.4.0-alpha.4. Never u
   stretch, because hidden sampling runs at 10 s. The break threshold is now 2.5 times the
   hidden sample interval (25 s), taken from the Go constant, not hard-coded in the page.
 - Screenshot of the System chart with fake data, committed under
-  `C:\ZND\projects\burnmon\04_assets\reference\2026-09-28_vendor_colours\` next to the colour one.
+  `C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-28_vendor_colours\` next to the colour one.

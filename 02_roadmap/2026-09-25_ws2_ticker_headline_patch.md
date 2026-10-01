@@ -1,6 +1,6 @@
 # WS2 patch 3: turn ticker, process groups, heatmap hover, headline (2026-09-25)
 
-Branch `burnmon-dev`, worktree `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev`.
+Branch `burnmon-dev`, worktree `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev`.
 Overrides `2026-09-25_ws2_burn_chart_no_scroll_patch.md` where they differ. Version stays
 0.4.0-alpha.1; phase 5 runs after this patch. Never use em dashes anywhere.
 

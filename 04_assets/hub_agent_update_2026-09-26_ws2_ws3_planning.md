@@ -5,7 +5,7 @@
 **Purpose:** tell the hub that WS1 shipped, WS2 (BurnMon Dev) is built on a branch, and that a
 performance workstream (WS3) plus release order are planned.
 **Read order:** this file, `C:\ZND\10_holding\handovers\2026-09-26_burnmon_dev_hub_handover.md`,
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-26_session_prompts_phase5_ws3_perf.md`.
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-26_session_prompts_phase5_ws3_perf.md`.
 **Supersedes:** nothing.
 
 ## 1. Headline
@@ -17,14 +17,14 @@ started.
 
 ## 2. What changed on disk
 
-- **Committed** in `C:\ZND\projects\burnmon` on `main`: `1291ef9` "v0.3.1: dev-only mode,
+- **Committed** in `C:\ZND\50_projects\burnmon` on `main`: `1291ef9` "v0.3.1: dev-only mode,
   Sessions harness fix, History stacked chart" (read from the reflog of `main`).
 - **On a branch, not merged:** `burnmon-dev` in worktree
-  `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev`: BurnMon Dev phases 0 to 4 and three
+  `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev`: BurnMon Dev phases 0 to 4 and three
   UI patches; last commits `493a84d`, `516c24e` as reported by the Claude Code session (not
   re-read live by this hub session).
 - **Untracked** (written by this hub session, not committed), all in
-  `C:\ZND\projects\burnmon\02_roadmap\`: `2026-09-24_ws1_burnmon_cleanup.md`,
+  `C:\ZND\50_projects\burnmon\02_roadmap\`: `2026-09-24_ws1_burnmon_cleanup.md`,
   `2026-09-24_ws2_burnmon_dev.md`, `2026-09-25_ws2_ui_review_patch.md`,
   `2026-09-25_ws2_burn_chart_no_scroll_patch.md`, `2026-09-25_ws2_ticker_headline_patch.md`,
   `2026-09-26_ws3_shared_ingest_performance.md`, `2026-09-26_ws2_performance_patch.md`,
@@ -51,7 +51,7 @@ started.
   minute by caching closed days (session report).
 - [STATE] Both exes reach about 900 MB to 1.3 GB and about 13k handles in the first minutes;
   hub hypothesis (unverified): one fsnotify watch per folder in
-  `C:\ZND\projects\burnmon\internal\watch\watch.go`, plus a 400 MB GC soft cap below the live
+  `C:\ZND\50_projects\burnmon\internal\watch\watch.go`, plus a 400 MB GC soft cap below the live
   heap. WS3 profiles first.
 - [STATE] Reviews in the Claude Code sessions caught many real bugs; two items were reported
   done while only half done (headline rolling once a minute, uicheck at half CSS size). Both are
@@ -67,7 +67,7 @@ Nothing. All calls are project-internal to BurnMon.
 
 `C:\ZND\10_holding\01_projects\burnmon.md` (status: v0.3.1 shipped, BurnMon Dev on branch,
 WS3 planned), `C:\ZND\10_holding\01_projects\portfolio.md` (BurnMon line),
-`C:\ZND\projects\burnmon\DEADLINES.md` if a date for v0.4.0-alpha.1 is set, and
+`C:\ZND\50_projects\burnmon\DEADLINES.md` if a date for v0.4.0-alpha.1 is set, and
 `C:\ZND\10_holding\SESSION_LOG.md`.
 
 ## 7. Open flags for next session
@@ -78,6 +78,6 @@ WS3 planned), `C:\ZND\10_holding\01_projects\portfolio.md` (BurnMon line),
 
 ## 8. Related files
 
-`C:\ZND\projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md` (on branch `burnmon-dev`),
-`C:\ZND\projects\burnmon\04_assets\reference\2026-09-25_ui_review\` (on the branch),
+`C:\ZND\50_projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md` (on branch `burnmon-dev`),
+`C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-25_ui_review\` (on the branch),
 `C:\ZND\10_holding\01_projects\burnmon.md`.

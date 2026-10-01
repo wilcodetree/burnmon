@@ -3,8 +3,8 @@
 **Date:** 2026-09-22 - **Owner:** Wilco de Tree
 **Project:** BurnMon (formerly claudecost)
 **Purpose:** 43A (I3) shipped and committed: markers, turn ticker and the "explain this spike" drawer on the Now page, plus a schema addition (tool_calls.path) decided mid-session.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry), then `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.3
-**Supersedes:** `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_42B_runway_expensive_turn.md` (extends it, does not replace it)
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry), then `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.3
+**Supersedes:** `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_42B_runway_expensive_turn.md` (extends it, does not replace it)
 
 ## 1. Headline
 43A is committed to `main`: the Now page's live chart now carries one marker per
@@ -13,7 +13,7 @@ drawer with the full turn detail. Committed, not tagged: no `v0.2.0-alpha.N` tag
 this session, and nothing was pushed to a remote.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (branch `main`): `e381f80` "feat: markers,
+- **Committed** in `C:\ZND\50_projects\burnmon` (branch `main`): `e381f80` "feat: markers,
   ticker and spike drawer on Now, tool_calls.path (I3, 43A)", 15 files changed, 828
   insertions, 30 deletions.
 - **Not tagged.** The build order table has 43A tagging `v0.2.0-alpha.4` alongside 43B
@@ -21,23 +21,23 @@ this session, and nothing was pushed to a remote.
 - **Not pushed.** `main` is 2 commits ahead of `origin/main`; Wilco was handed the push
   command and had not confirmed running it as of this brief.
 - **Files touched** (full paths, all in the commit above):
-  `C:\ZND\projects\burnmon\internal\live\live.go`,
-  `C:\ZND\projects\burnmon\internal\live\live_test.go`,
-  `C:\ZND\projects\burnmon\internal\live\turndetail_test.go` (new),
-  `C:\ZND\projects\burnmon\internal\report\template.html`,
-  `C:\ZND\projects\burnmon\internal\schema\event.go`,
-  `C:\ZND\projects\burnmon\internal\store\migrations\migrations.go`,
-  `C:\ZND\projects\burnmon\internal\store\store.go`,
-  `C:\ZND\projects\burnmon\internal\store\store_test.go`,
-  `C:\ZND\projects\burnmon\internal\adapter\claude\claude.go`,
-  `C:\ZND\projects\burnmon\internal\adapter\claude\claude_test.go`,
-  `C:\ZND\projects\burnmon\internal\adapter\codex\codex.go`,
-  `C:\ZND\projects\burnmon\internal\adapter\codex\codex_test.go`,
-  `C:\ZND\projects\burnmon\cmd\burnmon\main.go`,
-  `C:\ZND\projects\burnmon\SESSION_LOG.md`,
-  `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (43A ticked).
+  `C:\ZND\50_projects\burnmon\internal\live\live.go`,
+  `C:\ZND\50_projects\burnmon\internal\live\live_test.go`,
+  `C:\ZND\50_projects\burnmon\internal\live\turndetail_test.go` (new),
+  `C:\ZND\50_projects\burnmon\internal\report\template.html`,
+  `C:\ZND\50_projects\burnmon\internal\schema\event.go`,
+  `C:\ZND\50_projects\burnmon\internal\store\migrations\migrations.go`,
+  `C:\ZND\50_projects\burnmon\internal\store\store.go`,
+  `C:\ZND\50_projects\burnmon\internal\store\store_test.go`,
+  `C:\ZND\50_projects\burnmon\internal\adapter\claude\claude.go`,
+  `C:\ZND\50_projects\burnmon\internal\adapter\claude\claude_test.go`,
+  `C:\ZND\50_projects\burnmon\internal\adapter\codex\codex.go`,
+  `C:\ZND\50_projects\burnmon\internal\adapter\codex\codex_test.go`,
+  `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go`,
+  `C:\ZND\50_projects\burnmon\SESSION_LOG.md`,
+  `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (43A ticked).
 - **Untracked, not this session's work, left alone:**
-  `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md` (modified before
+  `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md` (modified before
   this session started) and this brief's own predecessor,
   `hub_agent_update_2026-09-22_v0.2_42B_runway_expensive_turn.md` (already untracked at
   session start, per that brief's own note it was meant to fold into a later commit; it
@@ -67,7 +67,7 @@ drawer, not an error.
 ## 4. Findings worth propagating
 - [RESULT] `go test ./... -count=1`, `.\build.ps1`, and `node --check` (on the extracted
   inline script, `internal/report/template.html` lines 462-1947) all green after the
-  change, run from `C:\ZND\projects\burnmon`.
+  change, run from `C:\ZND\50_projects\burnmon`.
 - [RESULT] Open choice resolved with Wilco directly this session: `tool_calls` (S2,
   added in an earlier session) had no file-path column at all, so the drawer's "files
   read" line had nowhere to read from. Wilco chose to add the column now (migration4,
@@ -81,7 +81,7 @@ drawer, not an error.
   Claude Code session's own turns and a real re-prefill finding on turn 8; a throwaway
   `go run` of live.BuildTurnDetail against the same store returned the matching tool
   call (joined by RequestID) and the correct gap in seconds, then was deleted. Full
-  detail in `C:\ZND\projects\burnmon\SESSION_LOG.md`'s 43A entry.
+  detail in `C:\ZND\50_projects\burnmon\SESSION_LOG.md`'s 43A entry.
 - [RESULT] Built and started the freshly built `burnmon.exe`, replacing a stale
   instance from an earlier build that still held the single-instance mutex;
   `burnmon-app.log` polled cleanly (poll 30, 60, 90, no panic, no "could not bind") for
@@ -115,9 +115,9 @@ actually opened and compared against its own transcript. This brief's own predec
 touches this project, per that brief's own note.
 
 ## 8. Related files
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.3, I3),
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (43A prompt,
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.3, I3),
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (43A prompt,
 line 79; checklist line 148),
-`C:\ZND\projects\burnmon\SESSION_LOG.md` (43A entry, top of file),
-`C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_42B_runway_expensive_turn.md`
+`C:\ZND\50_projects\burnmon\SESSION_LOG.md` (43A entry, top of file),
+`C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_42B_runway_expensive_turn.md`
 (the 42B brief this one extends).

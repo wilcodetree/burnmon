@@ -5,39 +5,39 @@
 **Purpose:** tell the hub that v0.4.0-alpha.3 was specced, pulled forward from "later", and
 launched as one unattended overnight Claude Code session that has not finished yet.
 **Read order:** this file,
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md`,
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-27_ws2_alpha3_bundle_and_overnight_rules.md`, then the
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md`,
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-27_ws2_alpha3_bundle_and_overnight_rules.md`, then the
 run's own report at the end of
-`C:\ZND\projects\burnmon\04_assets\2026-09-27_alpha3_overnight_run.log` and its own hub brief
+`C:\ZND\50_projects\burnmon\04_assets\2026-09-27_alpha3_overnight_run.log` and its own hub brief
 once they exist.
 **Supersedes:** the "v0.4.0-alpha.3, later, no date" line in
-`C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_merged_workstream_closed.md`
-and in `C:\ZND\projects\burnmon\02_roadmap\roadmap.md` item 9.
+`C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_merged_workstream_closed.md`
+and in `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md` item 9.
 
 ## 1. Headline
 
 v0.4.0-alpha.3 is in flight: an unattended overnight Claude Code session (Sonnet 5, headless) on
-`main` in `C:\ZND\projects\burnmon`, started 2026-09-27 21:53, not finished, nothing committed yet.
+`main` in `C:\ZND\50_projects\burnmon`, started 2026-09-27 21:53, not finished, nothing committed yet.
 
 ## 2. What changed on disk
 
 - **Committed:** nothing yet. `main` is still `f7f1c26` (Wilco's `git log` at about 23:35).
-- **Written by this hub chat, untracked** in `C:\ZND\projects\burnmon\02_roadmap\`:
+- **Written by this hub chat, untracked** in `C:\ZND\50_projects\burnmon\02_roadmap\`:
   `2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md` (Wilco's three requests: To Do panel
   scrolls vertically, all 20 core bars equal length with fixed three-character slots, one 1 s
   cadence for the whole System zone like perfadvisor) and
   `2026-09-27_ws2_alpha3_bundle_and_overnight_rules.md` (parked items bundled: minimized RAM,
   To Do due dates in local time, d9 at 1920x1080, w1 solo re-run; plus the unattended rules).
 - **Copied by Wilco, untracked:**
-  `C:\ZND\projects\burnmon\04_assets\reference\2026-09-27_system_panel\system_panel_core_bars.png`
+  `C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-27_system_panel\system_panel_core_bars.png`
   (System panel only; Wilco's To Do screenshot was deliberately kept out of the repo).
 - **Uncommitted work by the running session, seen at about 23:40 (not reviewed):**
-  `C:\ZND\projects\burnmon\cmd\burnmon-dev\page.html` `.todobody` now has `overflow-y:auto`;
+  `C:\ZND\50_projects\burnmon\cmd\burnmon-dev\page.html` `.todobody` now has `overflow-y:auto`;
   the `processWalkInterval` constant is gone from `cmd\burnmon-dev`; new files
-  `C:\ZND\projects\burnmon\04_assets\2026-09-27_alpha3_d_checks.log`,
+  `C:\ZND\50_projects\burnmon\04_assets\2026-09-27_alpha3_d_checks.log`,
   `...\2026-09-27_alpha3_w_checks.log`, `...\2026-09-27_alpha3_measure_active.log`,
   `...\2026-09-27_measure.ps1`.
-- **Pre-existing, not from this work:** `C:\ZND\projects\burnmon\go.mod` modified before the run
+- **Pre-existing, not from this work:** `C:\ZND\50_projects\burnmon\go.mod` modified before the run
   (`git diff` showed only a line-ending warning); the session was told to leave it out of its
   commits unless its own work needs it.
 
@@ -84,14 +84,14 @@ Nothing. Project-internal to BurnMon.
 
 `C:\ZND\10_holding\01_projects\burnmon.md` (alpha.3 in flight, not "later"),
 `C:\ZND\10_holding\01_projects\portfolio.md` (BurnMon line) only after the run's own brief lands.
-`C:\ZND\projects\burnmon\02_roadmap\roadmap.md` item 9 wording ("later, no date") is stale; the
+`C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md` item 9 wording ("later, no date") is stale; the
 run's own brief or Wilco should update it. No DEADLINES change. No Mission Deck This Week item
 known to be affected.
 
 ## 7. Open flags for next session
 
 - Read the run's report at the end of
-  `C:\ZND\projects\burnmon\04_assets\2026-09-27_alpha3_overnight_run.log` and check every item
+  `C:\ZND\50_projects\burnmon\04_assets\2026-09-27_alpha3_overnight_run.log` and check every item
   against the two specs; the run's claims are not results until checked.
 - Which real-window checks did not run (screen lock risk overnight).
 - Whether the run committed the untracked specs, the reference screenshot and the four logs, and
@@ -100,7 +100,7 @@ known to be affected.
 
 ## 8. Related files
 
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-26_parked_after_alpha2.md`
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_performance_patch.md`
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_merged_workstream_closed.md`
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-26_parked_after_alpha2.md`
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_performance_patch.md`
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_merged_workstream_closed.md`
 - `C:\ZND\10_holding\04_assets\hub_agent_update_2026-09-27_nightly_mirror_ssh_fix.md`

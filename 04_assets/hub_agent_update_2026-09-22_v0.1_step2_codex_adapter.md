@@ -3,18 +3,18 @@
 **Date:** 2026-09-22 - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** BurnMon v0.1 Step 2 (Codex adapter) is shipped, tagged, and pushed; here is what actually landed and what is still open before Step 3.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (2026-09-22, v0.1 Step 2 entry), then `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md` for Step 3.
-**Supersedes:** `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.1_step1_schema_store_adapter.md` (Step 1's own brief; this one covers the next step, not a correction to it).
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (2026-09-22, v0.1 Step 2 entry), then `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md` for Step 3.
+**Supersedes:** `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.1_step1_schema_store_adapter.md` (Step 1's own brief; this one covers the next step, not a correction to it).
 
 ## 1. Headline
 BurnMon v0.1 Step 2, the Codex adapter, is merged to `main` and tagged. Wilco's own real Codex sessions (34 of them, spanning three months) now appear in the local store with the right model, turn counts and cost, verified against his live `~/.codex/sessions` trail, not only the fixture.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (repo `burnmon`): `f9d4b68` "feat: Codex adapter (v0.1 Step 2)", 13 files changed, 928 insertions, 34 deletions.
+- **Committed** in `C:\ZND\50_projects\burnmon` (repo `burnmon`): `f9d4b68` "feat: Codex adapter (v0.1 Step 2)", 13 files changed, 928 insertions, 34 deletions.
 - **Tagged and pushed:** `v0.1.0-alpha.2` on `f9d4b68`, pushed to `origin/v0.1.0-alpha.2` and `origin/main` (commit `9b0b133..f9d4b68`).
-- **New:** `C:\ZND\projects\burnmon\internal\adapter\codex\codex.go`, `codex_test.go`; `C:\ZND\projects\burnmon\testdata\codex\three-turns.jsonl` (fixture: 3 turns, one `rate_limits` object, a mid-session model switch).
-- **Changed:** `C:\ZND\projects\burnmon\internal\scan\wsl.go` and `wsl_other.go` (generalised WSL distro discovery so Codex reuses Claude's, not a second copy), `internal\pricing\pricing.go` (OpenAI price book), `internal\dataset\dataset.go`, `fromstore.go` and their tests (adapter dispatch was hardcoded to Claude for every file; now resolves and classifies both adapters), `internal\scan\types.go` (`Session.Unpriced`), `cmd\burnmon-cli\main.go` (new `price-check` verb).
-- **Also present, unrelated to this brief:** `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.1_step1_schema_store_adapter.md` was left untracked by the prior session; not touched here.
+- **New:** `C:\ZND\50_projects\burnmon\internal\adapter\codex\codex.go`, `codex_test.go`; `C:\ZND\50_projects\burnmon\testdata\codex\three-turns.jsonl` (fixture: 3 turns, one `rate_limits` object, a mid-session model switch).
+- **Changed:** `C:\ZND\50_projects\burnmon\internal\scan\wsl.go` and `wsl_other.go` (generalised WSL distro discovery so Codex reuses Claude's, not a second copy), `internal\pricing\pricing.go` (OpenAI price book), `internal\dataset\dataset.go`, `fromstore.go` and their tests (adapter dispatch was hardcoded to Claude for every file; now resolves and classifies both adapters), `internal\scan\types.go` (`Session.Unpriced`), `cmd\burnmon-cli\main.go` (new `price-check` verb).
+- **Also present, unrelated to this brief:** `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.1_step1_schema_store_adapter.md` was left untracked by the prior session; not touched here.
 
 ## 3. What did NOT happen (and why)
 - Step 3 (the Now page, live watch, context windows) has not started. Out of scope for this session.
@@ -46,7 +46,7 @@ Nothing. This is a project-internal implementation step, no cross-project time, 
 - Step 3 (Now page, live watch via `fsnotify`, context-window table) is next; not started.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md` (the full v0.1 spec, all three steps).
-- `C:\ZND\projects\burnmon\04_assets\2026-09-22_token_monitor_sources_and_facts.md` (the phase-1/phase-2 research this step's field-name checks were built on).
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.1_step1_schema_store_adapter.md` (Step 1's own brief).
-- `C:\ZND\projects\burnmon\SESSION_LOG.md` (both the Step 1 and Step 2 entries).
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md` (the full v0.1 spec, all three steps).
+- `C:\ZND\50_projects\burnmon\04_assets\2026-09-22_token_monitor_sources_and_facts.md` (the phase-1/phase-2 research this step's field-name checks were built on).
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.1_step1_schema_store_adapter.md` (Step 1's own brief).
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (both the Step 1 and Step 2 entries).

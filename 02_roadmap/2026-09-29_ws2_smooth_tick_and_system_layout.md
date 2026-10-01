@@ -1,7 +1,7 @@
 # WS2 follow-up: smooth shared tick, System gaps, System and To Do layout
 
 Owner: Wilco (request 2026-09-28 and 2026-09-29). Executor: a Claude Code session in
-`C:\ZND\projects\burnmon`, target `v0.4.0-alpha.7`. Never use em dashes.
+`C:\ZND\50_projects\burnmon`, target `v0.4.0-alpha.7`. Never use em dashes.
 
 Goal in Wilco's words: the app feels smooth, all panels update at about the same moment, never
 clunky, and it never freezes.
@@ -106,5 +106,5 @@ a value line, then its bar, then a dim detail line. Rows line up across the thre
 - Screenshot of the harness heatmap with every label in full.
 - Screenshot of the three System boxes next to Wilco's mock-up, rows aligned.
 - Screenshots at three window sizes with To Do on, and one with To Do off, under
-  `C:\ZND\projects\burnmon\04_assets\reference\2026-09-29_smooth_tick\`.
+  `C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-29_smooth_tick\`.
 - Version bump to `v0.4.0-alpha.7`, README and STATUS updated, hub agent update brief.

@@ -5,7 +5,7 @@
 **Purpose:** Report the v0.2.3 patch: a real Win32+eval harness (`tools\uicheck`) replacing
 the proxy checks v0.2.1 and v0.2.2 had to rely on, then eight fixes (W1 to W8) reproduced
 and verified against the actual running window.
-**Read order:** this file, `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md`
+**Read order:** this file, `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md`
 **Supersedes:** nothing
 
 ## 1. Headline
@@ -28,21 +28,21 @@ activity provided the real store data every check ran against; no separate Codex
 session happened to be running concurrently. Committed locally, not pushed.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (local commit, not pushed): the new harness,
+- **Committed** in `C:\ZND\50_projects\burnmon` (local commit, not pushed): the new harness,
   all eight fixes, STATUS/roadmap/SESSION_LOG updates, this brief, version bump to `0.2.3`.
 - **Files touched** (full paths):
-  - `C:\ZND\projects\burnmon\tools\uicheck\*.go` (new): `main.go`/`checks.go` (registry and
+  - `C:\ZND\50_projects\burnmon\tools\uicheck\*.go` (new): `main.go`/`checks.go` (registry and
     CLI entry), `win32.go` (window discovery incl. the ghost-window check, `BitBlt`
     screenshot, `SendInput` click/key, DPI awareness), `eval.go` (the TCP client to the
     dev eval channel, click-by-selector), `check_w0.go` through `check_w8.go` (one check
     per item).
-  - `C:\ZND\projects\burnmon\cmd\burnmon\uicheck_devserver.go` (new): the dev-only
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon\uicheck_devserver.go` (new): the dev-only
     localhost TCP eval server, `BURNMON_UICHECK=1` gated, bound into `main()`.
-  - `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (W1: `scan.DefaultSourcesWithOptions`,
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (W1: `scan.DefaultSourcesWithOptions`,
     `codex.NativeSources`, `SeedNativeRoots`, `startLiveWatch`, the Hermes/Copilot CLI
     pollers moved off the pre-`w.Run()` path into the startup goroutine; the
     `startUICheckServer` call added; version to `0.2.3`).
-  - `C:\ZND\projects\burnmon\internal\report\template.html` (W2: Close button/overlay
+  - `C:\ZND\50_projects\burnmon\internal\report\template.html` (W2: Close button/overlay
     click moved from inline `onclick` to `addEventListener`; W3: `table-layout:fixed` and
     `overflow-wrap:anywhere` scoped to `#turn_drawer`; W4: the "recent session" fallback
     label replaced with the session id's own first 8 characters; W5: `sessionIds` sorted
@@ -50,17 +50,17 @@ session happened to be running concurrently. Committed locally, not pushed.
     two-decimal token formatter scoped to the Now chart's own axis/tooltip, `tok()`
     elsewhere unchanged; W7: `tickCallback` no longer skips any minute, rotation computed
     from px-per-minute; W8: the cost scale's `display:'auto'`).
-  - `C:\ZND\projects\burnmon\scripts\uicheck.ps1` (new): starts burnmon.exe with the dev
+  - `C:\ZND\50_projects\burnmon\scripts\uicheck.ps1` (new): starts burnmon.exe with the dev
     eval channel, waits for the real first Collect to finish (polls app.log, not a fixed
     sleep), runs the named checks (or all of them), stops the exe.
-  - `C:\ZND\projects\burnmon\cmd\burnmon-cli\main.go` (version to `0.2.3`).
-  - `C:\ZND\projects\burnmon\.gitignore` (`tools\uicheck\uicheck.exe`, `testdata\uicheck\out\`).
-  - `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\02_roadmap\roadmap.md`,
-    `C:\ZND\projects\burnmon\SESSION_LOG.md` (v0.2.3 recorded as roadmap item 6, v0.3
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon-cli\main.go` (version to `0.2.3`).
+  - `C:\ZND\50_projects\burnmon\.gitignore` (`tools\uicheck\uicheck.exe`, `testdata\uicheck\out\`).
+  - `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md`,
+    `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (v0.2.3 recorded as roadmap item 6, v0.3
     renumbered to item 7, decision to item 8).
-  - `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2.3_window_check_patch.md`
+  - `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2.3_window_check_patch.md`
     (this file).
-- **Screenshots**: `C:\ZND\projects\burnmon\testdata\uicheck\out\` (git-ignored), one
+- **Screenshots**: `C:\ZND\50_projects\burnmon\testdata\uicheck\out\` (git-ignored), one
   before/after pair per item where a genuinely separate broken build was still in hand
   (W1); before/after both against the already-fixed binary for W2 to W8, since each fix
   was isolated by direct DOM/measurement evidence first and a separate broken rebuild per
@@ -129,7 +129,7 @@ same route without new information.
   Collect duration varied from ~2s to 60s+ purely from this session's own process churn).
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.3_window_check_patch.md` (this
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.2.3_window_check_patch.md` (this
   session's spec/prompt)
-- `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md`,
-  `C:\ZND\projects\burnmon\02_roadmap\roadmap.md`
+- `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md`,
+  `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md`

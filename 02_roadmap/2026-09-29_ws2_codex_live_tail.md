@@ -1,6 +1,6 @@
 # WS2 follow-up: Codex sessions that stay open never reach the live watcher
 
-Owner: Wilco (request 2026-09-29). Executor: a Claude Code session in `C:\ZND\projects\burnmon`,
+Owner: Wilco (request 2026-09-29). Executor: a Claude Code session in `C:\ZND\50_projects\burnmon`,
 target `v0.4.0-alpha.8`. Never use em dashes.
 
 ## What was observed (2026-09-29, Codex in VS Code)

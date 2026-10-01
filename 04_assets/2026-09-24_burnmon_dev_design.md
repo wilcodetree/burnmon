@@ -8,7 +8,7 @@ are this session's own changes, flagged inline rather than folded in silently (t
 came from this session's own pre-commit Opus review of the phase 0-2 diff).
 Plan: `02_roadmap\2026-09-24_ws2_burnmon_dev.md`
 Read for this pass: `AGENTS.md`, `C:\ZND\AGENTS.md`, `STATUS.md`, `SESSION_LOG.md` (top entry),
-`C:\ZND\projects\perfadvisor\README.md` and its `docs\`,
+`C:\ZND\50_projects\perfadvisor\README.md` and its `docs\`,
 `C:\ZND\_archive\marketadvisor\docs\2026-08-13_marketadvisor-design.md`,
 `C:\ZND\_archive\marketadvisor\internal\server\web\index.html`, and this repo's own
 `internal\store\store.go`, `internal\adapter\adapter.go`, `internal\dataset\dataset.go`,
@@ -397,7 +397,7 @@ corrections below are this session's own findings, not a separate design step.
   `cmd\burnmon-dev\export_run.go`'s `buildExportBundle` calls it now (it always did its own
   independent, whole-window advisor pass, never through the deleted binding).
 - **Microsoft To Do panel (section 9)**: `internal/todo`, ported from
-  `C:\ZND\projects\perfadvisor\internal\todo\todo.go` (same source commit as the sysmon
+  `C:\ZND\50_projects\perfadvisor\internal\todo\todo.go` (same source commit as the sysmon
   collectors above), with its own token cache under `%LOCALAPPDATA%\burnmon\` instead of
   perfadvisor's own folder, and `Login` split into `StartLogin` (one fast HTTP call) plus
   `FinishLogin` (the slow interactive poll, run in a goroutine) so a WebView2 binding never

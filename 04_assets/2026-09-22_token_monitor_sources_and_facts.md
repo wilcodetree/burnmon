@@ -7,7 +7,7 @@ or unconfirmed, with what would confirm it).
 
 ## Part 1. Source map (internal)
 
-**`C:\ZND\projects\claudecost\README.md`** (last edited 2026-08-31). Settles the whole current
+**`C:\ZND\50_projects\claudecost\README.md`** (last edited 2026-08-31). Settles the whole current
 product surface: Go, standard library, WebView2, two portable exes, no ports, no network,
 reads Claude Code and Cowork transcripts, WSL via registry, dedup one entry per `requestId`
 keeping the largest `output_tokens`, pricing compiled-in with `claudecost.json` override,
@@ -40,7 +40,7 @@ the roadmap priority order. Leaves open: no slot for a successor.
 
 **`decisions.md`.** 2026-08-11 (:1214-1220): claudecost and perfadvisor published as public
 MIT repos under github.com/wilcodetree, personal, not Valona-owned, Valona invoice and seat
-data stripped. Public `C:\ZND\projects\claudecost` diverges from the Valona working copy
+data stripped. Public `C:\ZND\50_projects\claudecost` diverges from the Valona working copy
 `C:\dev\Work\claudecost`. 2026-08-28 (:400): Talon claudecost config, 5 seats, EUR 273,58 per
 month. 2026-09-08 (:312): the `claudecost` GitHub repo excluded from renames.
 
@@ -51,7 +51,7 @@ supply one of the PoC's three closing numbers (:38).
 
 **DEADLINES within 3 weeks.** 2026-09-22: archive `C:\dev` (minus `Work`), where the Valona
 claudecost fork lives. 2026-09-27: Siteoffice sprint 1 ends. 2026-09-28 to 10-11: estate
-rename window, will move `C:\ZND\projects\claudecost`. 2026-10-04: siteoffice-git kill check.
+rename window, will move `C:\ZND\50_projects\claudecost`. 2026-10-04: siteoffice-git kill check.
 2026-10-11: sprint 2 ends. 2026-10-15: Talon MLP.
 
 ### Conflicts between sources

@@ -5,7 +5,7 @@
 **Purpose:** Report the v0.2.1 patch: BurnMon's Refresh went "Not Responding" (98.5% CPU,
 1,438 MB, 175 MB/s disk); measured the real cause against the real store, fixed what the
 numbers showed, and where the numbers still fall short of the stated target.
-**Read order:** this file, `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md`
+**Read order:** this file, `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md`
 **Supersedes:** nothing
 
 ## 1. Headline
@@ -21,33 +21,33 @@ run at once). Peak memory during Refresh dropped by roughly a third but did not 
 locally, not pushed.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (local commits, not pushed): the hang patch
+- **Committed** in `C:\ZND\50_projects\burnmon` (local commits, not pushed): the hang patch
   itself, STATUS/roadmap/SESSION_LOG updates, this brief, version bump to `0.2.1`.
 - **Files touched** (full paths):
-  - `C:\ZND\projects\burnmon\internal\store\migrations\migrations.go` (migration 6: a
+  - `C:\ZND\50_projects\burnmon\internal\store\migrations\migrations.go` (migration 6: a
     `session_id`-only index; `schema_version` head now 6)
-  - `C:\ZND\projects\burnmon\internal\store\store.go` (WAL mode, a five-second busy
+  - `C:\ZND\50_projects\burnmon\internal\store\store.go` (WAL mode, a five-second busy
     timeout, and a second `*sql.DB` handle: one writer connection as before, an
     eight-connection read pool for every read-only query)
-  - `C:\ZND\projects\burnmon\internal\store\store_test.go` (schema_version expectations
+  - `C:\ZND\50_projects\burnmon\internal\store\store_test.go` (schema_version expectations
     updated from 5 to 6 in both `TestFreshStoreAtHeadVersion` and
     `TestMigrateRealV01Store`, the latter run against the real store this session)
-  - `C:\ZND\projects\burnmon\internal\dataset\dataset.go` (stage timing added to
+  - `C:\ZND\50_projects\burnmon\internal\dataset\dataset.go` (stage timing added to
     `Collect`/`ingest`; `Weeks` and the unused `CoverageNote` field removed from
     `Payload`, checked against every `D.*` reference in `template.html` first)
-  - `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (stage timing around every bound
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (stage timing around every bound
     function; `bmSessionInsight` and `bmHistory` now return immediately and resolve
     through `w.Dispatch` from a goroutine instead of blocking the UI thread; new
     `asyncResolveJS` helper; a 400 MB `debug.SetMemoryLimit`; version to `0.2.1`)
-  - `C:\ZND\projects\burnmon\internal\report\template.html` (`sessionInsight()` and
+  - `C:\ZND\50_projects\burnmon\internal\report\template.html` (`sessionInsight()` and
     `renderHistory()` adapted to the async resolve pattern; `renderSessions()`'s
     fan-out capped to 8 concurrent `bmSessionInsight` calls via a new
     `runWithConcurrency`)
-  - `C:\ZND\projects\burnmon\cmd\burnmon-cli\main.go` (version to `0.2.1`)
-  - `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\02_roadmap\roadmap.md`,
-    `C:\ZND\projects\burnmon\SESSION_LOG.md` (v0.2.1 recorded, v0.3 renumbered to item 5,
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon-cli\main.go` (version to `0.2.1`)
+  - `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md`,
+    `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (v0.2.1 recorded, v0.3 renumbered to item 5,
     its stale 2026-12-12 "Next" reference corrected to 2026-10-09)
-  - `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2.1_hang_patch.md`
+  - `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2.1_hang_patch.md`
     (this file)
 - **On a branch, not merged:** none; all work is on `main`, committed locally.
 - **Untracked / outside a repo:** the session's own spec and prompt files
@@ -115,6 +115,6 @@ re-surfaced as a surprise later.
   now dated 2026-10-09) unchanged, still the next real work after this patch.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.1_hang_patch.md` (this session's spec/prompt)
-- `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md`,
-  `C:\ZND\projects\burnmon\02_roadmap\roadmap.md`
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.2.1_hang_patch.md` (this session's spec/prompt)
+- `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md`,
+  `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md`

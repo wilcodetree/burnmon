@@ -63,7 +63,7 @@ per-person comparison; code signing; NL README (v1.1); a paid tier before a firm
 ## 4. Timeline
 
 Availability caveat: one session a week, Siteoffice sprint 2 runs to 2026-10-11 and the
-estate rename window (2026-09-28 to 10-11) moves `C:\ZND\projects\claudecost`; a slipped
+estate rename window (2026-09-28 to 10-11) moves `C:\ZND\50_projects\claudecost`; a slipped
 week slips every row below by a week, and the plan says so rather than compressing.
 
 | When | What | Done when |
@@ -145,4 +145,4 @@ No desktop, no client, no forecast.
   v0.3, 2026-12-19 decision.
 - `02_roadmap\roadmap.md`: a pointer to this plan under the side-track allocation.
 - Groundwork Kit and the Talon PoC plan: claudecost slot becomes BurnMon at v0.3.
-- `C:\ZND\projects\claudecost`: README gains a pointer once the `burnmon` repo exists.
+- `C:\ZND\50_projects\claudecost`: README gains a pointer once the `burnmon` repo exists.

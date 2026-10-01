@@ -3,8 +3,8 @@
 **Date:** 2026-09-22 - **Owner:** Wilco de Tree
 **Project:** BurnMon (formerly claudecost)
 **Purpose:** 42B (I2 part 2) shipped and tagged: two new insight rules, one line wired onto the Now card, v0.2.0-alpha.3 tagged.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry), then `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.3
-**Supersedes:** `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_42A_insight_package.md` (extends it, does not replace it)
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry), then `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.3
+**Supersedes:** `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_42A_insight_package.md` (extends it, does not replace it)
 
 ## 1. Headline
 42B is shipped, merged to `main` and tagged: `internal/insight` gained `context-runway`
@@ -13,23 +13,23 @@ was tagged `v0.2.0-alpha.3`. Not code-complete-on-branch, not pending: committed
 build green.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (branch `main`): `3a19d91` "feat: context
+- **Committed** in `C:\ZND\50_projects\burnmon` (branch `main`): `3a19d91` "feat: context
   runway and expensive-turn insight rules (I2 part 2, 42B)".
 - **Tagged:** `v0.2.0-alpha.3` on `3a19d91`, annotated "I2 complete (re-prefill,
   compaction, context-runway, expensive-turn)".
 - **Files touched** (full paths, all in the commit above):
-  `C:\ZND\projects\burnmon\internal\insight\insight.go`,
-  `C:\ZND\projects\burnmon\internal\insight\insight_test.go`,
-  `C:\ZND\projects\burnmon\internal\live\live.go`,
-  `C:\ZND\projects\burnmon\internal\report\template.html`,
-  `C:\ZND\projects\burnmon\SESSION_LOG.md`,
-  `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (42B ticked).
+  `C:\ZND\50_projects\burnmon\internal\insight\insight.go`,
+  `C:\ZND\50_projects\burnmon\internal\insight\insight_test.go`,
+  `C:\ZND\50_projects\burnmon\internal\live\live.go`,
+  `C:\ZND\50_projects\burnmon\internal\report\template.html`,
+  `C:\ZND\50_projects\burnmon\SESSION_LOG.md`,
+  `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (42B ticked).
 - Six prior sessions' handoff briefs (39B through 42A) were untracked in
-  `C:\ZND\projects\burnmon\04_assets\` and were folded into this same commit at
+  `C:\ZND\50_projects\burnmon\04_assets\` and were folded into this same commit at
   Wilco's choice, rather than left for a separate one: `hub_agent_update_2026-09-22_v0.2_39B_migrations_owner.md`,
   `..._40A_tool_calls.md`, `..._40B_five_tabs.md`, `..._41A_history_page.md`,
   `..._41B_vendor_strip_hermes.md`, `..._42A_insight_package.md`.
-- **Untracked, not this session's work:** `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md`
+- **Untracked, not this session's work:** `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md`
   shows as modified in `git status` but predates this session; left alone and left out of
   the 42B commit.
 
@@ -44,14 +44,14 @@ rendered anywhere in the UI, by design (42B's own prompt said "keep everything e
 
 ## 4. Findings worth propagating
 - [RESULT] `go test ./... -count=1` and `.\build.ps1` both green after the change, run
-  from `C:\ZND\projects\burnmon`.
+  from `C:\ZND\50_projects\burnmon`.
 - [RESULT] bmLive's per-poll cost with all four I2 rules (re-prefill, compaction,
   context-runway, expensive-turn), measured against Wilco's real local BurnMon store
   (built this session from his actual Claude Code transcripts via `burnmon-cli.exe`):
   1,858 sessions, 51,563 events, 6,295 findings total. Best of 3 full passes: 7.7
   microseconds average per session, 2.05 ms worst case. Comfortably inside the 5 ms
   per-session budget the existing synthetic-marathon test already asserts. Full number and
-  method are in `C:\ZND\projects\burnmon\SESSION_LOG.md`'s 42B entry.
+  method are in `C:\ZND\50_projects\burnmon\SESSION_LOG.md`'s 42B entry.
 - [RESULT] Open choice resolved with Wilco directly this session (recorded in the chat,
   not re-derivable from the diff alone): the spec's "95th percentile of the session's turn
   cost or tokens" for `expensive-turn` was ambiguous; Wilco chose tokens over cost, since
@@ -79,9 +79,9 @@ No remote push has happened for this branch; confirm with Wilco whether `v0.2.0-
 and `main` should be pushed, and to where.
 
 ## 8. Related files
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.3, I1-I3),
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (42B prompt, line
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.3, I1-I3),
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (42B prompt, line
 68-71; checklist line 147),
-`C:\ZND\projects\burnmon\SESSION_LOG.md` (42B entry, top of file),
-`C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_42A_insight_package.md`
+`C:\ZND\50_projects\burnmon\SESSION_LOG.md` (42B entry, top of file),
+`C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_42A_insight_package.md`
 (the 42A brief this one extends).

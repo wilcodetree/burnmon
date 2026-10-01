@@ -1,7 +1,7 @@
 # WS2 follow-up: one colour family per vendor, shades per session
 
 Owner: Wilco (request 2026-09-28, screenshot at 06:28). Executor: the same short follow-up
-session as the month labels fix, main in `C:\ZND\projects\burnmon`. Never use em dashes.
+session as the month labels fix, main in `C:\ZND\50_projects\burnmon`. Never use em dashes.
 Supersedes the 2026-09-24 decision "distinct colours per session and harness": sessions are now
 distinct shades inside their vendor's colour, not free hues.
 
@@ -37,5 +37,5 @@ distinct shades inside their vendor's colour, not free hues.
   one vendor share the vendor hue within a few degrees; any two shades differ clearly (report
   the lightness step); no session colour falls inside another vendor's hue range.
 - Screenshot of the burn zone with those fake sessions, committed under
-  `C:\ZND\projects\burnmon\04_assets\reference\2026-09-28_vendor_colours\`.
+  `C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-28_vendor_colours\`.
 - `README.md` BurnMon Dev section: one line on the colour rule.

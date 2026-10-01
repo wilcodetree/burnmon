@@ -1,12 +1,12 @@
 # WS2 performance patch: BurnMon Dev's own CPU and memory
 
-Branch `burnmon-dev`, worktree `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev`.
+Branch `burnmon-dev`, worktree `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev`.
 Executor: fresh Claude Code session, Sonnet 5 (Opus for the review agent).
 Runs AFTER WS3 (`2026-09-26_ws3_shared_ingest_performance.md`) is committed on `main`.
 Never use em dashes anywhere.
 
 Read first: `AGENTS.md`, `C:\ZND\AGENTS.md`, top of `SESSION_LOG.md`, the WS2 phase 5 and WS3
-hub briefs in `C:\ZND\projects\burnmon\04_assets\` (their numbers are the baseline).
+hub briefs in `C:\ZND\50_projects\burnmon\04_assets\` (their numbers are the baseline).
 
 ## Step 0: rebase
 
@@ -47,4 +47,4 @@ Rebase `burnmon-dev` on `main` (WS3, v0.3.2). Shared code conflicts resolve in f
 - Version v0.4.0-alpha.2. README, STATUS, SESSION_LOG. Commit, do not push or tag. Hand Wilco
   the PowerShell commands (branch push needs `--force-with-lease` after the rebase if the
   branch was pushed before).
-- One hub brief with the `hub-agent-update` skill in `C:\ZND\projects\burnmon\04_assets\`.
+- One hub brief with the `hub-agent-update` skill in `C:\ZND\50_projects\burnmon\04_assets\`.

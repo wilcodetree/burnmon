@@ -17,12 +17,12 @@ memory climb is fixed and measured for real (peak RAM 957MB to 87MB, peak handle
 Not pushed, not tagged; Wilco has the exact commands to run himself, below.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (branch `main`):
+- **Committed** in `C:\ZND\50_projects\burnmon` (branch `main`):
   - `69a071e` v0.3.2 WS3: shared ingest performance, local time everywhere (28 files,
     1,862 insertions, 200 deletions).
 - **On a branch, not merged:** nothing from this session; `burnmon-dev` (WS2) is
   untouched, still pending its own rebase onto this commit.
-- **Files touched** (full paths): `C:\ZND\projects\burnmon\internal\watch\watch.go`
+- **Files touched** (full paths): `C:\ZND\50_projects\burnmon\internal\watch\watch.go`
   (refactored behind a new `nativeBackend` interface),
   `...\internal\watch\watch_windows.go` (new, the hand-rolled recursive
   `ReadDirectoryChangesW` watcher), `...\internal\watch\watch_other.go` (new, the old
@@ -113,19 +113,19 @@ open item. No DEADLINES.md entry expected (no dated gate tied to this).
   in `store.go`'s event-time bounds.
 
 ## 8. Related files
-- Spec: `C:\ZND\projects\burnmon\02_roadmap\2026-09-26_ws3_shared_ingest_performance.md`
+- Spec: `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-26_ws3_shared_ingest_performance.md`
 - Full profile and before/after numbers:
-  `C:\ZND\projects\burnmon\04_assets\2026-09-26_ws3_profile_before_after.md`
+  `C:\ZND\50_projects\burnmon\04_assets\2026-09-26_ws3_profile_before_after.md`
 - WS2 phase 5 hub brief (this session's baseline numbers):
-  `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_phase5_verify_release.md`
+  `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_phase5_verify_release.md`
 - SESSION_LOG.md's newest entry, STATUS.md's top section
 
 ## PowerShell commands for Wilco
 
-Push `main` and tag v0.3.2 (run in: PowerShell, `C:\ZND\projects\burnmon`):
+Push `main` and tag v0.3.2 (run in: PowerShell, `C:\ZND\50_projects\burnmon`):
 
 ```powershell
-cd C:\ZND\projects\burnmon
+cd C:\ZND\50_projects\burnmon
 git push origin main
 git tag v0.3.2
 git push origin v0.3.2

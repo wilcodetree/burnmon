@@ -3,16 +3,16 @@
 **Date:** 2026-09-22 (subagent-driven-development session, worktree-isolated) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** v0.1 Step 1 (schema, store, Claude adapter) is code-complete and verified on a worktree branch, not yet merged, tagged or pushed.
-**Read order:** this file, then `C:\ZND\projects\burnmon\docs\superpowers\plans\2026-09-22-v0.1-step1-schema-store-adapter.md`, then `C:\ZND\projects\burnmon\SESSION_LOG.md`
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\docs\superpowers\plans\2026-09-22-v0.1-step1-schema-store-adapter.md`, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md`
 **Supersedes:** nothing
 
 ## 1. Headline
 
-BurnMon v0.1 Step 1 (schema, store, Claude adapter, per `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`) is code-complete on branch `worktree-burnmon-v0.1-step1`: `go test ./...` and `.\build.ps1` are green, and `burnmon-cli.exe report` built from the new SQLite store matches a v0.0.1 baseline binary byte-for-byte on Wilco's real two months of transcripts, apart from one sign-off'd surface-vocabulary change. Not merged into `main`, not pushed, not tagged.
+BurnMon v0.1 Step 1 (schema, store, Claude adapter, per `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`) is code-complete on branch `worktree-burnmon-v0.1-step1`: `go test ./...` and `.\build.ps1` are green, and `burnmon-cli.exe report` built from the new SQLite store matches a v0.0.1 baseline binary byte-for-byte on Wilco's real two months of transcripts, apart from one sign-off'd surface-vocabulary change. Not merged into `main`, not pushed, not tagged.
 
 ## 2. What changed on disk
 
-- **Committed** on branch `worktree-burnmon-v0.1-step1` (not on `main`), in worktree `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-v0.1-step1`, 15 commits on top of the v0.0.1 baseline (`0393939`):
+- **Committed** on branch `worktree-burnmon-v0.1-step1` (not on `main`), in worktree `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-v0.1-step1`, 15 commits on top of the v0.0.1 baseline (`0393939`):
   - `848c16f` feat(schema): add vendor-agnostic Event type
   - `69bf1ec` feat(store): add SQLite event/cursor/meta store
   - `15a5abc` feat(adapter): add the Adapter interface
@@ -29,8 +29,8 @@ BurnMon v0.1 Step 1 (schema, store, Claude adapter, per `C:\ZND\projects\burnmon
   - `36feb49` fix: address final review findings (incremental read data loss, schema version, event pruning, and 4 more)
   - `fc8aff8` docs: SESSION_LOG entry for v0.1 Step 1
 - **On a branch, not merged:** `worktree-burnmon-v0.1-step1` carries all of the above; `main` is unchanged at `0393939`.
-- **Files touched** (full paths, all under `C:\ZND\projects\burnmon\`): `internal\schema\event.go`, `internal\store\store.go`, `internal\adapter\adapter.go`, `internal\adapter\claude\claude.go` (plus `partial_test.go`, `testdata\basic.jsonl`), `internal\scan\types.go` (new), `internal\scan\parse.go` (deleted, content moved), `internal\dataset\fromstore.go` (new), `internal\dataset\dataset.go`, `cmd\burnmon-cli\main.go`, `cmd\burnmon\main.go`, `go.mod`, `go.sum`, `SESSION_LOG.md`, `internal\report\template.html`, `README.md`.
-- **Untracked / outside a repo:** none. The implementation plan lives at `C:\ZND\projects\burnmon\docs\superpowers\plans\2026-09-22-v0.1-step1-schema-store-adapter.md`, committed on the branch.
+- **Files touched** (full paths, all under `C:\ZND\50_projects\burnmon\`): `internal\schema\event.go`, `internal\store\store.go`, `internal\adapter\adapter.go`, `internal\adapter\claude\claude.go` (plus `partial_test.go`, `testdata\basic.jsonl`), `internal\scan\types.go` (new), `internal\scan\parse.go` (deleted, content moved), `internal\dataset\fromstore.go` (new), `internal\dataset\dataset.go`, `cmd\burnmon-cli\main.go`, `cmd\burnmon\main.go`, `go.mod`, `go.sum`, `SESSION_LOG.md`, `internal\report\template.html`, `README.md`.
+- **Untracked / outside a repo:** none. The implementation plan lives at `C:\ZND\50_projects\burnmon\docs\superpowers\plans\2026-09-22-v0.1-step1-schema-store-adapter.md`, committed on the branch.
 
 ## 3. What did NOT happen (and why)
 
@@ -65,7 +65,7 @@ Nothing yet. This branch is not merged, so BurnMon's status in `C:\ZND\10_holdin
 
 ## 8. Related files
 
-- Spec: `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
-- Plan: `C:\ZND\projects\burnmon\docs\superpowers\plans\2026-09-22-v0.1-step1-schema-store-adapter.md`
-- Architecture note: `C:\ZND\projects\burnmon\04_assets\2026-09-22_token_monitor_architecture.md`
-- Session log: `C:\ZND\projects\burnmon\SESSION_LOG.md`
+- Spec: `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1_spec.md`
+- Plan: `C:\ZND\50_projects\burnmon\docs\superpowers\plans\2026-09-22-v0.1-step1-schema-store-adapter.md`
+- Architecture note: `C:\ZND\50_projects\burnmon\04_assets\2026-09-22_token_monitor_architecture.md`
+- Session log: `C:\ZND\50_projects\burnmon\SESSION_LOG.md`

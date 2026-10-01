@@ -6,7 +6,7 @@
 built exe and the real local store, one real bug found and fixed along the way, version
 constants set, docs and roadmap updated, commit and tag done, push command printed for
 Wilco.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry,
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry,
 V3-6), then `02_roadmap\2026-09-23_v0.3_spec.md` sections 5 and 6 for what was checked.
 **Supersedes:** nothing.
 
@@ -125,14 +125,14 @@ Groundwork Kit once Talon actually starts using v0.3 in place of claudecost.
 
 ## 8. Related files
 
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md` (sections 5 and 6),
-`C:\ZND\projects\burnmon\SESSION_LOG.md` (V3-6 entry, top of file),
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (checklist, V3-6
-now ticked), `C:\ZND\projects\burnmon\STATUS.md` (Known gaps section).
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md` (sections 5 and 6),
+`C:\ZND\50_projects\burnmon\SESSION_LOG.md` (V3-6 entry, top of file),
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (checklist, V3-6
+now ticked), `C:\ZND\50_projects\burnmon\STATUS.md` (Known gaps section).
 
 ## Commands for Wilco (not run this session)
 
 ```powershell
-# runs in: PowerShell on the laptop, cwd C:\ZND\projects\burnmon
+# runs in: PowerShell on the laptop, cwd C:\ZND\50_projects\burnmon
 git push origin main --tags
 ```

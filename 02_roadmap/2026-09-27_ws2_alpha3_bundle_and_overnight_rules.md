@@ -1,9 +1,9 @@
 # WS2 alpha.3, part 2: bundled parked items and overnight rules
 
-Companion to `C:\ZND\projects\burnmon\02_roadmap\2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md`
+Companion to `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-27_ws2_alpha3_system_cadence_todo_scroll.md`
 (part 1, items 1 to 3). Wilco, 2026-09-27: bundle four parked items into the same session, run
 it as one unattended overnight session. Source of the parked items:
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-26_parked_after_alpha2.md`. Never use em dashes.
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-26_parked_after_alpha2.md`. Never use em dashes.
 
 ## Bundled items (numbered on from part 1)
 

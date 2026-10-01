@@ -1,7 +1,7 @@
 # WS3: shared ingest performance (CPU and memory), BurnMon v0.3.2
 
 Owner: Wilco. Executor: fresh Claude Code session, Sonnet 5 (Opus for the review agent).
-Branch: `main` in `C:\ZND\projects\burnmon`. Runs AFTER WS2 phase 5 has finished, so its
+Branch: `main` in `C:\ZND\50_projects\burnmon`. Runs AFTER WS2 phase 5 has finished, so its
 10-minute measurement is the baseline. WS2 (`burnmon-dev`) rebases on this afterwards.
 Never use em dashes anywhere.
 
@@ -75,7 +75,7 @@ Today "today" and every day bucket start at UTC midnight (`vendorstrip.dayStart`
 - Fresh read-only Opus review agent over the diff before each commit.
 - Version v0.3.2 in `cmd\burnmon\app.go` and `cmd\burnmon-cli\main.go`; README, STATUS,
   SESSION_LOG updated. Commit on `main`, do not push or tag. Hand Wilco the PowerShell commands.
-- One hub brief with the `hub-agent-update` skill in `C:\ZND\projects\burnmon\04_assets\`.
+- One hub brief with the `hub-agent-update` skill in `C:\ZND\50_projects\burnmon\04_assets\`.
 
 ## Out of scope
 

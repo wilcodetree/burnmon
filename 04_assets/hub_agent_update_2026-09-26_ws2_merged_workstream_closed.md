@@ -27,14 +27,14 @@ is v0.3.2. The workstream is closed. v0.4.0-alpha.3 is planned for later, no dat
 - `v0.4.0-alpha.1` was wrong on origin: an older local tag on `c67a7af` (phase 2b) blocked the
   new tag, so the first push sent the old one. Repointed to `0089baf` and force-pushed.
 - Branch `burnmon-dev` deleted locally and on origin; worktree
-  `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev` removed.
-- `C:\ZND\projects\burnmon\02_roadmap\roadmap.md`: item 8 (WS1 to WS3 plus BurnMon Dev, done)
+  `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev` removed.
+- `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md`: item 8 (WS1 to WS3 plus BurnMon Dev, done)
   and item 9 (v0.4.0-alpha.3, later) added.
 
 ## 3. What did NOT happen (and why)
 
 - v0.4.0-alpha.3 not run: Wilco accepted alpha.2. Items in
-  `C:\ZND\projects\burnmon\02_roadmap\2026-09-26_parked_after_alpha2.md`.
+  `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-26_parked_after_alpha2.md`.
 - Hub `SESSION_LOG.md` and the BurnMon one-pager not edited by the hub chat: the Cowork shell
   was down (Windows update blocks the workspace) and Edit truncates large files on the hub
   mount. The next hub-update pass propagates this brief.
@@ -50,7 +50,7 @@ is v0.3.2. The workstream is closed. v0.4.0-alpha.3 is planned for later, no dat
   Copilot credit reset stays UTC (GitHub's billing boundary).
 - [STATE] Microsoft To Do sign-in done by Wilco on his own account, 2026-09-26.
 - [STATE] Leftovers seen in `git worktree list` and `git branch -a`, not touched: an old
-  worktree `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-v0.1-step1` (branch
+  worktree `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-v0.1-step1` (branch
   `worktree-burnmon-v0.1-step1`, `fc8aff8`), and a stale `mirror/burnmon-dev` ref from remote
   `mirror` (`ssh://cipher/~/znd-mirrors/burnmon.git`). Unverified whether the mirror is updated
   by a job.
@@ -68,7 +68,7 @@ Nothing. Project-internal.
 Update, same day: both leftovers fixed by Wilco. `fc8aff8` confirmed merged into `main`,
 worktree `burnmon-v0.1-step1` and its branch removed; `git push --mirror mirror` deleted
 `burnmon-dev` and `worktree-burnmon-v0.1-step1` on the mirror and brought it to `f7f1c26` plus
-all three tags. `git worktree list` now shows only `C:\ZND\projects\burnmon`.
+all three tags. `git worktree list` now shows only `C:\ZND\50_projects\burnmon`.
 
 ## 7. Open flags for next session
 

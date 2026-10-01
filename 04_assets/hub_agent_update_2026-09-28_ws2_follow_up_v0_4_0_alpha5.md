@@ -3,7 +3,7 @@
 **Date:** 2026-09-28 - **Owner:** Wilco de Tree
 **Project:** BurnRate (BurnMon)
 **Purpose:** Small fix on `main` after v0.4.0-alpha.4 (gap-break threshold vs the hidden-window sampling cadence), shipped as v0.4.0-alpha.5, committed, not pushed or tagged.
-**Read order:** this file, `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, 2026-09-28, "WS2 follow-up fix"), `C:\ZND\projects\burnmon\STATUS.md`'s v0.4.0-alpha.5 paragraph.
+**Read order:** this file, `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, 2026-09-28, "WS2 follow-up fix"), `C:\ZND\50_projects\burnmon\STATUS.md`'s v0.4.0-alpha.5 paragraph.
 **Supersedes:** nothing (first brief for this fix; picks up the alpha.4 brief's open flag "Wilco to confirm whether a blank System chart during a hidden/minimized stretch is the wanted behaviour" - answer: no, it was a bug, now fixed).
 
 ## 1. Headline
@@ -14,10 +14,10 @@ narrower than the app's hidden-sampling cadence (10s). Fixed and code-complete o
 wrong thing and it was fixed before commit. Not pushed, not tagged.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (`main`):
+- **Committed** in `C:\ZND\50_projects\burnmon` (`main`):
   - `8d64ae9` - v0.4 WS2 follow-up fix: gap-break threshold vs hidden sampling cadence,
     v0.4.0-alpha.5.
-- **Files touched** (full paths, `8d64ae9`): `C:\ZND\projects\burnmon\README.md`,
+- **Files touched** (full paths, `8d64ae9`): `C:\ZND\50_projects\burnmon\README.md`,
   `SESSION_LOG.md`, `STATUS.md`, `cmd\burnmon-dev\app.go`, `cmd\burnmon-dev\main.go`,
   `cmd\burnmon-dev\page.html`, `tools\uicheck\check_d16.go` (one stale comment reworded),
   `tools\uicheck\check_d17.go` (new).
@@ -104,9 +104,9 @@ time, park/unpark, consultancy, company positioning or CIPHER-wall question invo
   open for Wilco.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-28_ws2_system_chart_time_axis.md` (amended
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-28_ws2_system_chart_time_axis.md` (amended
   2026-09-28 with this fix's own Proof addendum)
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-28_ws2_follow_up_v0_4_0_alpha4.md`
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-28_ws2_follow_up_v0_4_0_alpha4.md`
   (the prior brief for this same track)
-- `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, full writeup and review findings)
-- `C:\ZND\projects\burnmon\tools\uicheck\check_d17.go`
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, full writeup and review findings)
+- `C:\ZND\50_projects\burnmon\tools\uicheck\check_d17.go`

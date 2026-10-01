@@ -4,7 +4,7 @@
 **Project:** BurnMon
 **Purpose:** Report the v0.2.2 patch: six fixes from Wilco's own live review of the Now page
 (three screenshots, 2026-09-23 around 12:00), worked N1 to N6 in order.
-**Read order:** this file, `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md`
+**Read order:** this file, `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md`
 **Supersedes:** nothing
 
 ## 1. Headline
@@ -23,39 +23,39 @@ session was live throughout (this session's own), no Codex CLI session happened 
 running concurrently. Committed locally, not pushed.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (local commit, not pushed): all six fixes,
+- **Committed** in `C:\ZND\50_projects\burnmon` (local commit, not pushed): all six fixes,
   STATUS/roadmap/SESSION_LOG updates, this brief, version bump to `0.2.2`.
 - **Files touched** (full paths):
-  - `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (N1: `bmTurn` binding now returns
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (N1: `bmTurn` binding now returns
     immediately and resolves through a goroutine plus `asyncResolveJS`, matching
     `bmSessionInsight`/`bmHistory`'s existing v0.2.1 pattern; version to `0.2.2`)
-  - `C:\ZND\projects\burnmon\internal\report\template.html` (N1: `TURN_DETAIL_PENDING`,
+  - `C:\ZND\50_projects\burnmon\internal\report\template.html` (N1: `TURN_DETAIL_PENDING`,
     `__bmTurnResolve`, an `Escape`-key close handler; N2: `drawNowChart` rewritten to
     clustered per-session-per-minute bars, `VENDOR_COLOR_FAMILIES`, `shadeHex`,
     `sessionSeriesColor`, `nowChartOnClick` rewritten for the new bar-click-to-drawer
     behaviour, finding-marker point layer removed; N3: `.now-cards` gets a 28px top
     margin; N4: `#t_vendorstrip td a` de-styled plus a `title` tooltip)
-  - `C:\ZND\projects\burnmon\internal\live\live.go` (N2: `BucketSeconds` 10 to 60, doc
+  - `C:\ZND\50_projects\burnmon\internal\live\live.go` (N2: `BucketSeconds` 10 to 60, doc
     comments updated; the window-truncation logic needed no other change)
-  - `C:\ZND\projects\burnmon\internal\live\live_test.go` (N5: `TestBuildSnapshot_RunningVsStale`'s
+  - `C:\ZND\50_projects\burnmon\internal\live\live_test.go` (N5: `TestBuildSnapshot_RunningVsStale`'s
     context-window assertion moved from 200,000 to 1,000,000)
-  - `C:\ZND\projects\burnmon\internal\pricing\pricing.go` (N5: `ContextWindows` table,
+  - `C:\ZND\50_projects\burnmon\internal\pricing\pricing.go` (N5: `ContextWindows` table,
     Opus 5.5/Sonnet 5/Fable 5.1 to 1,000,000 tokens, Haiku 4.5 unchanged at 200,000; the
     Opus key itself renamed `claude-opus-5` to `claude-opus-5-5` to match what the real
     store actually reports; `ContextWindowBookDate` to 2026-09-23)
-  - `C:\ZND\projects\burnmon\internal\insight\insight_test.go` (N5:
+  - `C:\ZND\50_projects\burnmon\internal\insight\insight_test.go` (N5:
     `TestAnalyze_ContextRunway_ExpectedTurnCount` switched to `claude-haiku-4-5-20251001`,
     the one model still booked at 200,000, to keep its hand-computed turn-count math valid)
-  - `C:\ZND\projects\burnmon\internal\adapter\codex\codex.go` (N6: `scanHeaderMeta` now
+  - `C:\ZND\50_projects\burnmon\internal\adapter\codex\codex.go` (N6: `scanHeaderMeta` now
     also tracks the most recent `turn_context.model` across its existing 64KB header
     window, seeded into `Parse`'s `model` for incremental reads)
-  - `C:\ZND\projects\burnmon\internal\adapter\codex\codex_test.go` (N6:
+  - `C:\ZND\50_projects\burnmon\internal\adapter\codex\codex_test.go` (N6:
     `TestParseIncrementalReadKeepsSurface` extended with a `Model` assertion)
-  - `C:\ZND\projects\burnmon\cmd\burnmon-cli\main.go` (version to `0.2.2`)
-  - `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\02_roadmap\roadmap.md`,
-    `C:\ZND\projects\burnmon\SESSION_LOG.md` (v0.2.2 recorded as item 5, v0.3 renumbered
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon-cli\main.go` (version to `0.2.2`)
+  - `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md`,
+    `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (v0.2.2 recorded as item 5, v0.3 renumbered
     to item 6, decision to item 7)
-  - `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2.2_now_page_patch.md`
+  - `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2.2_now_page_patch.md`
     (this file)
 - **On a branch, not merged:** none; all work is on `main`, committed locally.
 - **Untracked / outside this session's scope:** `04_assets\_grill_state.md` and
@@ -121,6 +121,6 @@ the tag is pushed is still worth doing, not a surprise gap to rediscover later.
   dated 2026-10-09) unchanged, still the next real work after this patch.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2.2_now_page_patch.md` (this session's spec/prompt)
-- `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md`,
-  `C:\ZND\projects\burnmon\02_roadmap\roadmap.md`
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.2.2_now_page_patch.md` (this session's spec/prompt)
+- `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md`,
+  `C:\ZND\50_projects\burnmon\02_roadmap\roadmap.md`

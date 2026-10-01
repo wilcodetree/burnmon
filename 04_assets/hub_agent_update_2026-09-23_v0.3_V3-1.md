@@ -4,7 +4,7 @@
 **Project:** BurnMon
 **Purpose:** tell the hub that BurnMon v0.3's first build session (price books, cost
 function) is code-complete and committed locally, not yet tagged or pushed.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md`'s top entry for
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md`'s top entry for
 the full technical trail.
 **Supersedes:** nothing.
 
@@ -15,25 +15,25 @@ one new Go function prices any set of events on every basis its vendor's book co
 work: that starts V3-3.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (git, `main`): `5fe54f6` "v0.3 V3-1: dated
+- **Committed** in `C:\ZND\50_projects\burnmon` (git, `main`): `5fe54f6` "v0.3 V3-1: dated
   price books (C1), CostForEvents (C2)".
 - **On a branch, not merged:** nothing; this is a direct commit on `main`, not pushed.
 - **Files touched** (full paths):
-  - `C:\ZND\projects\burnmon\internal\pricing\books.go` (new)
-  - `C:\ZND\projects\burnmon\internal\pricing\books\anthropic_api.json` (new)
-  - `C:\ZND\projects\burnmon\internal\pricing\books\openai_api.json` (new)
-  - `C:\ZND\projects\burnmon\internal\pricing\books\copilot_credits.json` (new)
-  - `C:\ZND\projects\burnmon\internal\pricing\cost.go` (new)
-  - `C:\ZND\projects\burnmon\internal\pricing\cost_test.go` (new)
-  - `C:\ZND\projects\burnmon\internal\pricing\books_test.go` (new)
-  - `C:\ZND\projects\burnmon\internal\pricing\pricing.go` (edited: new Config fields,
+  - `C:\ZND\50_projects\burnmon\internal\pricing\books.go` (new)
+  - `C:\ZND\50_projects\burnmon\internal\pricing\books\anthropic_api.json` (new)
+  - `C:\ZND\50_projects\burnmon\internal\pricing\books\openai_api.json` (new)
+  - `C:\ZND\50_projects\burnmon\internal\pricing\books\copilot_credits.json` (new)
+  - `C:\ZND\50_projects\burnmon\internal\pricing\cost.go` (new)
+  - `C:\ZND\50_projects\burnmon\internal\pricing\cost_test.go` (new)
+  - `C:\ZND\50_projects\burnmon\internal\pricing\books_test.go` (new)
+  - `C:\ZND\50_projects\burnmon\internal\pricing\pricing.go` (edited: new Config fields,
     `Subscription.Source`)
-  - `C:\ZND\projects\burnmon\cmd\burnmon-cli\main.go` (edited: `price-check` prints the
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon-cli\main.go` (edited: `price-check` prints the
     new books)
-  - `C:\ZND\projects\burnmon\burnmon.example.json` (edited: documents the new override
+  - `C:\ZND\50_projects\burnmon\burnmon.example.json` (edited: documents the new override
     block)
-  - `C:\ZND\projects\burnmon\SESSION_LOG.md` (edited: session paragraph prepended)
-  - `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (edited: V3-1
+  - `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (edited: session paragraph prepended)
+  - `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (edited: V3-1
     ticked)
 - **Untracked / outside a repo:** nothing.
 
@@ -83,7 +83,7 @@ VERIFY items above (section 4) stay open until a later session confirms them or 
 spec's own VERIFY-carried list (section 6) closes them at V3-6.
 
 ## 8. Related files
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md` (sections 1, 2.1 C1/C2),
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (V3-1 prompt, now
-ticked), `C:\ZND\projects\burnmon\04_assets\2026-09-22_token_monitor_architecture.md`
-(section 4.3, the pricing-basis decision this session implements), `C:\ZND\projects\burnmon\SESSION_LOG.md`.
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md` (sections 1, 2.1 C1/C2),
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (V3-1 prompt, now
+ticked), `C:\ZND\50_projects\burnmon\04_assets\2026-09-22_token_monitor_architecture.md`
+(section 4.3, the pricing-basis decision this session implements), `C:\ZND\50_projects\burnmon\SESSION_LOG.md`.

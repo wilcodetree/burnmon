@@ -1,9 +1,9 @@
 # Hub Agent Update - ZeroNonsense.dev
 
 **Date:** 2026-09-28 - **Owner:** Wilco de Tree
-**Project:** BurnMon (BurnRate node, `C:\ZND\projects\burnmon`)
+**Project:** BurnMon (BurnRate node, `C:\ZND\50_projects\burnmon`)
 **Purpose:** report a bug fix on main, v0.4.0-alpha.6: a session's burn-chart colour could lock onto the wrong grey shade for life before its vendor was known.
-**Read order:** this file, then `C:\ZND\projects\burnmon\STATUS.md`'s v0.4.0-alpha.6 entry, then `C:\ZND\projects\burnmon\SESSION_LOG.md`'s matching entry (fullest narrative).
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\STATUS.md`'s v0.4.0-alpha.6 entry, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md`'s matching entry (fullest narrative).
 **Supersedes:** nothing.
 
 ## 1. Headline
@@ -16,26 +16,26 @@ vendor was known, locking the wrong grey shade in permanently. Fixed on both the
 side, independently reviewed (Claude Opus 5.5, read-only), full verify pass green.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (repo root, branch `main`): `789a40d` "Fix
+- **Committed** in `C:\ZND\50_projects\burnmon` (repo root, branch `main`): `789a40d` "Fix
   session colour locked grey before its vendor was known, v0.4.0-alpha.6".
 - **Files touched** (full paths):
-  - `C:\ZND\projects\burnmon\cmd\burnmon-dev\app.go` (version bump only, `0.4.0-alpha.6`)
-  - `C:\ZND\projects\burnmon\cmd\burnmon-dev\page.html` (`assignSessionColor`,
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon-dev\app.go` (version bump only, `0.4.0-alpha.6`)
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon-dev\page.html` (`assignSessionColor`,
     `reserveSessionShades`, `sessionColor`, `agentBySessionMap`, the `renderBurnPanels` call
     site, `renderBurnLegend`'s legend-item markup, `renderBars`' sort comparator)
-  - `C:\ZND\projects\burnmon\internal\live\live.go` (new `buildChartAgents`, new
+  - `C:\ZND\50_projects\burnmon\internal\live\live.go` (new `buildChartAgents`, new
     `Snapshot.ChartAgents` field, wired into `BuildSnapshot`)
-  - `C:\ZND\projects\burnmon\internal\live\live_test.go` (new
+  - `C:\ZND\50_projects\burnmon\internal\live\live_test.go` (new
     `TestBuildSnapshot_ChartAgentsCoversSessionBeyondTurnCap`)
-  - `C:\ZND\projects\burnmon\tools\uicheck\check_d15.go` (extended with a two-tick
+  - `C:\ZND\50_projects\burnmon\tools\uicheck\check_d15.go` (extended with a two-tick
     fake-mode scenario, a saturation-vs-vendor-strip check, a per-run-unique fake session id)
-  - `C:\ZND\projects\burnmon\README.md`, `C:\ZND\projects\burnmon\STATUS.md`,
-    `C:\ZND\projects\burnmon\SESSION_LOG.md` (version bump and full narrative)
-- **Left out on purpose:** `C:\ZND\projects\burnmon\go.mod` (unrelated modification already
+  - `C:\ZND\50_projects\burnmon\README.md`, `C:\ZND\50_projects\burnmon\STATUS.md`,
+    `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (version bump and full narrative)
+- **Left out on purpose:** `C:\ZND\50_projects\burnmon\go.mod` (unrelated modification already
   present before this session, per Wilco's own instruction to leave it out) stays unstaged
   and uncommitted.
 - **Untracked, pre-existing, not touched this session:**
-  `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-28_ws2_alpha5_pushed_and_tagged.md`
+  `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-28_ws2_alpha5_pushed_and_tagged.md`
   (a prior session's own brief, left as-is).
 
 ## 3. What did NOT happen (and why)
@@ -107,7 +107,7 @@ involved.
   code comment understates how often it actually runs.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-28_ws2_vendor_colour_families.md` (the
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-28_ws2_vendor_colour_families.md` (the
   original colour-family spec this bug's fix still honours).
-- `C:\ZND\projects\burnmon\SESSION_LOG.md`, top entry, 2026-09-28 (fullest narrative).
-- `C:\ZND\projects\burnmon\STATUS.md`, "BurnMon Dev" section, `v0.4.0-alpha.6` paragraph.
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md`, top entry, 2026-09-28 (fullest narrative).
+- `C:\ZND\50_projects\burnmon\STATUS.md`, "BurnMon Dev" section, `v0.4.0-alpha.6` paragraph.

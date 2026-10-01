@@ -3,7 +3,7 @@
 **Date:** 2026-09-22 (tick 41A) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** History (v0.2 P2) is code-complete and committed on main, not pushed.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, tick 41A)
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, tick 41A)
 **Supersedes:** nothing
 
 ## 1. Headline
@@ -13,14 +13,14 @@ a totals block, one chart and one table, backed by a new bound Go function `bmHi
 pushed to the remote yet.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (repo root): `9b509e7` "feat: History page, one
+- **Committed** in `C:\ZND\50_projects\burnmon` (repo root): `9b509e7` "feat: History page, one
   bmHistory binding, vendor-aware totals (P2)". 5 files changed, 722 insertions, 85 deletions.
-- **New files:** `C:\ZND\projects\burnmon\internal\history\history.go`,
-  `C:\ZND\projects\burnmon\internal\history\history_test.go`.
-- **Files touched:** `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (new `bmHistory` binding),
-  `C:\ZND\projects\burnmon\internal\report\template.html` (History UI built out, old
+- **New files:** `C:\ZND\50_projects\burnmon\internal\history\history.go`,
+  `C:\ZND\50_projects\burnmon\internal\history\history_test.go`.
+- **Files touched:** `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (new `bmHistory` binding),
+  `C:\ZND\50_projects\burnmon\internal\report\template.html` (History UI built out, old
   `#months`/`#weeks`/`#days` sections and their `periodRows`/`renderPeriods` functions deleted),
-  `C:\ZND\projects\burnmon\SESSION_LOG.md` (tick 41A entry prepended).
+  `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (tick 41A entry prepended).
 - **On a branch, not merged:** nothing; this landed directly on `main`.
 - Not pushed: `main` is one commit ahead of `origin/main` as of this session.
 
@@ -46,8 +46,8 @@ build clean). No manual click-through of the built app window happened this sess
   when the filter is narrowed to one covered vendor (`anthropic` or `openai`); "All" always shows
   the `cost_note` "tokens only until v0.3" text, even if the filtered data happens to be
   all-covered. Implemented in `coveredVendorForAgent` in
-  `C:\ZND\projects\burnmon\internal\history\history.go`.
-- [STATE] Build order per the spec (`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md`,
+  `C:\ZND\50_projects\burnmon\internal\history\history.go`.
+- [STATE] Build order per the spec (`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md`,
   section 4) has P2 History in week 41 session A, which this session completes; P3 vendor strip
   and A1 Hermes fixture are week 41 session B, still open.
 
@@ -70,7 +70,7 @@ project's own files rather than `C:\ZND\10_holding\03_logs\decisions.md`.
   look at the History tab in the real app before trusting the filter UX end to end.
 
 ## 8. Related files
-- Spec: `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.2, P2).
-- Session log: `C:\ZND\projects\burnmon\SESSION_LOG.md` (tick 41A entry, top of file).
-- Prior briefs this week: `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_39B_migrations_owner.md`,
+- Spec: `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.2, P2).
+- Session log: `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (tick 41A entry, top of file).
+- Prior briefs this week: `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_39B_migrations_owner.md`,
   `..._40A_tool_calls.md`, `..._40B_five_tabs.md`.

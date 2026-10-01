@@ -3,19 +3,19 @@
 **Date:** 2026-09-22 - **Owner:** Wilco de Tree
 **Project:** BurnMon (forked from claudecost)
 **Purpose:** BurnMon week 39 fork is complete: renamed, built, equality-tested, tagged v0.0.1 and pushed to a public GitHub repo.
-**Read order:** this file, then `C:\ZND\10_holding\01_projects\burnmon.md`, then `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_burnmon_plan.md`
+**Read order:** this file, then `C:\ZND\10_holding\01_projects\burnmon.md`, then `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_burnmon_plan.md`
 **Supersedes:** nothing
 
 ## 1. Headline
 BurnMon v0.0.1 is forked from claudecost, renamed throughout, builds clean, reproduces claudecost's numbers, and is pushed to `https://github.com/wilcodetree/burnmon` (branch `main`, tag `v0.0.1`). Steps 1 through 7 of the week 39 handoff are done.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (local repo, remote `https://github.com/wilcodetree/burnmon.git`):
+- **Committed** in `C:\ZND\50_projects\burnmon` (local repo, remote `https://github.com/wilcodetree/burnmon.git`):
   - `6e1147d` Fork claudecost into burnmon, unchanged (v0.0.0 baseline) (done before this session, per the handoff's step 1).
   - `3d00f22` Rename claudecost to burnmon (v0.0.1): module, imports, folders, build, config, dashboard title.
 - **Tag:** `v0.0.1` on `3d00f22`, pushed.
 - **Pushed:** `main` and `v0.0.1` both on `origin` (`https://github.com/wilcodetree/burnmon`), confirmed by the push output (new branch `main`, new tag `v0.0.1`).
-- **Files touched** (full paths, all under `C:\ZND\projects\burnmon\`):
+- **Files touched** (full paths, all under `C:\ZND\50_projects\burnmon\`):
   - `go.mod` (module `claudecost` to `burnmon`)
   - `cmd\claudecost\main.go` to `cmd\burnmon-cli\main.go` (folder rename, import paths, config filename `claudecost.json` to `burnmon.json`, cache dir, report filename prefix, version string)
   - `cmd\claudecost-app\main.go` and `main_test.go` to `cmd\burnmon\main.go` and `main_test.go` (folder rename, import paths, window title `Claude Cost` to `BurnMon`, mutex name, app data dir, log filename, warming page title)
@@ -48,17 +48,17 @@ Nothing. This is a project-internal fork/rename step, no cross-project time, par
 - `C:\ZND\10_holding\01_projects\burnmon.md`: repo now exists and is pushed; update the "no code yet" line in Current status.
 - `C:\ZND\10_holding\02_roadmap\roadmap.md`: BurnMon side-track pointer already present per the plan's section 9; confirm it reflects week 39 as done.
 - `C:\ZND\10_holding\04_engineering\migration\2026-09-08_znd_migration_map.json`: if this map tracks per-project repo state, BurnMon now has its own repo separate from claudecost.
-- `C:\ZND\projects\claudecost\README.md`: the plan (section 9) says claudecost's README should gain a pointer to BurnMon now that the repo exists; not done this session, flagged for the hub or a claudecost-side session.
+- `C:\ZND\50_projects\claudecost\README.md`: the plan (section 9) says claudecost's README should gain a pointer to BurnMon now that the repo exists; not done this session, flagged for the hub or a claudecost-side session.
 
 ## 7. Open flags for next session
 - claudecost's own README does not yet point at BurnMon (see section 6).
 - The equality test relied on a live-vs-live comparison plus a control run, not a frozen fixture; if a hub reader wants a stricter byte-for-byte proof later, that needs a static transcript snapshot and `-source` pointed at it.
 - Week 40 (schema, SQLite store, Claude adapter onto the schema) is the next plan row, due 2026-10-03.
-- The estate rename window (2026-09-28 to 2026-10-11) may move `C:\ZND\projects\*`; BurnMon was forked before it, per the plan's risk register.
+- The estate rename window (2026-09-28 to 2026-10-11) may move `C:\ZND\50_projects\*`; BurnMon was forked before it, per the plan's risk register.
 
 ## 8. Related files
 - `C:\ZND\10_holding\handovers\2026-09-22_burnmon_week39_handoff.md` (the handoff this session executed)
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_burnmon_plan.md`
-- `C:\ZND\projects\burnmon\04_assets\2026-09-22_token_monitor_architecture.md`
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_burnmon_plan.md`
+- `C:\ZND\50_projects\burnmon\04_assets\2026-09-22_token_monitor_architecture.md`
 - `C:\ZND\10_holding\01_projects\burnmon.md`
 - `https://github.com/wilcodetree/burnmon` (repo, tag `v0.0.1`)

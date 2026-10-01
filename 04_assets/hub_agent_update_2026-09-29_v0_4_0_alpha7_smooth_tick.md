@@ -3,7 +3,7 @@
 **Date:** 2026-09-29 - **Owner:** Wilco de Tree
 **Project:** BurnMon (BurnMon Dev, WS2)
 **Purpose:** BurnMon Dev v0.4.0-alpha.7 is code-complete and verified locally: the page freeze has two named causes, both fixed, and the System chart gap cause is narrowed and moved off the sample path.
-**Read order:** this file, `C:\ZND\projects\burnmon\STATUS.md` (the `v0.4.0-alpha.7` entry), `C:\ZND\projects\burnmon\02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md`
+**Read order:** this file, `C:\ZND\50_projects\burnmon\STATUS.md` (the `v0.4.0-alpha.7` entry), `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md`
 **Supersedes:** nothing (follows `hub_agent_update_2026-09-28_v0.4.0_alpha6_pushed_and_tagged.md`)
 
 ## 1. Headline
@@ -11,9 +11,9 @@ v0.4.0-alpha.7 (spec items 1 to 5) is built and tested on `main` in the working 
 
 ## 2. What changed on disk
 - **Committed:** nothing. Wilco commits by hand (no git writes on `C:\ZND`).
-- **Modified:** `C:\ZND\projects\burnmon\cmd\burnmon-dev\main.go`, `app.go`, `page.html`; `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (one line, WebView2 folder); `C:\ZND\projects\burnmon\internal\sysmon\sample_windows.go`, `sample_stub.go`, `types.go`; `C:\ZND\projects\burnmon\internal\watch\watch_windows.go`; `C:\ZND\projects\burnmon\README.md`; `C:\ZND\projects\burnmon\STATUS.md`.
-- **New:** `C:\ZND\projects\burnmon\cmd\burnmon-dev\history_delta.go`, `history_delta_test.go`, `perf.go`; `C:\ZND\projects\burnmon\tools\uicheck\check_d18.go` to `check_d22.go`; screenshots in `C:\ZND\projects\burnmon\04_assets\reference\2026-09-29_smooth_tick\`; this brief.
-- **Untracked, not mine:** `C:\ZND\projects\burnmon\02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md` (the spec) and Wilco's `2026-09-29_system_boxes_mockup.png`.
+- **Modified:** `C:\ZND\50_projects\burnmon\cmd\burnmon-dev\main.go`, `app.go`, `page.html`; `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (one line, WebView2 folder); `C:\ZND\50_projects\burnmon\internal\sysmon\sample_windows.go`, `sample_stub.go`, `types.go`; `C:\ZND\50_projects\burnmon\internal\watch\watch_windows.go`; `C:\ZND\50_projects\burnmon\README.md`; `C:\ZND\50_projects\burnmon\STATUS.md`.
+- **New:** `C:\ZND\50_projects\burnmon\cmd\burnmon-dev\history_delta.go`, `history_delta_test.go`, `perf.go`; `C:\ZND\50_projects\burnmon\tools\uicheck\check_d18.go` to `check_d22.go`; screenshots in `C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-29_smooth_tick\`; this brief.
+- **Untracked, not mine:** `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md` (the spec) and Wilco's `2026-09-29_system_boxes_mockup.png`.
 
 ## 3. What did NOT happen (and why)
 - Not committed, not pushed, not tagged: Wilco's manual step.
@@ -37,12 +37,12 @@ Nothing. All calls here are project-internal.
 
 ## 7. Open flags for next session
 - A long real-store run of the final alpha.7 exe, to confirm nothing regressed.
-- `C:\ZND\projects\burnmon\STATUS.md` still opens with "What is true at this commit (2026-09-26): v0.3.2"; that header is stale against the BurnMon Dev section.
+- `C:\ZND\50_projects\burnmon\STATUS.md` still opens with "What is true at this commit (2026-09-26): v0.3.2"; that header is stale against the BurnMon Dev section.
 - uicheck overwrites `%LOCALAPPDATA%\burnmon\burnmon-dev-window.json` (it restores at (100,100) after a run): pre-existing, not fixed.
 - The d19 and d20 screenshots show Wilco's real Wi-Fi SSID in the Network box.
 - Consider reporting the `PostThreadMessage` and `DataPath` issues to go-webview2 upstream.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md`
-- `C:\ZND\projects\burnmon\04_assets\reference\2026-09-29_smooth_tick\` (incl. `2026-09-29_d22-system-boxes_vs_mockup.png`)
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-28_v0.4.0_alpha6_pushed_and_tagged.md`
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-29_ws2_smooth_tick_and_system_layout.md`
+- `C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-29_smooth_tick\` (incl. `2026-09-29_d22-system-boxes_vs_mockup.png`)
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-28_v0.4.0_alpha6_pushed_and_tagged.md`

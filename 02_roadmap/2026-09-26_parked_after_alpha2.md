@@ -21,7 +21,7 @@ as v0.4.0-alpha.3, later, no date (`roadmap.md` item 9). Never use em dashes any
 5. **w1 re-run.** Last run failed because another window took the foreground. Re-run solo on an
    idle desktop.
 6. Seven minor review findings in the WS2 performance patch report and its hub brief
-   `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_performance_patch.md`.
+   `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_performance_patch.md`.
 
 ## BurnMon main (shared code)
 

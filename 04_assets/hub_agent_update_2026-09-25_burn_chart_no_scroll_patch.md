@@ -3,7 +3,7 @@
 **Date:** 2026-09-25 - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** report that the WS2 burn-chart-no-scroll patch (sections 1-5) is code-complete and committed on burnmon-dev, verified against the real running window, not yet released.
-**Read order:** this file, then C:\ZND\projects\burnmon\02_roadmap\2026-09-25_ws2_burn_chart_no_scroll_patch.md, then SESSION_LOG.md top two entries in the worktree.
+**Read order:** this file, then C:\ZND\50_projects\burnmon\02_roadmap\2026-09-25_ws2_burn_chart_no_scroll_patch.md, then SESSION_LOG.md top two entries in the worktree.
 **Supersedes:** nothing (first brief on this specific patch)
 
 ## 1. Headline
@@ -16,7 +16,7 @@ unchanged at 0.4.0-alpha.1.
 
 ## 2. What changed on disk
 - **Committed** in the burnmon repo (worktree
-  C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev, branch
+  C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev, branch
   burnmon-dev): `51a1f72` "v0.4 burn chart no-scroll patch, sections 1-5" -
   cmd\burnmon-dev\page.html, cmd\burnmon-dev\app.go, cmd\burnmon-dev\main.go,
   tools\uicheck\check_d8.go/check_d9.go/check_d10.go/check_d11.go, and the
@@ -26,12 +26,12 @@ unchanged at 0.4.0-alpha.1.
 - **Committed**, same branch: `d0c18d8` "SESSION_LOG: v0.4 burn chart
   no-scroll patch (sections 1-5) entry" - SESSION_LOG.md only.
 - **Files touched** (full paths, all inside the worktree above):
-  C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\cmd\burnmon-dev\page.html,
+  C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\cmd\burnmon-dev\page.html,
   \cmd\burnmon-dev\app.go, \cmd\burnmon-dev\main.go,
   \tools\uicheck\check_d8.go, \check_d9.go, \check_d10.go, \check_d11.go,
   \SESSION_LOG.md.
 - **Untracked, left alone on purpose** (pre-existing, not from this
-  session): C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\5_topbar_target.jpg,
+  session): C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\04_assets\reference\2026-09-25_ui_review\5_topbar_target.jpg,
   6_ticker_target.png, 7_perfadvisor_system.png, 8_current.jpg - four
   reference images from an earlier, separate session that were never
   committed there either; out of this patch scope, not touched.
@@ -100,7 +100,7 @@ cross-project, pricing, positioning, park/unpark or CIPHER-wall call.
 - C:\ZND\10_holding\01_projects\burnmon.md (the project one-pager): note
   that the no-scroll patch (sections 1-5) landed on burnmon-dev, phase 5
   (release) still pending.
-- C:\ZND\projects\burnmon\02_roadmap\2026-09-25_ws2_burn_chart_no_scroll_patch.md
+- C:\ZND\50_projects\burnmon\02_roadmap\2026-09-25_ws2_burn_chart_no_scroll_patch.md
   itself has no status field to update; SESSION_LOG.md in the worktree is
   the record of record for this patch own history.
 - No This Week / Mission Deck item name was given for this session, so
@@ -125,13 +125,13 @@ cross-project, pricing, positioning, park/unpark or CIPHER-wall call.
   avoid duplicating that record.
 
 ## 8. Related files
-- C:\ZND\projects\burnmon\02_roadmap\2026-09-25_ws2_burn_chart_no_scroll_patch.md
+- C:\ZND\50_projects\burnmon\02_roadmap\2026-09-25_ws2_burn_chart_no_scroll_patch.md
   (the spec this patch follows)
-- C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\SESSION_LOG.md (top
+- C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\SESSION_LOG.md (top
   entry, full narrative of what changed and what the two reviews caught)
-- C:\ZND\projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md
+- C:\ZND\50_projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md
   (the underlying BurnMon Dev design doc this patch sections build on)
-- C:\ZND\projects\burnmon\04_assets\reference\2026-09-25_ui_review\ (in
+- C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-25_ui_review\ (in
   the worktree at ...\.claude\worktrees\burnmon-dev\04_assets\reference\
   2026-09-25_ui_review\ - the two committed screenshots plus four
   pre-existing, still-untracked ones)

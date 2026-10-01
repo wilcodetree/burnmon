@@ -3,7 +3,7 @@
 **Date:** 2026-09-23 (v0.2 leftovers session) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** Report the close of three mechanical leftovers from the v0.2 ship, no new features, no version bump.
-**Read order:** this file, `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md`
+**Read order:** this file, `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md`
 **Supersedes:** nothing
 
 ## 1. Headline
@@ -13,16 +13,16 @@ and the only untracked file in the tree was this session's own prompt file. Test
 build both green. Committed locally, not pushed.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (local commits, not pushed): About copy fix,
+- **Committed** in `C:\ZND\50_projects\burnmon` (local commits, not pushed): About copy fix,
   STATUS/SESSION_LOG updates, and tracking this brief plus the session prompt file.
 - **Files touched** (full paths):
-  - `C:\ZND\projects\burnmon\internal\report\template.html` (deleted the two sentences
+  - `C:\ZND\50_projects\burnmon\internal\report\template.html` (deleted the two sentences
     naming the removed Overview tab, lines 349 and 420 before the edit)
-  - `C:\ZND\projects\burnmon\STATUS.md` (Known gaps: dropped the Overview-tab clause,
+  - `C:\ZND\50_projects\burnmon\STATUS.md` (Known gaps: dropped the Overview-tab clause,
     kept the still-true "About only covers Claude's seat model" gap)
-  - `C:\ZND\projects\burnmon\SESSION_LOG.md` (new entry prepended)
-  - `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2_leftovers_prompt.md` (now tracked)
-  - `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2_leftovers.md` (this file)
+  - `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (new entry prepended)
+  - `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.2_leftovers_prompt.md` (now tracked)
+  - `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.2_leftovers.md` (this file)
 - **On a branch, not merged:** none; all work is on `main`, committed locally.
 - **Untracked / outside a repo:** none remaining; `git status --porcelain -uall` showed
   exactly one untracked file at session start (the session prompt) and none by the end.
@@ -68,6 +68,6 @@ edit unless the hub wants to note the leftovers are closed.
   unchanged, still the next real work.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.2_leftovers_prompt.md` (this session's prompt)
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md` (checked, already committed)
-- `C:\ZND\projects\burnmon\STATUS.md`, `C:\ZND\projects\burnmon\SESSION_LOG.md`
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.2_leftovers_prompt.md` (this session's prompt)
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md` (checked, already committed)
+- `C:\ZND\50_projects\burnmon\STATUS.md`, `C:\ZND\50_projects\burnmon\SESSION_LOG.md`

@@ -3,7 +3,7 @@
 **Date:** 2026-09-28 - **Owner:** Wilco de Tree
 **Project:** BurnRate (BurnMon)
 **Purpose:** v0.4.0-alpha.6 (session colour locked grey before its vendor was known, the fix) is now pushed and tagged on origin, not just committed.
-**Read order:** this file, `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-28_v0.4.0_alpha6_colour_cache_fix.md` (the code-complete brief this one supersedes for shipped state), `C:\ZND\projects\burnmon\SESSION_LOG.md` top entry.
+**Read order:** this file, `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-28_v0.4.0_alpha6_colour_cache_fix.md` (the code-complete brief this one supersedes for shipped state), `C:\ZND\50_projects\burnmon\SESSION_LOG.md` top entry.
 **Supersedes:** `hub_agent_update_2026-09-28_v0.4.0_alpha6_colour_cache_fix.md`'s own sections 1, 3 and 7 (their "not pushed, not tagged" state) - everything else in that brief still stands.
 
 ## 1. Headline
@@ -60,6 +60,6 @@ Nothing - a push/tag confirmation, not a decision.
   carried over from the alpha.5 ship-confirmation brief.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-28_v0.4.0_alpha6_colour_cache_fix.md`
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-28_ws2_alpha5_pushed_and_tagged.md`
-- `C:\ZND\projects\burnmon\SESSION_LOG.md`
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-28_v0.4.0_alpha6_colour_cache_fix.md`
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-28_ws2_alpha5_pushed_and_tagged.md`
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md`

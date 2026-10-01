@@ -1,13 +1,13 @@
 # WS2: BurnMon Dev, the AI-development monitor for a vertical screen
 
 Owner: Wilco. Executor: fresh Claude Code session, Sonnet 5.
-Repo: `C:\ZND\projects\burnmon`, branch `burnmon-dev`, worktree
-`C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev`. WS1
+Repo: `C:\ZND\50_projects\burnmon`, branch `burnmon-dev`, worktree
+`C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev`. WS1
 (`2026-09-24_ws1_burnmon_cleanup.md`) runs on `main` at the same time and deletes the old
 Monitor view. Rebase on `main` before the release step. Never use em dashes anywhere.
 
 Read first: `AGENTS.md`, `C:\ZND\AGENTS.md`, `STATUS.md`, `SESSION_LOG.md` (top entry),
-`C:\ZND\projects\perfadvisor\README.md` and its `docs\`,
+`C:\ZND\50_projects\perfadvisor\README.md` and its `docs\`,
 `C:\ZND\_archive\marketadvisor\docs\2026-08-13_marketadvisor-design.md` and
 `C:\ZND\_archive\marketadvisor\internal\server\web\index.html` (for the exact CSS tokens).
 

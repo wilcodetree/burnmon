@@ -4,7 +4,7 @@
 **Project:** BurnMon
 **Purpose:** report v0.2.0 shipped: version constants set, docs and roadmap updated,
 commit and tag commands printed for Wilco.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, 46B),
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, 46B),
 then the 46A brief (`hub_agent_update_2026-09-23_46a_rc_done_when.md`) for the rc.1
 Done-when/VERIFY evidence this tag carries forward unchanged.
 **Supersedes:** nothing. Filename uses the real date (2026-09-23), not the session
@@ -90,16 +90,16 @@ BurnMon v0.2 as shipped 2026-09-23, ahead of the 2026-11-14 target date carried 
 
 ## 8. Related files
 
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (sections 5 and 6),
-`C:\ZND\projects\burnmon\SESSION_LOG.md` (46B entry, top of file),
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist, 46B now
-ticked), `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_46a_rc_done_when.md`
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (sections 5 and 6),
+`C:\ZND\50_projects\burnmon\SESSION_LOG.md` (46B entry, top of file),
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (checklist, 46B now
+ticked), `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_46a_rc_done_when.md`
 (rc.1 Done-when/VERIFY evidence this tag carries).
 
 ## Commands for Wilco (not run this session)
 
 ```powershell
-# runs in: PowerShell on the laptop, cwd C:\ZND\projects\burnmon
+# runs in: PowerShell on the laptop, cwd C:\ZND\50_projects\burnmon
 git add -A
 git commit -m "release: BurnMon v0.2.0, version constants, STATUS/DEADLINES/roadmap updated (46B)"
 git tag v0.2.0

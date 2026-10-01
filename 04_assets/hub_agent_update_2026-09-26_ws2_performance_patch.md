@@ -8,8 +8,8 @@ per-tick DOM rebuilds, an honest self row, local time in every remaining UTC spo
 cmd/burnmon-dev, and measured headline-change evidence. A fresh Opus review found five
 real issues before commit, all fixed. Committed on burnmon-dev, not pushed, not tagged,
 not merged.
-**Read order:** this file, SESSION_LOG.md newest entry (repo C:\ZND\projects\burnmon,
-worktree C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev), STATUS.md BurnMon Dev
+**Read order:** this file, SESSION_LOG.md newest entry (repo C:\ZND\50_projects\burnmon,
+worktree C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev), STATUS.md BurnMon Dev
 section and its two new Known gaps entries.
 **Supersedes:** nothing (first WS2-performance-patch brief; the WS2 phase 5 brief and the
 WS3 brief it builds on stay valid for their own earlier state).
@@ -22,8 +22,8 @@ target, down from 252.5 MB). Not merged, not pushed, not tagged; Wilco has the e
 commands below.
 
 ## 2. What changed on disk
-- Committed in C:\ZND\projects\burnmon (branch burnmon-dev, worktree
-  C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev):
+- Committed in C:\ZND\50_projects\burnmon (branch burnmon-dev, worktree
+  C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev):
   - c236162 v0.4 WS2 performance patch, v0.4.0-alpha.2 (21 files, 1613 insertions,
     297 deletions - items 1-6 plus the five review fixes, one commit).
   - The branch was also rebased onto main's 69a071e (v0.3.2) in this same session:
@@ -32,7 +32,7 @@ commands below.
     by real commit timestamp; no other file conflicted.
 - On a branch, not merged: burnmon-dev carries this commit plus every earlier WS2
   phase (0 through 5) and prior UI patches. main is unaffected.
-- Files touched (full paths, this session): C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\cmd\burnmon-dev\app.go,
+- Files touched (full paths, this session): C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\cmd\burnmon-dev\app.go,
   ...\main.go, ...\headline.go, ...\headline_test.go, ...\export_run.go,
   ...\export_run_test.go (new), ...\page.html,
   ...\internal\sysmon\process.go (trimmed to shared code only),
@@ -150,24 +150,24 @@ this patch as an open item. No DEADLINES.md entry expected (no dated gate tied t
   times).
 
 ## 8. Related files
-- Spec: C:\ZND\projects\burnmon\02_roadmap\2026-09-26_ws2_performance_patch.md
-- Prior briefs: C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_phase5_verify_release.md,
+- Spec: C:\ZND\50_projects\burnmon\02_roadmap\2026-09-26_ws2_performance_patch.md
+- Prior briefs: C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_phase5_verify_release.md,
   ...\hub_agent_update_2026-09-26_ws3_shared_ingest_performance.md
-- Design: C:\ZND\projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md
+- Design: C:\ZND\50_projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md
 - Hub one-pager: C:\ZND\10_holding\01_projects\burnmon.md
 
 ## PowerShell commands for Wilco
 
 Push burnmon-dev with force-with-lease (the branch was pushed before this session's
-rebase, so a plain push would be rejected). Run in PowerShell, at C:\ZND\projects\burnmon:
+rebase, so a plain push would be rejected). Run in PowerShell, at C:\ZND\50_projects\burnmon:
 
-    cd C:\ZND\projects\burnmon
+    cd C:\ZND\50_projects\burnmon
     git fetch origin
     git push --force-with-lease origin burnmon-dev
 
 Tag v0.4.0-alpha.2 once you are happy with the push (optional, this is an alpha). Run in
-PowerShell, at C:\ZND\projects\burnmon:
+PowerShell, at C:\ZND\50_projects\burnmon:
 
-    cd C:\ZND\projects\burnmon
+    cd C:\ZND\50_projects\burnmon
     git tag v0.4.0-alpha.2 burnmon-dev
     git push origin v0.4.0-alpha.2

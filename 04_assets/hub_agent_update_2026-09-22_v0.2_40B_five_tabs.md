@@ -3,7 +3,7 @@
 **Date:** 2026-09-22 (v0.2 tick 40B) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** Report v0.2's tab-shell restructure (P1, P4, P5) shipped, tagged and pushed.
-**Read order:** this file, `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry), `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.2.
+**Read order:** this file, `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry), `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.2.
 **Supersedes:** nothing.
 
 ## 1. Headline
@@ -12,14 +12,14 @@ main and tagged `v0.2.0-alpha.1`, pushed to GitHub. Now opens first, History is 
 placeholder for 41A, How it works moved into About, the Dutch language toggle is gone.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (GitHub `wilcodetree/burnmon`): `3d6bc88` "feat:
+- **Committed** in `C:\ZND\50_projects\burnmon` (GitHub `wilcodetree/burnmon`): `3d6bc88` "feat:
   five tabs, Now default, English only (P1, P4, P5)".
 - **Tagged:** `v0.2.0-alpha.1` on `3d6bc88`, annotated, pushed.
 - **Pushed:** `main` and the tag are both on `origin` (`e469457..3d6bc88`).
-- **Files touched** (full paths): `C:\ZND\projects\burnmon\internal\report\template.html`
-  (tab bar, sections, i18n table, deep-link read), `C:\ZND\projects\burnmon\SESSION_LOG.md`
+- **Files touched** (full paths): `C:\ZND\50_projects\burnmon\internal\report\template.html`
+  (tab bar, sections, i18n table, deep-link read), `C:\ZND\50_projects\burnmon\SESSION_LOG.md`
   (new entry prepended, tick 40B).
-- **Not touched, left as found:** `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md`
+- **Not touched, left as found:** `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md`
   showed modified in `git status` at session start; this session never opened it, so it was
   deliberately excluded from the commit and is still sitting locally modified. Flagged to
   Wilco in-session; he has not yet said what to do with it.
@@ -67,7 +67,7 @@ consultancy, positioning or CIPHER-wall call in it.
   40 session B done (P1, P4, P5 shipped, tagged `v0.2.0-alpha.1`).
 - `C:\ZND\10_holding\02_roadmap\roadmap.md`: if it tracks BurnMon's v0.2 progress by tick,
   advance it past 40B.
-- No `DEADLINES.md` change: the only hard date in `C:\ZND\projects\burnmon\DEADLINES.md` for
+- No `DEADLINES.md` change: the only hard date in `C:\ZND\50_projects\burnmon\DEADLINES.md` for
   v0.2 is the 2026-11-14 release itself, unaffected by a single tick landing on schedule.
 
 ## 7. Open flags for next session
@@ -81,7 +81,7 @@ consultancy, positioning or CIPHER-wall call in it.
   further GUI-only changes to screenshot verification alone.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.2, P1/P4/P5).
-- `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, "2026-09-22, v0.2 40B").
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_40A_tool_calls.md` and
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.2, P1/P4/P5).
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, "2026-09-22, v0.2 40B").
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_40A_tool_calls.md` and
   `..._39B_migrations_owner.md` (prior, still-unpropagated briefs this week).

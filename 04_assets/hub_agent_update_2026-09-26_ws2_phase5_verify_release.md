@@ -5,8 +5,8 @@
 **Purpose:** WS2's phase 5 (verify and release) finished on branch burnmon-dev: fixes, a
 full verify pass, two 10-minute perf measurements, a fresh independent review and its one
 fix, docs. Code-complete on the branch, not merged, not pushed, not tagged.
-**Read order:** this file, SESSION_LOG.md's newest entry (repo C:\ZND\projects\burnmon,
-worktree C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev), STATUS.md's "BurnMon Dev"
+**Read order:** this file, SESSION_LOG.md's newest entry (repo C:\ZND\50_projects\burnmon,
+worktree C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev), STATUS.md's "BurnMon Dev"
 section, README.md's "BurnMon Dev" section.
 **Supersedes:** nothing (first phase 5 brief).
 
@@ -18,8 +18,8 @@ refresh_ms's own default flipped from 2000 to 1000 based on a measured compariso
 merged, not pushed, not tagged; Wilco has the exact release commands to run himself.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (branch `burnmon-dev`, worktree
-  `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev`):
+- **Committed** in `C:\ZND\50_projects\burnmon` (branch `burnmon-dev`, worktree
+  `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev`):
   - `2e0f91c` v0.4 phase 5 fix 1-2: headline per-tick, uicheck DPI-aware sizing
   - `be5dce5` v0.4 header tweak: center the headline total between title and stats
   - `935b2a0` 04_assets: commit the UI review patch's reference screenshots
@@ -30,7 +30,7 @@ merged, not pushed, not tagged; Wilco has the exact release commands to run hims
     session; one conflict in SESSION_LOG.md, resolved keeping both entries.
 - **On a branch, not merged:** `burnmon-dev` carries all of the above plus every earlier
   WS2 phase (0 through 4) and three UI patches from prior sessions. `main` is unaffected.
-- **Files touched** (full paths, this session only): `C:\ZND\projects\burnmon\.claude\worktrees\burnmon-dev\cmd\burnmon-dev\headline.go`
+- **Files touched** (full paths, this session only): `C:\ZND\50_projects\burnmon\.claude\worktrees\burnmon-dev\cmd\burnmon-dev\headline.go`
   (new), `...\cmd\burnmon-dev\headline_test.go` (new), `...\cmd\burnmon-dev\app.go`,
   `...\cmd\burnmon-dev\main.go`, `...\cmd\burnmon-dev\page.html`,
   `...\tools\uicheck\win32.go`, `...\tools\uicheck\check_d11.go`, `...\README.md`,
@@ -111,8 +111,8 @@ an open item. No DEADLINES.md entry expected (no dated gate tied to this).
   further, flagging in case it recurs.
 
 ## 8. Related files
-- Plan: `C:\ZND\projects\burnmon\02_roadmap\2026-09-24_ws2_burnmon_dev.md`
-- Patches: `C:\ZND\projects\burnmon\02_roadmap\2026-09-25_ws2_ui_review_patch.md`,
+- Plan: `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-24_ws2_burnmon_dev.md`
+- Patches: `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-25_ws2_ui_review_patch.md`,
   `..._burn_chart_no_scroll_patch.md`, `..._ticker_headline_patch.md`
-- Design: `C:\ZND\projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md`
+- Design: `C:\ZND\50_projects\burnmon\04_assets\2026-09-24_burnmon_dev_design.md`
 - Hub one-pager: `C:\ZND\10_holding\01_projects\burnmon.md`

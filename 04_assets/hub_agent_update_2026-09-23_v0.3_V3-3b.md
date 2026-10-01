@@ -3,25 +3,25 @@
 **Date:** 2026-09-23 (v0.3 session V3-3b) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** V3-3b (monitor mode U3, dev-mode text rendering U4) is code-complete on main, tested and partially real-window checked, not yet committed or tagged; hand-off for whoever commits next, and for whoever can re-run the interactive part from an unlocked session.
-**Read order:** this file, C:\ZND\projects\burnmon\SESSION_LOG.md (top entry)
+**Read order:** this file, C:\ZND\50_projects\burnmon\SESSION_LOG.md (top entry)
 
 ## 1. Headline
 U3 and U4 are implemented: a header Monitor/Full switch, persisted in `burnmon.json`'s new `"view"` field through the same merge-into-JSON save path Settings uses (`writeConfigKey`, generalised from the old `writeSubscriptionConfig`), a Settings-dialog default-view field, and a chrome-less monitor page reusing the Now page's own chart/cards/vendor strip in business mode, swapped for a real block-character/ASCII-border text page in dev mode. Fully tested (`go test ./... -count=1`, `go vet ./...`, `.\build.ps1`, `node --check` on both inline `<script>` blocks, all green). Real-window checked only partially: a new self-managed `tools\uicheck\check_v3b.go` proved the config-driven startup state via the dev eval channel (no click needed), but every click-driven step in it, and in the pre-existing `v3` check, failed because this laptop's console session was locked for the whole run (`query session` showed the foreground window as the Windows lock screen) — confirmed an environment condition, not a regression, since the untouched `v3` check failed the identical way. See section 3.
 
 ## 2. What changed on disk
-- Committed: nothing yet. Every change below is an uncommitted working-tree edit in C:\ZND\projects\burnmon (branch main).
+- Committed: nothing yet. Every change below is an uncommitted working-tree edit in C:\ZND\50_projects\burnmon (branch main).
 - Files touched (full paths):
-  - C:\ZND\projects\burnmon\internal\pricing\pricing.go (Config.View, Config.MonitorView())
-  - C:\ZND\projects\burnmon\internal\pricing\pricing_test.go (TestLoadView, TestDefaultsAreFullView)
-  - C:\ZND\projects\burnmon\internal\dataset\dataset.go (Payload.View, straight from cfg.View)
-  - C:\ZND\projects\burnmon\cmd\burnmon\main.go (writeSubscriptionConfig generalised to writeConfigKey(path, key, value); new ccSaveView binding; settingsPayload.DefaultView; applySettings also writes "view"; settingsModalHTML gains a Default view select)
-  - C:\ZND\projects\burnmon\internal\report\template.html (header #btn_monitor button; #monitor_exit_btn; #monitor_text_view and its #mt_chart/#mt_sessions/#mt_vendorstrip children; #now_extra wrapper around the turn ticker and forecast; monitor-mode/monitor-dev CSS; UI.view state; setView/applyViewMode; renderMonitorChartText/monitorSessionBoxHTML/mtVendorStripText/renderMonitorText; renderNow and renderVendorStrip each call renderMonitorText when body carries monitor-dev; applyMode calls applyViewMode)
-  - C:\ZND\projects\burnmon\burnmon.example.json ("view" example block)
-  - C:\ZND\projects\burnmon\scripts\uicheck.ps1 (self-managed check list generalised from a hardcoded "w1" case to a `$selfManagedChecks` array, now `@("w1", "v3b")`)
-  - C:\ZND\projects\burnmon\tools\uicheck\check_v3b.go (new; self-managed real-window check for U3/U4)
-  - C:\ZND\projects\burnmon\SESSION_LOG.md (V3-3b paragraph)
-  - C:\ZND\projects\burnmon\STATUS.md (Known gaps: the locked-session re-verification item)
-  - C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md (V3-3b ticked)
+  - C:\ZND\50_projects\burnmon\internal\pricing\pricing.go (Config.View, Config.MonitorView())
+  - C:\ZND\50_projects\burnmon\internal\pricing\pricing_test.go (TestLoadView, TestDefaultsAreFullView)
+  - C:\ZND\50_projects\burnmon\internal\dataset\dataset.go (Payload.View, straight from cfg.View)
+  - C:\ZND\50_projects\burnmon\cmd\burnmon\main.go (writeSubscriptionConfig generalised to writeConfigKey(path, key, value); new ccSaveView binding; settingsPayload.DefaultView; applySettings also writes "view"; settingsModalHTML gains a Default view select)
+  - C:\ZND\50_projects\burnmon\internal\report\template.html (header #btn_monitor button; #monitor_exit_btn; #monitor_text_view and its #mt_chart/#mt_sessions/#mt_vendorstrip children; #now_extra wrapper around the turn ticker and forecast; monitor-mode/monitor-dev CSS; UI.view state; setView/applyViewMode; renderMonitorChartText/monitorSessionBoxHTML/mtVendorStripText/renderMonitorText; renderNow and renderVendorStrip each call renderMonitorText when body carries monitor-dev; applyMode calls applyViewMode)
+  - C:\ZND\50_projects\burnmon\burnmon.example.json ("view" example block)
+  - C:\ZND\50_projects\burnmon\scripts\uicheck.ps1 (self-managed check list generalised from a hardcoded "w1" case to a `$selfManagedChecks` array, now `@("w1", "v3b")`)
+  - C:\ZND\50_projects\burnmon\tools\uicheck\check_v3b.go (new; self-managed real-window check for U3/U4)
+  - C:\ZND\50_projects\burnmon\SESSION_LOG.md (V3-3b paragraph)
+  - C:\ZND\50_projects\burnmon\STATUS.md (Known gaps: the locked-session re-verification item)
+  - C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md (V3-3b ticked)
 - Untracked / outside a repo: `testdata\uicheck\out\v3b-*.png` (gitignored, evidence only; the click-driven ones show the Windows lock screen, not burnmon, per section 3 below — do not mistake them for real coverage).
 
 ## 3. What did NOT happen (and why)
@@ -43,7 +43,7 @@ Nothing. Project-internal implementation detail, no cross-project time, position
 Nothing in the hub canonical files (STATUS, DEADLINES, portfolio, decisions.md) needs to change from this brief alone. The v0.3 session prompts checklist is already ticked for V3-3b.
 
 ## 7. Open flags for next session
-- Commit is still Wilco's to run (no tag this session, per the build order). Exact commands, from C:\ZND\projects\burnmon:
+- Commit is still Wilco's to run (no tag this session, per the build order). Exact commands, from C:\ZND\50_projects\burnmon:
 
 ```
 git add internal/pricing/pricing.go internal/pricing/pricing_test.go internal/dataset/dataset.go cmd/burnmon/main.go internal/report/template.html burnmon.example.json scripts/uicheck.ps1 tools/uicheck/check_v3b.go SESSION_LOG.md STATUS.md "02_roadmap/2026-09-23_v0.3_session_prompts.md" "04_assets/hub_agent_update_2026-09-23_v0.3_V3-3b.md"
@@ -55,7 +55,7 @@ git commit -m "v0.3 V3-3b: monitor mode (U3), dev-mode text rendering (U4)"
 - V3-4 (export K4, merge K5) is next per the build order.
 
 ## 8. Related files
-- Spec: C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md (section 2.5 U3/U4)
-- Colour table referenced: C:\ZND\projects\burnmon\internal\report\template.html (`VENDOR_COLOR_FAMILIES`, v0.2.2)
-- Prior brief: C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-3.md
-- Session log: C:\ZND\projects\burnmon\SESSION_LOG.md
+- Spec: C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md (section 2.5 U3/U4)
+- Colour table referenced: C:\ZND\50_projects\burnmon\internal\report\template.html (`VENDOR_COLOR_FAMILIES`, v0.2.2)
+- Prior brief: C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-3.md
+- Session log: C:\ZND\50_projects\burnmon\SESSION_LOG.md

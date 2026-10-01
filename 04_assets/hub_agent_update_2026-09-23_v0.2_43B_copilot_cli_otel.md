@@ -3,8 +3,8 @@
 **Date:** 2026-09-23 - **Owner:** Wilco de Tree
 **Project:** BurnMon (formerly claudecost)
 **Purpose:** 43B (A2, A3) shipped and tagged: Copilot CLI adapter built, live-corrected the VS Code OTel answer from no to yes.
-**Read order:** this file, then `C:\ZND\projects\burnmon\SESSION_LOG.md` (top two entries), then `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.5
-**Supersedes:** `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_43A_markers_ticker_drawer.md` (extends it, does not replace it)
+**Read order:** this file, then `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top two entries), then `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.5
+**Supersedes:** `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_43A_markers_ticker_drawer.md` (extends it, does not replace it)
 
 ## 1. Headline
 43B is shipped, merged to `main` and tagged `v0.2.0-alpha.4`: `internal/adapter/copilotcli`
@@ -15,22 +15,22 @@ answered no from a CLI-only test, then corrected to yes the same day once Wilco 
 the VS Code window and sent one real chat message. Both committed, pushed, build green.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (branch `main`, pushed to `origin/main`):
+- **Committed** in `C:\ZND\50_projects\burnmon` (branch `main`, pushed to `origin/main`):
   - `876c37e` "feat: Copilot CLI adapter, VS Code OTel check answered no (A2, A3)"
   - `b6caa93` "docs: correct A3 finding to yes, GitHub Copilot VS Code does emit OTel"
 - **Tagged:** `v0.2.0-alpha.4` on `876c37e`.
 - **Files touched** (full paths):
-  `C:\ZND\projects\burnmon\internal\adapter\copilotcli\copilotcli.go` (new),
-  `C:\ZND\projects\burnmon\internal\adapter\copilotcli\copilotcli_test.go` (new),
-  `C:\ZND\projects\burnmon\testdata\copilot\copilot_fixture.db` (new, three real
+  `C:\ZND\50_projects\burnmon\internal\adapter\copilotcli\copilotcli.go` (new),
+  `C:\ZND\50_projects\burnmon\internal\adapter\copilotcli\copilotcli_test.go` (new),
+  `C:\ZND\50_projects\burnmon\testdata\copilot\copilot_fixture.db` (new, three real
   sessions' `sessions` and `assistant_usage_events` rows only, no message content),
-  `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (`startCopilotCLIPoll`, same shape as
+  `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (`startCopilotCLIPoll`, same shape as
   the existing Hermes poll),
-  `C:\ZND\projects\burnmon\SESSION_LOG.md` (43B entry, then the 2026-09-23 correction
+  `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (43B entry, then the 2026-09-23 correction
   entry above it),
-  `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (43B ticked,
+  `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (43B ticked,
   then re-annotated with the correction).
-- **Untracked, not this session's work:** `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md`
+- **Untracked, not this session's work:** `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md`
   shows modified in `git status` but predates this session; left alone throughout.
 
 ## 3. What did NOT happen (and why)
@@ -77,8 +77,8 @@ decided or applied in this session; left for Wilco when v0.3 is planned.
   **Consequences:** if adopted, v0.3 gains a Copilot VS Code adapter reading the OTel
   file/db-span-exporter path instead of a store like the other adapters; if declined,
   the "yes" finding stands on record but nothing is scoped in.
-  **Links:** `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.5;
-  `C:\ZND\projects\burnmon\SESSION_LOG.md` (both the 43B entry and the 2026-09-23
+  **Links:** `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` section 2.5;
+  `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (both the 43B entry and the 2026-09-23
   correction entry).
 
 ## 6. What the next hub read should update
@@ -99,12 +99,12 @@ outfile grows unbounded while they stay on, worth a periodic check or cleanup, n
 tracked by any BurnMon code.
 
 ## 8. Related files
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.5, A1-A3),
-`C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (43B prompt,
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.5, A1-A3),
+`C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (43B prompt,
 checklist line 149),
-`C:\ZND\projects\burnmon\04_assets\2026-09-22_token_monitor_sources_and_facts.md`
+`C:\ZND\50_projects\burnmon\04_assets\2026-09-22_token_monitor_sources_and_facts.md`
 (Copilot rows, section C),
-`C:\ZND\projects\burnmon\SESSION_LOG.md` (43B entry and the 2026-09-23 correction entry,
+`C:\ZND\50_projects\burnmon\SESSION_LOG.md` (43B entry and the 2026-09-23 correction entry,
 top of file),
-`C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_43A_markers_ticker_drawer.md`
+`C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_43A_markers_ticker_drawer.md`
 (the 43A brief this one extends).

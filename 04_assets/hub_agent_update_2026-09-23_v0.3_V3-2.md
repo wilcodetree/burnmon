@@ -3,32 +3,32 @@
 **Date:** 2026-09-23 (v0.3 session V3-2) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** V3-2 (client map K1, active time K2) is code-complete on main, reviewed by a fresh Opus pass and fixed, not yet committed or tagged; hand-off for whoever commits/tags next.
-**Read order:** this file, C:\ZND\projects\burnmon\SESSION_LOG.md (top entry), C:\ZND\projects\burnmon\docs\superpowers\plans\2026-09-23-client-map-active-time.md
+**Read order:** this file, C:\ZND\50_projects\burnmon\SESSION_LOG.md (top entry), C:\ZND\50_projects\burnmon\docs\superpowers\plans\2026-09-23-client-map-active-time.md
 **Supersedes:** hub_agent_update_2026-09-23_v0.3_V3-2.md (this file replaces the earlier draft of itself, written before the review pass)
 
 ## 1. Headline
 K1 (client map) and K2 (active time) are implemented, fully tested (go test ./... -count=1 and .\build.ps1 green), and have been through one fresh-context review (Opus, via the Agent tool) that found and confirmed a Critical correctness bug plus several Important issues; all of them were fixed in the same session and re-verified, so the code on disk now reflects the fixed version, not the reviewed one. Not yet committed to git: per the workspace house rule (no git writes on C:\ZND), every change is staged on disk for Wilco to commit and tag himself.
 
 ## 2. What changed on disk
-- Committed: nothing yet. Every change below is an uncommitted working-tree edit in C:\ZND\projects\burnmon (branch main).
+- Committed: nothing yet. Every change below is an uncommitted working-tree edit in C:\ZND\50_projects\burnmon (branch main).
 - Files touched (full paths):
-  - C:\ZND\projects\burnmon\internal\pricing\pricing.go (OwnerRule gains Client/Remote; Config gains ActiveIdleMinutes; a unified matchRule used by both OwnerFor and ClientFor)
-  - C:\ZND\projects\burnmon\internal\pricing\gitremote.go (new; reads the .git config origin remote directly, no git binary, follows a worktree commondir chain; normalizeRemote and remoteMatches, whole-segment matching)
-  - C:\ZND\projects\burnmon\internal\pricing\gitremote_test.go (new; includes a worktree-chain test)
-  - C:\ZND\projects\burnmon\internal\pricing\pricing_test.go (ClientFor tests, a v0.2-config-unchanged test, plus post-review tests for the remote-only-rule bug, whole-segment matching, and the unified match)
-  - C:\ZND\projects\burnmon\internal\schema\event.go (Event.Client)
-  - C:\ZND\projects\burnmon\internal\store\migrations\migrations.go (migration 7: client column)
-  - C:\ZND\projects\burnmon\internal\store\store.go (client column read/write; ReownEvents takes ownerFor and clientFor)
-  - C:\ZND\projects\burnmon\internal\store\store_test.go (client round-trip, reown-reapplies-client, schema-version bumped 6 to 7 in two pre-existing tests)
-  - C:\ZND\projects\burnmon\internal\dataset\dataset.go (ingest sets Client via a per-pass memoized cfg.ClientFor)
-  - C:\ZND\projects\burnmon\internal\dataset\fromstore.go (buildSession computes Client, ActiveMinutes; ActiveMinutesByClient)
-  - C:\ZND\projects\burnmon\internal\dataset\fromstore_test.go (active-time tests, including a same-instant-events case added post-review)
-  - C:\ZND\projects\burnmon\internal\scan\types.go (Session.Client, Session.ActiveMinutes)
-  - C:\ZND\projects\burnmon\cmd\burnmon-cli\main.go (reown calls a memoized clientFor too)
-  - C:\ZND\projects\burnmon\burnmon.example.json (owners comment shows a client and remote example)
-  - C:\ZND\projects\burnmon\SESSION_LOG.md (V3-2 paragraph, rewritten after the review to describe the fixed design and list what was caught)
-  - C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md (V3-2 ticked)
-- New plan doc: C:\ZND\projects\burnmon\docs\superpowers\plans\2026-09-23-client-map-active-time.md
+  - C:\ZND\50_projects\burnmon\internal\pricing\pricing.go (OwnerRule gains Client/Remote; Config gains ActiveIdleMinutes; a unified matchRule used by both OwnerFor and ClientFor)
+  - C:\ZND\50_projects\burnmon\internal\pricing\gitremote.go (new; reads the .git config origin remote directly, no git binary, follows a worktree commondir chain; normalizeRemote and remoteMatches, whole-segment matching)
+  - C:\ZND\50_projects\burnmon\internal\pricing\gitremote_test.go (new; includes a worktree-chain test)
+  - C:\ZND\50_projects\burnmon\internal\pricing\pricing_test.go (ClientFor tests, a v0.2-config-unchanged test, plus post-review tests for the remote-only-rule bug, whole-segment matching, and the unified match)
+  - C:\ZND\50_projects\burnmon\internal\schema\event.go (Event.Client)
+  - C:\ZND\50_projects\burnmon\internal\store\migrations\migrations.go (migration 7: client column)
+  - C:\ZND\50_projects\burnmon\internal\store\store.go (client column read/write; ReownEvents takes ownerFor and clientFor)
+  - C:\ZND\50_projects\burnmon\internal\store\store_test.go (client round-trip, reown-reapplies-client, schema-version bumped 6 to 7 in two pre-existing tests)
+  - C:\ZND\50_projects\burnmon\internal\dataset\dataset.go (ingest sets Client via a per-pass memoized cfg.ClientFor)
+  - C:\ZND\50_projects\burnmon\internal\dataset\fromstore.go (buildSession computes Client, ActiveMinutes; ActiveMinutesByClient)
+  - C:\ZND\50_projects\burnmon\internal\dataset\fromstore_test.go (active-time tests, including a same-instant-events case added post-review)
+  - C:\ZND\50_projects\burnmon\internal\scan\types.go (Session.Client, Session.ActiveMinutes)
+  - C:\ZND\50_projects\burnmon\cmd\burnmon-cli\main.go (reown calls a memoized clientFor too)
+  - C:\ZND\50_projects\burnmon\burnmon.example.json (owners comment shows a client and remote example)
+  - C:\ZND\50_projects\burnmon\SESSION_LOG.md (V3-2 paragraph, rewritten after the review to describe the fixed design and list what was caught)
+  - C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md (V3-2 ticked)
+- New plan doc: C:\ZND\50_projects\burnmon\docs\superpowers\plans\2026-09-23-client-map-active-time.md
 - Untracked / outside a repo: none.
 
 ## 3. What did NOT happen (and why)
@@ -56,7 +56,7 @@ Nothing. Project-internal implementation detail, no cross-project time, position
 Nothing in the hub canonical files (STATUS, DEADLINES, portfolio, decisions.md) needs to change from this brief alone: it is an in-project code milestone, not a cross-project or deadline-relevant event by itself. The v0.3 session prompts checklist is already ticked for V3-2. This Week / Mission Deck: not applicable, burnmon's v0.3 build order is tracked in its own session-prompts file, not the deck.
 
 ## 7. Open flags for next session
-- Commit and tag are still Wilco's to run. Exact commands, from C:\ZND\projects\burnmon:
+- Commit and tag are still Wilco's to run. Exact commands, from C:\ZND\50_projects\burnmon:
 
 ```
 git add internal/pricing/pricing.go internal/pricing/gitremote.go internal/pricing/gitremote_test.go internal/pricing/pricing_test.go internal/schema/event.go internal/store/migrations/migrations.go internal/store/store.go internal/store/store_test.go internal/dataset/dataset.go internal/dataset/fromstore.go internal/dataset/fromstore_test.go internal/scan/types.go cmd/burnmon-cli/main.go burnmon.example.json SESSION_LOG.md "02_roadmap/2026-09-23_v0.3_session_prompts.md" "docs/superpowers/plans/2026-09-23-client-map-active-time.md" "04_assets/hub_agent_update_2026-09-23_v0.3_V3-2.md"
@@ -70,7 +70,7 @@ git tag v0.3.0-alpha.1
 - V3-3 (C3 dev and business switch, K3 client view, cost on every page, U1/U2 Now-page fixes) is next per the build order.
 
 ## 8. Related files
-- Spec: C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md (sections 2.2 K1, K2)
-- Plan: C:\ZND\projects\burnmon\docs\superpowers\plans\2026-09-23-client-map-active-time.md
-- Prior brief: C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-1.md
-- Session log: C:\ZND\projects\burnmon\SESSION_LOG.md
+- Spec: C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_spec.md (sections 2.2 K1, K2)
+- Plan: C:\ZND\50_projects\burnmon\docs\superpowers\plans\2026-09-23-client-map-active-time.md
+- Prior brief: C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-1.md
+- Session log: C:\ZND\50_projects\burnmon\SESSION_LOG.md

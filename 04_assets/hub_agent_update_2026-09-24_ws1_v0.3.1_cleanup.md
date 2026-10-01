@@ -3,7 +3,7 @@
 **Date:** 2026-09-24 - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** WS1 cleanup session (v0.3.1, patch): dev-only mode, Sessions harness fix, History stacked chart, ready to commit, not yet committed.
-**Read order:** this file, `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry), `C:\ZND\projects\burnmon\STATUS.md`.
+**Read order:** this file, `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry), `C:\ZND\50_projects\burnmon\STATUS.md`.
 **Supersedes:** nothing (WS1-specific, sits alongside `hub_agent_update_2026-09-24_v0.3_V3-6_ship.md`, which shipped v0.3.0 the same day).
 
 ## 1. Headline
@@ -19,7 +19,7 @@ against the real local store; not committed, not pushed, not tagged.
 - **Committed:** none. Every change below is uncommitted in the working tree.
 - **On a branch, not merged:** not applicable, this ran on `main` directly (per the WS1
   plan, `main` is where this workstream lands; WS2 is the one on a branch/worktree).
-- **Files touched** (full paths, all under `C:\ZND\projects\burnmon\`):
+- **Files touched** (full paths, all under `C:\ZND\50_projects\burnmon\`):
   - `internal\report\template.html` (large: deleted Monitor markup/CSS/JS, the
     dev/business toggle and every `isBusiness()` branch, added the Sessions Harness
     column/filter and the History stacked-bar chart)
@@ -177,10 +177,10 @@ park/unpark, consultancy, positioning, pricing, voice or CIPHER-anonymity call i
 
 ## 8. Related files
 
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-24_ws1_burnmon_cleanup.md` (this session's
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-24_ws1_burnmon_cleanup.md` (this session's
   own plan).
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-24_ws2_burnmon_dev.md` (the parallel
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-24_ws2_burnmon_dev.md` (the parallel
   workstream, BurnMon Dev, untouched by this session).
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-24_v0.3_V3-6_ship.md` (the
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-24_v0.3_V3-6_ship.md` (the
   same-day v0.3.0 release brief this one follows).
-- `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, full session narrative).
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, full session narrative).

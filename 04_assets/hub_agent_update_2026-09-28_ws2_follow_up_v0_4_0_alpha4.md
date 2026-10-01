@@ -3,7 +3,7 @@
 **Date:** 2026-09-28 - **Owner:** Wilco de Tree
 **Project:** BurnRate (BurnMon)
 **Purpose:** WS2 follow-up on `main` (month labels, To Do privacy, vendor colours, System time axis) shipped as v0.4.0-alpha.4, committed, not pushed or tagged.
-**Read order:** this file, `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, 2026-09-28), `C:\ZND\projects\burnmon\STATUS.md`'s own v0.4.0-alpha.4 paragraph.
+**Read order:** this file, `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, 2026-09-28), `C:\ZND\50_projects\burnmon\STATUS.md`'s own v0.4.0-alpha.4 paragraph.
 **Supersedes:** nothing (first brief for this follow-up; the alpha.3 brief `hub_agent_update_2026-09-27_ws2_alpha3_overnight_launched.md` is the prior one for this same track).
 
 ## 1. Headline
@@ -14,11 +14,11 @@ System chart moved to a real time axis) are code-complete and committed on `main
 Important issues first. Not pushed, not tagged.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (`main`):
+- **Committed** in `C:\ZND\50_projects\burnmon` (`main`):
   - `2d237bc` - docs: alpha.3 overnight logs and hub briefs, WS2 follow-up roadmap specs.
   - `a7b398e` - v0.4 WS2 follow-up: month labels, To Do privacy, vendor colours, System
     time axis, v0.4.0-alpha.4.
-- **Files touched** (full paths, `a7b398e`): `C:\ZND\projects\burnmon\README.md`,
+- **Files touched** (full paths, `a7b398e`): `C:\ZND\50_projects\burnmon\README.md`,
   `SESSION_LOG.md`, `STATUS.md`, `cmd\burnmon-dev\app.go`, `cmd\burnmon-dev\main.go`,
   `cmd\burnmon-dev\page.html`, `cmd\burnmon-dev\todo_gate.go` (new),
   `cmd\burnmon-dev\todo_gate_test.go` (new), `tools\uicheck\check_d14.go` (new),
@@ -91,8 +91,8 @@ company positioning or CIPHER-wall question involved.
   wanted behaviour, or whether the gap-break threshold needs a second look.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-28_ws2_vendor_colour_families.md`
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-28_ws2_system_chart_time_axis.md`
-- `C:\ZND\projects\burnmon\04_assets\reference\2026-09-28_vendor_colours\d15-vendor-colours.png`
-- `C:\ZND\projects\burnmon\04_assets\reference\2026-09-28_vendor_colours\d16-system-time-axis.png`
-- `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, full writeup and review findings)
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-28_ws2_vendor_colour_families.md`
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-28_ws2_system_chart_time_axis.md`
+- `C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-28_vendor_colours\d15-vendor-colours.png`
+- `C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-28_vendor_colours\d16-system-time-axis.png`
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, full writeup and review findings)

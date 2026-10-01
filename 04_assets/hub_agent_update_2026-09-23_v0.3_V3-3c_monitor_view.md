@@ -3,7 +3,7 @@
 **Date:** 2026-09-23 (v0.3 session V3-3c) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** V3-3c (U5, the monitor-dev braille history chart) is code-complete on main, fully tested and real-window checked, not yet committed at the time of writing (commit happens right after this brief); hand-off for whoever pushes it or picks up the next v0.3 session.
-**Read order:** this file, C:\ZND\projects\burnmon\SESSION_LOG.md (top entry)
+**Read order:** this file, C:\ZND\50_projects\burnmon\SESSION_LOG.md (top entry)
 **Supersedes:** nothing
 
 ## 1. Headline
@@ -13,16 +13,16 @@ U5 is implemented and verified against the real running window: monitor-dev's ti
 - **Committed** in `burnmon`: nothing yet at the time of writing this brief; the commit happens immediately after (see section 7 for the exact command already used).
 - **On a branch, not merged:** none, this is straight on `main`'s working tree.
 - **Files touched** (full paths):
-  - `C:\ZND\projects\burnmon\internal\live\live.go` (`BuildSnapshot` gained an optional variadic `bucketSeconds` argument, default 60 unchanged for every existing 3-arg caller; `buildChart` sizes its slot count from that argument instead of the fixed `BucketSeconds` constant)
-  - `C:\ZND\projects\burnmon\internal\live\live_test.go` (new `TestBuildSnapshot_CustomBucketSeconds`, asserts a 10-second bucket yields 180 dense slots)
-  - `C:\ZND\projects\burnmon\cmd\burnmon\main.go` (`bmLive` binding takes the same optional int, passes it straight through to `BuildSnapshot`)
-  - `C:\ZND\projects\burnmon\internal\report\template.html` (CSS: chart panel, legend rows, minute-label row, 4-column session card grid, bigger clamp()-scaled type, Cascadia Mono/JetBrains Mono/Consolas stack; JS: `mtBrailleGraph` (perfadvisor's `graph()` ported to JS), `renderMonitorChartText` rebuilt around it, `mtTokensPerMinute`, `sizeMonitorChart` (dot-row count from the panel's real pixel height, ~35% of the window), `monitorSessionLines`/shared session-box width computation, `pollNow` calls `bmLive(10)` in monitor-dev vs `bmLive()` in full view)
-  - `C:\ZND\projects\burnmon\scripts\uicheck.ps1` (`$selfManagedChecks` gained `"u5"`)
-  - `C:\ZND\projects\burnmon\tools\uicheck\check_u5.go` (new; self-managed real-window check for U5)
-  - `C:\ZND\projects\burnmon\SESSION_LOG.md` (V3-3c paragraph, prepended)
-  - `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (V3-3c ticked)
-  - `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-3c_monitor_view.md` (this file)
-- **Untracked / outside a repo (so it is not lost):** `C:\ZND\projects\burnmon\testdata\uicheck\out\u5-before-monitor-dev.png` and `u5-chart-monitor-dev.png` (gitignored, evidence only, referenced from SESSION_LOG.md); a one-off font-rendering test page/screenshot under this session's own scratchpad temp folder, not committed, not durable (only used to answer the patch's braille-glyph verification requirement).
+  - `C:\ZND\50_projects\burnmon\internal\live\live.go` (`BuildSnapshot` gained an optional variadic `bucketSeconds` argument, default 60 unchanged for every existing 3-arg caller; `buildChart` sizes its slot count from that argument instead of the fixed `BucketSeconds` constant)
+  - `C:\ZND\50_projects\burnmon\internal\live\live_test.go` (new `TestBuildSnapshot_CustomBucketSeconds`, asserts a 10-second bucket yields 180 dense slots)
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon\main.go` (`bmLive` binding takes the same optional int, passes it straight through to `BuildSnapshot`)
+  - `C:\ZND\50_projects\burnmon\internal\report\template.html` (CSS: chart panel, legend rows, minute-label row, 4-column session card grid, bigger clamp()-scaled type, Cascadia Mono/JetBrains Mono/Consolas stack; JS: `mtBrailleGraph` (perfadvisor's `graph()` ported to JS), `renderMonitorChartText` rebuilt around it, `mtTokensPerMinute`, `sizeMonitorChart` (dot-row count from the panel's real pixel height, ~35% of the window), `monitorSessionLines`/shared session-box width computation, `pollNow` calls `bmLive(10)` in monitor-dev vs `bmLive()` in full view)
+  - `C:\ZND\50_projects\burnmon\scripts\uicheck.ps1` (`$selfManagedChecks` gained `"u5"`)
+  - `C:\ZND\50_projects\burnmon\tools\uicheck\check_u5.go` (new; self-managed real-window check for U5)
+  - `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (V3-3c paragraph, prepended)
+  - `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_session_prompts.md` (V3-3c ticked)
+  - `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-3c_monitor_view.md` (this file)
+- **Untracked / outside a repo (so it is not lost):** `C:\ZND\50_projects\burnmon\testdata\uicheck\out\u5-before-monitor-dev.png` and `u5-chart-monitor-dev.png` (gitignored, evidence only, referenced from SESSION_LOG.md); a one-off font-rendering test page/screenshot under this session's own scratchpad temp folder, not committed, not durable (only used to answer the patch's braille-glyph verification requirement).
 
 ## 3. What did NOT happen (and why)
 - Not committed at the time this brief was written; committed locally immediately after per this session's own instructions, still not pushed. House rule: git writes on `C:\ZND` are otherwise a manual step for Wilco; this session's own prompt explicitly asked for a local commit and to print (not run) the push command, so a commit happened here, push did not.
@@ -58,8 +58,8 @@ git commit -m "v0.3 V3-3c: monitor view like perfadvisor (U5)"
 - V3-6 (release candidate, `v0.3.0`, due 2026-10-09) is next per the build order.
 
 ## 8. Related files
-- Patch spec: `C:\ZND\projects\burnmon\02_roadmap\2026-09-23_v0.3_monitor_view_patch.md`
-- Reference images: `C:\ZND\projects\burnmon\testdata\uicheck\reference\perfadvisor_history.png`, `monitor_mockup.jpg`
-- Source ported from: `C:\ZND\projects\perfadvisor\internal\tui\widgets.go` (`graph()`), `C:\ZND\projects\perfadvisor\internal\tui\view.go` (`graphLines()`)
-- Prior brief: `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-5.md`
-- Session log: `C:\ZND\projects\burnmon\SESSION_LOG.md`
+- Patch spec: `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-23_v0.3_monitor_view_patch.md`
+- Reference images: `C:\ZND\50_projects\burnmon\testdata\uicheck\reference\perfadvisor_history.png`, `monitor_mockup.jpg`
+- Source ported from: `C:\ZND\50_projects\perfadvisor\internal\tui\widgets.go` (`graph()`), `C:\ZND\50_projects\perfadvisor\internal\tui\view.go` (`graphLines()`)
+- Prior brief: `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-23_v0.3_V3-5.md`
+- Session log: `C:\ZND\50_projects\burnmon\SESSION_LOG.md`

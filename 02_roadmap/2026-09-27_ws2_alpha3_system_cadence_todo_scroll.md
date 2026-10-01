@@ -1,13 +1,13 @@
 # WS2 alpha.3 patch: one 1 s cadence for System, equal core bars, To Do scroll
 
 Owner: Wilco. Executor: fresh Claude Code session, Sonnet 5 (Opus for the review agent).
-Branch: `main` in `C:\ZND\projects\burnmon` (BurnMon Dev was merged in `f7f1c26`). Version
+Branch: `main` in `C:\ZND\50_projects\burnmon` (BurnMon Dev was merged in `f7f1c26`). Version
 v0.4.0-alpha.3 for `burnmon-dev.exe` only. Never use em dashes anywhere.
 
 Read first: `AGENTS.md`, `C:\ZND\AGENTS.md`, top of `SESSION_LOG.md`,
-`C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_performance_patch.md` (its
+`C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-26_ws2_performance_patch.md` (its
 numbers are the baseline), and the reference screenshot
-`C:\ZND\projects\burnmon\04_assets\reference\2026-09-27_system_panel\system_panel_core_bars.png`
+`C:\ZND\50_projects\burnmon\04_assets\reference\2026-09-27_system_panel\system_panel_core_bars.png`
 (Wilco's red boxes mark the unequal core bars).
 
 ## Wilco's requests (2026-09-27)
@@ -40,7 +40,7 @@ bar, the 20 core bars, the main chart (cpu, ram, disk, net, gpu), the process-gr
 their trend sparklines, and the Memory, Disks and Network boxes. Today the process walk runs on
 its own `processWalkInterval = 3 * time.Second` (`cmd\burnmon-dev\app.go` line ~429), so process
 groups lag the rest.
-- Read how perfadvisor does it first (`C:\ZND\projects\perfadvisor`, its sampler and its page)
+- Read how perfadvisor does it first (`C:\ZND\50_projects\perfadvisor`, its sampler and its page)
   and follow the same model: one sample per second, one paint per sample.
 - One sampler tick per second produces one snapshot for all of the above; the page paints that
   snapshot once. No panel on its own timer. Disk and network rates are per-second deltas of that
@@ -66,4 +66,4 @@ groups lag the rest.
 - Fresh read-only Opus review over the diff before each commit; name the model in the report.
 - Version v0.4.0-alpha.3 in `cmd\burnmon-dev`; README, STATUS, SESSION_LOG. Commit on `main`, do
   not push or tag. Hand Wilco the PowerShell commands.
-- One hub brief with the `hub-agent-update` skill in `C:\ZND\projects\burnmon\04_assets\`.
+- One hub brief with the `hub-agent-update` skill in `C:\ZND\50_projects\burnmon\04_assets\`.

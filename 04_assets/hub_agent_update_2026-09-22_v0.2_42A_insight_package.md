@@ -3,26 +3,26 @@
 **Date:** 2026-09-22 (session 42A) - **Owner:** Wilco de Tree
 **Project:** BurnMon
 **Purpose:** v0.2 session 42A (insight package, re-prefill and compaction) is done, merged, and its two VERIFY items are closed with sourced facts.
-**Read order:** this file, then C:\ZND\projects\burnmon\SESSION_LOG.md (top entry, 2026-09-22 42A), then C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md section 2.3 (I1, I2) for the rule text this implements.
+**Read order:** this file, then C:\ZND\50_projects\burnmon\SESSION_LOG.md (top entry, 2026-09-22 42A), then C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md section 2.3 (I1, I2) for the rule text this implements.
 **Supersedes:** nothing (first brief for 42A; follows hub_agent_update_2026-09-22_v0.2_41B_vendor_strip_hermes.md)
 
 ## 1. Headline
 BurnMon v0.2 session 42A is code-complete and merged to main: new package internal\insight implements I1 (the Finding shape) and I2's first two rules (re-prefill, compaction), wired into both bmLive and a new burnmon-cli insight command, with the spec's two VERIFY items (Claude Code cache TTL, auto-compact threshold) now closed against live docs instead of left as placeholders.
 
 ## 2. What changed on disk
-- **Committed** in `C:\ZND\projects\burnmon` (repo root): `f362810` "feat: insight package, re-prefill and compaction findings (I1, I2 part 1)". 9 files changed, 681 insertions, 1 deletion.
+- **Committed** in `C:\ZND\50_projects\burnmon` (repo root): `f362810` "feat: insight package, re-prefill and compaction findings (I1, I2 part 1)". 9 files changed, 681 insertions, 1 deletion.
 - **Files touched** (full paths):
-  - `C:\ZND\projects\burnmon\internal\insight\insight.go` (new)
-  - `C:\ZND\projects\burnmon\internal\insight\insight_test.go` (new)
-  - `C:\ZND\projects\burnmon\internal\pricing\pricing.go` (new Config fields and consts: ClaudeCodeCacheTTLMinutes, ClaudeCodeAutoCompactTokens, ReprefillCacheWriteThreshold, ClaudeCodeCacheBookDate)
-  - `C:\ZND\projects\burnmon\internal\live\live.go` (Session.Findings, computed per poll via insight.Analyze on the already-windowed turns)
-  - `C:\ZND\projects\burnmon\internal\store\store.go` (new Store.EventsForSession query)
-  - `C:\ZND\projects\burnmon\internal\store\store_test.go` (TestEventsForSession)
-  - `C:\ZND\projects\burnmon\cmd\burnmon-cli\main.go` (new insight session-id subcommand, with a --json flag)
-  - `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (42A ticked done)
-  - `C:\ZND\projects\burnmon\SESSION_LOG.md` (new top entry)
+  - `C:\ZND\50_projects\burnmon\internal\insight\insight.go` (new)
+  - `C:\ZND\50_projects\burnmon\internal\insight\insight_test.go` (new)
+  - `C:\ZND\50_projects\burnmon\internal\pricing\pricing.go` (new Config fields and consts: ClaudeCodeCacheTTLMinutes, ClaudeCodeAutoCompactTokens, ReprefillCacheWriteThreshold, ClaudeCodeCacheBookDate)
+  - `C:\ZND\50_projects\burnmon\internal\live\live.go` (Session.Findings, computed per poll via insight.Analyze on the already-windowed turns)
+  - `C:\ZND\50_projects\burnmon\internal\store\store.go` (new Store.EventsForSession query)
+  - `C:\ZND\50_projects\burnmon\internal\store\store_test.go` (TestEventsForSession)
+  - `C:\ZND\50_projects\burnmon\cmd\burnmon-cli\main.go` (new insight session-id subcommand, with a --json flag)
+  - `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (42A ticked done)
+  - `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (new top entry)
 - **On a branch, not merged:** none; work went straight to main per this project's usual flow.
-- **Untracked / outside a repo:** none from this session. Note: `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md` shows as modified in git status but predates this session (present in the working tree before 42A started); left untouched and unstaged by this session, not part of `f362810`.
+- **Untracked / outside a repo:** none from this session. Note: `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.1.2_patch_spec.md` shows as modified in git status but predates this session (present in the working tree before 42A started); left untouched and unstaged by this session, not part of `f362810`.
 
 ## 3. What did NOT happen (and why)
 - Not pushed to origin/main: local commit only, per this project's own convention of stopping before push/tag for Wilco to run.
@@ -51,13 +51,13 @@ Nothing. The cache-TTL default choice (one hour, subscription case) is a project
 
 ## 7. Open flags for next session
 - f362810 is not pushed to origin/main yet; push is Wilco's call, per this project's stop-before-push convention.
-- Session 42B (context-runway, expensive-turn, tag v0.2.0-alpha.3) is the next item in `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md`.
+- Session 42B (context-runway, expensive-turn, tag v0.2.0-alpha.3) is the next item in `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md`.
 - The pre-existing uncommitted change to `02_roadmap/2026-09-22_v0.1.2_patch_spec.md` (present before this session started) is still sitting unstaged in the working tree; worth Wilco's own look, not something this session touched or explains.
 - The cache-TTL default (one hour, subscription case) is a judgment call, not a hard spec answer; flagged to Wilco directly in-session, no objection raised yet.
 
 ## 8. Related files
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.3, I1/I2)
-- `C:\ZND\projects\burnmon\04_assets\2026-09-22_burnmon_now_page_features.md` (section 3, live context features)
-- `C:\ZND\projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (42A prompt, now ticked)
-- `C:\ZND\projects\burnmon\SESSION_LOG.md` (top entry, full technical detail)
-- `C:\ZND\projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_41B_vendor_strip_hermes.md` (prior brief this one follows)
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_spec.md` (section 2.3, I1/I2)
+- `C:\ZND\50_projects\burnmon\04_assets\2026-09-22_burnmon_now_page_features.md` (section 3, live context features)
+- `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_v0.2_session_prompts.md` (42A prompt, now ticked)
+- `C:\ZND\50_projects\burnmon\SESSION_LOG.md` (top entry, full technical detail)
+- `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-09-22_v0.2_41B_vendor_strip_hermes.md` (prior brief this one follows)
