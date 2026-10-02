@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
@@ -41,6 +42,26 @@ import (
 
 //go:embed page.html
 var pageHTML string
+
+// The Station (02_roadmap\2026-10-01_station_secret_screen.md): the
+// atlas and the screen, spliced into page.html at stationMarker by
+// assemblePage before SetHtml.
+//
+//go:embed station/station_atlas.js
+var stationAtlasJS string
+
+//go:embed station/station.js
+var stationJS string
+
+const stationMarker = "<!--BM_STATION-->"
+
+// assemblePage returns page.html with both Station scripts at its marker.
+// The page keeps working without them (window.BMStation is checked before
+// use), so a missing marker only costs the secret screen.
+func assemblePage() string {
+	return strings.Replace(pageHTML, stationMarker,
+		"<script>\n"+stationAtlasJS+"\n</script>\n<script>\n"+stationJS+"\n</script>", 1)
+}
 
 // Microsoft To Do panel payloads (section 9). Kept small and purpose-built
 // per call rather than reusing internal/todo's own structs directly: the
@@ -407,6 +428,13 @@ func main() {
 		if err := live.ApplySessionTotals(burn.Sessions, st, &cfg); err != nil {
 			log.Println("bdevSnapshotNow: session totals:", err)
 		}
+		// Only while the Station is open (the page sets cursor.Stages), so a
+		// closed Station adds no store read to the tick.
+		if cursor.Stages {
+			if err := live.ApplyStages(burn.Sessions, st, now); err != nil {
+				log.Println("bdevSnapshotNow: stages:", err)
+			}
+		}
 		tDone := time.Now()
 
 		payload := snapshotPayload{
@@ -648,7 +676,7 @@ func main() {
 
 	startUICheckServer(w)
 
-	w.SetHtml(pageHTML)
+	w.SetHtml(assemblePage())
 	go startBackgroundIngest(a, st, w)
 	w.Run()
 }

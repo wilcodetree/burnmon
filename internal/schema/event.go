@@ -64,10 +64,12 @@ type ToolCall struct {
 	At        time.Time `json:"at"`
 
 	InputBytes int64 `json:"input_bytes"`
-	// ResultBytes is nil until the matching tool_result/*_output is seen in
-	// the same Parse read; a call and its result almost always land in the
-	// same incremental read in practice (they are adjacent lines), so this
-	// is not backfilled across separate reads.
+	// ResultBytes is nil until the matching tool_result/*_output is seen. A
+	// result read in a later Parse pass than its call comes back as a
+	// result-only ToolCall (Tool "", only Vendor, SessionID, CallID and
+	// ResultBytes set), which the store applies to the stored call (alpha.9:
+	// on live sessions a tool that outlives one read is the common case,
+	// 1,812 of 3,805 Bash calls in Wilco's store never got a result).
 	ResultBytes *int64 `json:"result_bytes,omitempty"`
 	// Path is the file path the call touched, when the tool's own input
 	// names one plainly (Claude's Read/Edit/Write/NotebookEdit: file_path or

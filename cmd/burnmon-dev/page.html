@@ -184,6 +184,12 @@ tr.totalrow td{font-weight:700; color:#fff; border-bottom:1px solid var(--bd)}
 #turnPopupOverlay{position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center}
 #turnPopupOverlay.hidden{display:none}
 #turnPopupOverlay:not(.hidden){display:flex}
+/* Station (P full window, O in the burn zone): above the page and an
+   already open turn popup, below the loading screen. A popup opened from
+   the Station itself gets .over-station so it shows on top. */
+#stationOverlay{position:fixed; inset:0; z-index:1500; display:none}
+#stationOverlay.on{display:block}
+#turnPopupOverlay.over-station{z-index:1600}
 #turnPopup{position:relative; background:var(--panel); border:1px solid var(--amber); color:var(--txt);
   padding:18px 20px; width:480px; max-width:92vw; max-height:84vh; overflow:hidden; font-size:12px}
 #turnPopup h3{margin:0 0 2px; color:#fff; font-size:14px}
@@ -460,6 +466,8 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     <div id="turnPopupBody"></div>
   </div>
 </div>
+<div id="stationOverlay"></div>
+<!--BM_STATION-->
 <script>
 (function(){
   // HARNESS_HUE (no-scroll patch section 2) is the one fixed categorical
@@ -1511,9 +1519,104 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     });
   }
 
+  // ---------- Station (02_roadmap\2026-10-01_station_secret_screen.md)
+  // P opens the full-window Station, O swaps the burn zone for its plan
+  // view. Nothing exists until the first P or O. While it is closed or the
+  // window is hidden nothing draws, nothing is fed, and the tick asks the
+  // Go side for no stages (cursor.stages), so it costs nothing.
+  var station = null, stationMode = null, stationPanel = null, lastBurnSnap = null;
+  function stationTurnCount(sid){
+    var n = 0;
+    (function walk(list){
+      (list || []).forEach(function(s){ if(s.session_id === sid) n = s.turn_count; else walk(s.subagents); });
+    })(lastBurnSnap && lastBurnSnap.sessions);
+    return n;
+  }
+  // A snapshot built without stages (the tick in flight when the Station
+  // opened) would send every agent to the lounge for one beat.
+  function snapHasStages(b){ return !(b && b.sessions && b.sessions.length && !b.sessions[0].stage); }
+  function feedStation(){
+    if(station && station.isMounted() && lastBurnSnap && snapHasStages(lastBurnSnap)) station.update(BMStation.fromSnapshot(lastBurnSnap, sessionColor));
+  }
+  function stationAgentClick(sid){
+    var turn = stationTurnCount(sid);
+    if(!turn) return;
+    document.getElementById('turnPopupOverlay').classList.add('over-station');
+    openTurnPopup(sid, turn);
+  }
+  window.__bdevStationClick = stationAgentClick; // tools\uicheck (check_d23.go) only
+  function ensureStation(){
+    if(!station && window.BMStation) station = BMStation.create({atlas: window.BM_STATION_ATLAS, onAgentClick: stationAgentClick});
+    return station;
+  }
+  function mountStation(){
+    if(station.isMounted()) return;
+    if(stationMode === 'full'){
+      var ov = document.getElementById('stationOverlay');
+      ov.classList.add('on');
+      station.mount(ov, 'full');
+    } else {
+      // O takes the whole burn zone, label to turn ticker, everything above
+      // System (Wilco, 2026-10-01): the chart panel alone was too short for
+      // the deck to read.
+      var host = document.querySelector('.zone.burn');
+      var hidden = Array.prototype.slice.call(host.children);
+      hidden.forEach(function(el){ el.style.display = 'none'; });
+      var box = document.createElement('div');
+      box.id = 'stationPanel';
+      box.style.cssText = 'flex:1;min-height:0';
+      host.appendChild(box);
+      stationPanel = {box: box, hidden: hidden};
+      station.mount(box, 'panel');
+    }
+    feedStation();
+  }
+  function unmountStation(){
+    if(!station || !station.isMounted()) return;
+    station.unmount();
+    document.getElementById('stationOverlay').classList.remove('on');
+    if(stationPanel){
+      stationPanel.box.parentNode.removeChild(stationPanel.box);
+      stationPanel.hidden.forEach(function(el){ el.style.display = ''; });
+      stationPanel = null;
+      // While the zone was hidden, applyPanelFit saw room to spare and the
+      // heatmaps drew at width 0: re-fit and redraw now, not on the next paint.
+      applyPanelFit();
+      renderHeatmap(lastHeatmapPayload);
+      renderHarnessHeatmap(lastProcessGroupsHistory);
+    }
+  }
+  function closeStation(){
+    if(!stationMode) return;
+    unmountStation();
+    stationMode = null;
+  }
+  function openStation(m){
+    if(!ensureStation()) return;
+    closeStation();
+    // The full Station covers an already open turn popup; close it so the
+    // first Esc does not close something nobody can see.
+    if(m === 'full') closeTurnPopup();
+    stationMode = m;
+    if(!document.hidden) mountStation();
+    if(!tickInFlight) tick(); // stages now, not on the next beat
+  }
+  document.addEventListener('keydown', function(e){
+    var t = e.target, tag = t && t.tagName;
+    if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+    if(e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+    var k = (e.key || '').toLowerCase();
+    if(k === 'p'){ stationMode === 'full' ? closeStation() : openStation('full'); e.preventDefault(); }
+    else if(k === 'o'){ stationMode === 'panel' ? closeStation() : openStation('panel'); e.preventDefault(); }
+  });
+  document.addEventListener('visibilitychange', function(){
+    if(!stationMode) return;
+    if(document.hidden) unmountStation(); else mountStation();
+  });
+
   function closeTurnPopup(){
     var overlay = document.getElementById('turnPopupOverlay');
-    if(overlay) overlay.classList.add('hidden');
+    if(overlay){ overlay.classList.add('hidden'); overlay.classList.remove('over-station'); }
     currentTurnKey = null;
   }
 
@@ -1612,6 +1715,10 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     var overlay = document.getElementById('turnPopupOverlay');
     if(overlay && !overlay.classList.contains('hidden')){
       closeTurnPopup();
+      return;
+    }
+    if(stationMode === 'full'){
+      closeStation();
       return;
     }
     if(window.bdevExitFullscreen) window.bdevExitFullscreen();
@@ -2519,6 +2626,8 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     lastHistWindowStart = (snap.burn && snap.burn.window_start) ? new Date(snap.burn.window_start).getTime() : (snap.now - 30 * 60 * 1000);
     renderHistoryChart(lastSysmonHistory, lastHistWindowStart); paintMark('sysmonHistory');
     renderBurnPanels(snap.burn); paintMark('burn');
+    lastBurnSnap = snap.burn;
+    if(stationMode) feedStation();
     renderVendorPanels(snap.vendor_strip); paintMark('vendorStrip');
     renderHeadline(snap.headline_today); paintMark('headline');
     renderHeatmap(snap.activity_heatmap); paintMark('activityHeatmap');
@@ -2603,7 +2712,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     var mySeq = ++tickSeq;
     var startedAt = performance.now();
     tickInFlightSince = startedAt;
-    return window.bdevSnapshotNow({ sys_since: ringNewestMs(sysRing), groups_since: ringNewestMs(groupsRing) }).then(function(snap){
+    return window.bdevSnapshotNow({ sys_since: ringNewestMs(sysRing), groups_since: ringNewestMs(groupsRing), stages: !!stationMode && !document.hidden }).then(function(snap){
       if(mySeq === tickSeq) tickInFlight = false;
       if(mySeq === abandonedSeq) abandonedSeq = 0;
       perfWin.rts.push(performance.now() - startedAt);

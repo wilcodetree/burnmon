@@ -2,6 +2,27 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-10-01/02, the Station secret screen, v0.4.0-alpha.9
+
+Spec `02_roadmap\2026-10-01_station_secret_screen.md`, steps 1 to 8, on `main`, Claude Code on
+Windows. Test first for the store query (`LatestToolCalls`, ordered by `julianday`, a text `MAX`
+proved wrong) and the live fields (`ApplyStages`, called only while the Station is open). Real data
+showed two bugs the pre-built parts could not see: Codex shell calls are named `exec` (were Coding),
+and tool results read in a later pass were dropped (1,812 of 3,805 Bash calls without one), now
+result-only rows. Codex call turn ids never match its event keys, so "latest turn" falls back to
+"newer than the second-newest turn". Wilco changed two things during the session: O replaces the
+whole burn zone, and the full view turns the deck 15 degrees (after a detour to a 15 degree
+elevation he reverted), which meant re-rendering all 100 Kenney sprites in Blender, calibrated
+against the kit's own renders. The first open measurement cost about +44 points of one core;
+profiling showed the animation-frame request rate, not drawing, drove WebView2's cost, so frames
+are now timer-paced (15 fps busy, 8 idle) and static props baked. Final: +8.7 points open, accepted
+by Wilco against the target of 6. Measurements were repeatedly spoiled by Wilco's typing reaching
+the test window (P toggles the Station) and by him closing it; the final scripts enforce the state
+and count real key presses. Live check: rooms followed tools for this Claude Code session and a
+real Codex task. Fresh Opus review, findings fixed or ledgered. uicheck d0 to d23 pass except d19
+and d20, which fail identically on alpha.8 on today's single small screen. Numbers and caveats:
+`STATUS.md`'s alpha.9 entry. Not committed.
+
 ## 2026-09-29, WS2 follow-up: Codex live tail and collapsed turns, v0.4.0-alpha.8
 
 Spec `02_roadmap6-09-29_ws2_codex_live_tail.md`, items 0 to 5, on `main`. Item 0 proved on

@@ -934,3 +934,103 @@ func TestResetCollapsedCodexSessions(t *testing.T) {
 		t.Fatalf("second run removed %d/%d (err %v), want a no-op", e, c, err)
 	}
 }
+
+// TestLatestToolCalls guards the Station's one-query-per-tick read: the
+// newest call per (vendor, session_id) by its real instant, not by the text
+// of the stored `at`. RFC3339Nano trims trailing zeros, so a whole-second
+// "10:00:00Z" sorts after "10:00:00.5Z" as text ('Z' > '.'), which would pick
+// the older call; the 500 ms pair below fails that way.
+func TestLatestToolCalls(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	base := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	calls := []schema.ToolCall{
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", CallID: "a", Turn: "req-1", Tool: "Read", At: base, InputBytes: 1},
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", CallID: "b", Turn: "req-2", Tool: "Bash", At: base.Add(500 * time.Millisecond), InputBytes: 2, ResultBytes: ptr(int64(7))},
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", CallID: "c", Turn: "req-0", Tool: "Edit", At: base.Add(-time.Minute), InputBytes: 3},
+		// Same session id under another vendor: its own key, its own answer.
+		{Vendor: "openai", Agent: "codex", SessionID: "s1", CallID: "d", Turn: "t-1", Tool: "exec", At: base.Add(time.Hour), InputBytes: 4},
+		{Vendor: "openai", Agent: "codex", SessionID: "s2", CallID: "e", Turn: "t-2", Tool: "apply_patch", At: base.Add(2 * time.Second), InputBytes: 5},
+		// Not asked for: must not appear.
+		{Vendor: "openai", Agent: "codex", SessionID: "s3", CallID: "f", Turn: "t-3", Tool: "exec", At: base.Add(3 * time.Hour), InputBytes: 6},
+	}
+	if err := st.UpsertToolCalls(calls); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := st.LatestToolCalls([]SessionKey{
+		{Vendor: "anthropic", SessionID: "s1"},
+		{Vendor: "openai", SessionID: "s1"},
+		{Vendor: "openai", SessionID: "s2"},
+		{Vendor: "anthropic", SessionID: "no-calls"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("want 3 sessions, got %d: %+v", len(got), got)
+	}
+	c := got[SessionKey{Vendor: "anthropic", SessionID: "s1"}]
+	if c.CallID != "b" || c.Tool != "Bash" || c.Turn != "req-2" || !c.At.Equal(base.Add(500*time.Millisecond)) {
+		t.Fatalf("anthropic/s1 = %+v, want call b (Bash, req-2, 10:00:00.5)", c)
+	}
+	if c.ResultBytes == nil || *c.ResultBytes != 7 {
+		t.Fatalf("anthropic/s1 ResultBytes = %v, want 7", c.ResultBytes)
+	}
+	if c := got[SessionKey{Vendor: "openai", SessionID: "s1"}]; c.CallID != "d" || c.ResultBytes != nil {
+		t.Fatalf("openai/s1 = %+v, want call d with no result", c)
+	}
+	if c := got[SessionKey{Vendor: "openai", SessionID: "s2"}]; c.CallID != "e" || c.Tool != "apply_patch" {
+		t.Fatalf("openai/s2 = %+v, want call e", c)
+	}
+	if _, ok := got[SessionKey{Vendor: "anthropic", SessionID: "no-calls"}]; ok {
+		t.Fatal("a session with no calls must be absent")
+	}
+
+	empty, err := st.LatestToolCalls(nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty keys: got %v, %v", empty, err)
+	}
+}
+
+// TestUpsertToolCallsResultOnly: a result-only row (no Tool, the adapters'
+// shape for a result read after its call) fills result_bytes on the stored
+// call and changes nothing else; one for an unknown call inserts nothing.
+func TestUpsertToolCallsResultOnly(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "burnmon.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	at := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	call := schema.ToolCall{Vendor: "anthropic", Agent: "claude-code", SessionID: "s", CallID: "c1", Turn: "req-1", Tool: "Bash", At: at, InputBytes: 9, Path: "p"}
+	if err := st.UpsertToolCalls([]schema.ToolCall{call}); err != nil {
+		t.Fatal(err)
+	}
+	late := []schema.ToolCall{
+		{Vendor: "anthropic", SessionID: "s", CallID: "c1", ResultBytes: ptr(int64(42))},
+		{Vendor: "anthropic", SessionID: "s", CallID: "ghost", ResultBytes: ptr(int64(1))},
+	}
+	if err := st.UpsertToolCalls(late); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.ToolCallsForTurn("anthropic", "s", "req-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Tool != "Bash" || got[0].Agent != "claude-code" || got[0].InputBytes != 9 || got[0].Path != "p" || !got[0].At.Equal(at) {
+		t.Fatalf("got %+v, want the original call untouched apart from its result", got)
+	}
+	if got[0].ResultBytes == nil || *got[0].ResultBytes != 42 {
+		t.Fatalf("ResultBytes = %v, want 42", got[0].ResultBytes)
+	}
+	m, err := st.LatestToolCalls([]SessionKey{{Vendor: "anthropic", SessionID: "s"}})
+	if err != nil || m[SessionKey{Vendor: "anthropic", SessionID: "s"}].CallID != "c1" {
+		t.Fatalf("the ghost result must not create a row: %+v %v", m, err)
+	}
+}

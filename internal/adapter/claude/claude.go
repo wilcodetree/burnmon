@@ -225,6 +225,9 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 	toolCounts := map[string]map[string]int64{}
 	pendingCalls := map[string]*pendingToolCall{}
 	var toolCallOrder []string
+	// lateResults: results whose call was read in an earlier pass (a tool
+	// that outlived one incremental read), returned as result-only rows.
+	var lateResults []schema.ToolCall
 
 	offset := from
 	reader := bufio.NewReader(f)
@@ -275,9 +278,11 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 						if tuid == "" {
 							continue
 						}
+						n := contentByteLen(block["content"])
 						if pc, ok := pendingCalls[tuid]; ok {
-							n := contentByteLen(block["content"])
 							pc.resultBytes = &n
+						} else {
+							lateResults = append(lateResults, schema.ToolCall{CallID: tuid, ResultBytes: &n})
 						}
 					}
 				}
@@ -433,6 +438,10 @@ func (Adapter) Parse(path string, from int64) ([]schema.Event, []schema.ToolCall
 			CallID: id, Turn: pc.turn, Tool: pc.tool, At: at,
 			InputBytes: pc.inputBytes, ResultBytes: pc.resultBytes, Path: pc.path,
 		})
+	}
+	for _, r := range lateResults {
+		r.Vendor, r.SessionID = "anthropic", sessionID
+		toolCalls = append(toolCalls, r)
 	}
 
 	return events, toolCalls, offset, nil

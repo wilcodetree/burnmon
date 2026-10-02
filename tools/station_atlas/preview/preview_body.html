@@ -1,0 +1,21 @@
+<style>
+  :root{--bg:#04060a;--panel:#0a0e14;--panel2:#10151d;--bd:#1c2532;--txt:#cbd5e1;--amber:#ffb000}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:13px "Segoe UI",system-ui,sans-serif;overflow:hidden}
+  .top{height:38px;display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--panel2);border-bottom:1px solid var(--bd);color:var(--amber);font-weight:700;letter-spacing:.06em}
+  .top small{color:#64748b;font-weight:400;letter-spacing:0}
+  .grid{position:absolute;top:39px;left:0;right:0;bottom:0;display:grid;grid-template-columns:7fr 3fr;grid-template-rows:1fr 150px;gap:8px;padding:8px}
+  .panel{background:var(--panel);border:1px solid var(--bd);display:flex;flex-direction:column;min-height:0}
+  .ph{padding:6px 10px;border-bottom:1px solid var(--bd);background:var(--panel2);color:var(--amber);font-size:12px;letter-spacing:.08em}
+  .pb{flex:1;position:relative;min-height:0}
+  .fakechart{position:absolute;inset:10px;display:flex;align-items:flex-end;gap:3px}
+  .fakechart i{flex:1;background:linear-gradient(#ffa028,#a78bfa);opacity:.55}
+  #stationOverlay{position:fixed;inset:0;z-index:3000;display:none}
+  #stationOverlay.on{display:block}
+</style>
+<div class="top">BURNMON DEV <small>preview harness with fake sessions. Press P for the full Station, O for the Station inside the chart panel.</small></div>
+<div class="grid">
+  <div class="panel" id="burnPanel"><div class="ph">BURN, LAST 30 MIN</div><div class="pb" id="burnBody"><div class="fakechart" id="fakechart"></div></div></div>
+  <div class="panel"><div class="ph">SESSIONS</div><div class="pb"></div></div>
+  <div class="panel" style="grid-column:1 / span 2"><div class="ph">SYSTEM</div><div class="pb"></div></div>
+</div>
+<div id="stationOverlay"></div>

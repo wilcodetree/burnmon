@@ -23,6 +23,9 @@ import (
 type snapshotCursor struct {
 	SysSince    int64 `json:"sys_since"`
 	GroupsSince int64 `json:"groups_since"`
+	// Stages is true while the Station is open: only then does the tick
+	// read the latest tool calls and fill each session's stage.
+	Stages bool `json:"stages"`
 }
 
 // sysHistSince returns the part of buf the page still needs. full is true

@@ -296,6 +296,77 @@ ignored), it just no longer does anything.
 
 ## BurnMon Dev (`burnmon-dev` merged into `main` at `f7f1c26`; this and later work commits on `main` directly)
 
+`v0.4.0-alpha.9`: the Station, an undocumented secret screen (`02_roadmap\2026-10-01_station_secret_screen.md`,
+"What is left" steps 1 to 8). **P** opens a full-window isometric deck where every live session
+is an astronaut in the room of its current stage; **O** replaces the whole burn zone (chart to
+turn ticker, everything above System; Wilco's call this session, the spec said the chart only)
+with a pixel-art plan view; **Esc** closes a turn popup first, then the full Station, then
+fullscreen. No README mention. Shared ingest code changed (late tool results), so `burnmon.exe`
+(still `0.3.2`) gets that fix once rebuilt.
+
+- **Store:** `LatestToolCalls(keys)`, the newest call per session in one query, ordered by
+  `julianday(at)`, not the stored text: RFC3339Nano trims zeros, so `10:00:00Z` sorts after
+  `10:00:00.5Z` as text (`TestLatestToolCalls` fails on a text `MAX(at)`, checked). About 5 ms warm
+  for the 10 largest real sessions together.
+- **Live:** `Session.Stage`, `StageSince`, `StageTool` (`stage`, `stage_since`, `stage_tool`,
+  omitempty), filled by `live.ApplyStages`, a sibling of `ApplySessionTotals` that BurnMon Dev calls
+  only while the Station is open (`cursor.stages`), so a closed Station adds no store read and
+  `burnmon.exe` and the CLI emit no stage fields. Claude keys a tool call by its turn's `requestId`
+  (a key match); Codex keys it by a rollout `turn_id` that never equals its event keys and writes a
+  response's `token_count` only after that response's tool output (seen in real rollouts), so a
+  call whose key matches no windowed turn counts as in the latest turn when it is newer than the
+  second-newest turn (`TestApplyStages`, mutation-checked).
+- **Real bugs found and fixed:** (1) Codex shell calls are stored as `exec` (93 rows since
+  2026-09-25), which `stage.ToolStage` mapped to Coding; now Running (`TestCodexExecRuns`). (2) A
+  tool result read in a later incremental pass than its call was dropped, so the call never got a
+  result (1,812 of 3,805 Bash rows in the real store had none) and Thinking could never show for a
+  slow tool. Both adapters now return a result-only row and `UpsertToolCalls` applies it as an
+  update, never an insert (`TestParseLateToolResult` for Claude and Codex,
+  `TestUpsertToolCallsResultOnly`). Seen working live: a 25 s Codex sleep got its result recorded.
+- **Page:** both scripts embedded (`//go:embed`, spliced at `<!--BM_STATION-->` by `assemblePage`,
+  `TestAssemblePageSplicesStation`). Nothing exists until the first P or O; closed or hidden, nothing
+  draws or is fed; hidden unmounts, visible remounts. A popup opened from the Station shows on top.
+  Fixed after a fresh Opus review: the popup class left behind, a popup hidden behind a newly opened
+  Station, heatmaps left at width 0 after O closes, a double mount, a perf-stat skew.
+- **Camera (Wilco, this session):** elevation 30 as in the kit, deck turned 15 degrees (azimuth 30,
+  left corner closer, long edges about 16 degrees from horizontal). The kit's PNGs exist only at
+  azimuth 45, so all 100 sprites are re-rendered from its GLB models in headless Blender 5.2
+  (installed this session with winget), calibrated against the kit's own PNGs (mean IoU 0.906 on 20
+  samples, edge pieces registered to within 1 px, walls 0.22 to 0.985). The atlas carries the
+  camera's projection matrix; `station.js` projects, fits and depth-sorts from it. Pipeline and
+  commands: the spec's Art section, `tools\station_atlas\render_iso.py`.
+- **Render cost, found and fixed in `station.js`:** the first open measurement cost about +44 points
+  of one core in WebView2. Profiled: JavaScript was 4 percent; the cost followed how often an
+  animation frame was requested (a 30 fps loop requesting at 60 Hz). Now a timer paces frames at 15
+  fps while anything moves and 8 fps idle, static walls and props are baked once per camera, and a
+  restart check that spawned duplicate loops is fixed (`!raf` now also checks the timer).
+
+Proof. Final 10-minute samples, same exe, Station state enforced and real key presses counted (none):
+closed Go 3.18 and WebView2 4.84 percent of one core, JS heap 9.5 MB; open Go 3.28 and WebView2
+13.49, JS heap 9.5 to 28.0 MB. **Open costs +8.7 points of one core against the spec's target of 6;
+Wilco accepted that for alpha.9 (2026-10-02), so Done-when item 3 is met for memory (+18.5 MB, under
+60) but not for CPU.** Closed against alpha.8: an alpha.8 build from `HEAD` measured 22.4 percent
+(Go plus WebView2) over 10 minutes and alpha.9 closed 13.1 and 8.0 in two later runs, both with the
+same 9.5 MB heap; run-to-run spread from live session activity is larger than any difference, so
+"no worse than alpha.8" is the claim, not "faster". Live rooms check, one stage sample every 2.5 s
+against the store's newest call: this Claude Code session went Read and Grep to Reading, Bash to
+Running, Thinking 8 s after the Bash result, Write to Coding, an MCP search to Fetching, then
+Waiting; a real `codex exec` task went Arriving, `exec` to Running, Thinking, Waiting. Every change
+landed within one sample. `go vet ./...` and `go test ./... -count=1` green, `node --check` green
+on all three page scripts, `.\build.ps1` green. uicheck: d0 to d18 and d21 to d23 pass (d23 new:
+real P, O and Esc presses, both views draw, popup above the Station, Esc order). d19 and d20 fail
+on this laptop's current single 1600x1000 screen at 200 percent, and the alpha.8 exe fails them
+the same way (checked), so environmental, not this change.
+
+Known, not fixed: an `ApplyStages` error is only logged, and the page then keeps the last stages;
+events and tool calls are committed in separate transactions, so a tick can see a new Claude turn
+before its call (one tick in the lounge at most, usually hidden by the 3.5 s dwell); Running is
+exempt from the stuck rule, so a Codex `exec` waiting for approval reads Running; Thinking's
+`stage_since` counts from the call, not from the result; parallel calls with one timestamp pick
+arbitrarily; `performance.memory` is coarse (it read a flat 9.5 MB closed in every run). Spec
+corrected: the atlas regenerates pixel-identical, not byte-identical (Pillow versions encode PNGs
+differently). Not committed, pushed or tagged.
+
 `v0.4.0-alpha.8`: WS2 follow-up, Codex sessions held open never reached the live watcher, plus
 the Copilot in VS Code tail (`02_roadmap\2026-09-29_ws2_codex_live_tail.md`, items 0 to 5).
 Shared ingest code changed, so `burnmon.exe` (still `0.3.2`) gets the same fixes once rebuilt.

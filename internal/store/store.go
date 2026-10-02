@@ -229,6 +229,9 @@ WHERE excluded.output > events.output
 // separate Parse calls) updates every column but only overwrites
 // result_bytes when the new row actually carries one, so a result already
 // recorded is never wiped back to unknown by a later row that has none.
+// A result-only row (Tool "", the adapters' shape for a result read in a
+// later pass than its call) only fills result_bytes on the stored call and
+// never inserts one.
 func (s *Store) UpsertToolCalls(calls []schema.ToolCall) error {
 	if len(calls) == 0 {
 		return nil
@@ -252,8 +255,21 @@ ON CONFLICT (vendor, session_id, call_id) DO UPDATE SET
 		return err
 	}
 	defer stmt.Close()
+	late, err := tx.Prepare(`UPDATE tool_calls SET result_bytes = ? WHERE vendor = ? AND session_id = ? AND call_id = ? AND result_bytes IS NULL`)
+	if err != nil {
+		return err
+	}
+	defer late.Close()
 
 	for _, c := range calls {
+		if c.Tool == "" {
+			if c.ResultBytes != nil {
+				if _, err := late.Exec(*c.ResultBytes, c.Vendor, c.SessionID, c.CallID); err != nil {
+					return fmt.Errorf("store: tool call result %s/%s: %w", c.Vendor, c.CallID, err)
+				}
+			}
+			continue
+		}
 		_, err = stmt.Exec(
 			c.Vendor, c.Agent, c.SessionID, c.CallID, c.Turn, c.Tool,
 			c.At.UTC().Format(time.RFC3339Nano), c.InputBytes, nullInt(c.ResultBytes), c.Path,
@@ -301,6 +317,56 @@ ORDER BY at ASC`, vendor, sessionID, turn)
 			c.ResultBytes = &v
 		}
 		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// LatestToolCalls returns each key's newest tool call by its real instant,
+// in one query for every key (the Station reads this once per tick, never
+// once per session). Ordered by julianday(at), not the stored text:
+// RFC3339Nano trims trailing zeros, so "10:00:00Z" sorts after
+// "10:00:00.5Z" as text. A key with no calls is absent from the map. Ties
+// on the same instant pick SQLite's first row of the group (bare columns
+// next to MAX), which is fine for a room picker. Returns an empty map for
+// empty keys.
+func (s *Store) LatestToolCalls(keys []SessionKey) (map[SessionKey]schema.ToolCall, error) {
+	out := map[SessionKey]schema.ToolCall{}
+	if len(keys) == 0 {
+		return out, nil
+	}
+	clauses := make([]string, len(keys))
+	args := make([]any, 0, len(keys)*2)
+	for i, k := range keys {
+		clauses[i] = "(vendor = ? AND session_id = ?)"
+		args = append(args, k.Vendor, k.SessionID)
+	}
+	rows, err := s.readDB.Query(`
+SELECT vendor, agent, session_id, call_id, turn, tool, at, input_bytes, result_bytes, path, MAX(julianday(at))
+FROM tool_calls
+WHERE `+strings.Join(clauses, " OR ")+`
+GROUP BY vendor, session_id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var c schema.ToolCall
+		var atStr string
+		var resultBytes sql.NullInt64
+		var maxKey any
+		if err := rows.Scan(&c.Vendor, &c.Agent, &c.SessionID, &c.CallID, &c.Turn, &c.Tool,
+			&atStr, &c.InputBytes, &resultBytes, &c.Path, &maxKey); err != nil {
+			return nil, err
+		}
+		c.At, err = time.Parse(time.RFC3339Nano, atStr)
+		if err != nil {
+			return nil, fmt.Errorf("store: parse at %q: %w", atStr, err)
+		}
+		if resultBytes.Valid {
+			v := resultBytes.Int64
+			c.ResultBytes = &v
+		}
+		out[SessionKey{Vendor: c.Vendor, SessionID: c.SessionID}] = c
 	}
 	return out, rows.Err()
 }

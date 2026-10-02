@@ -12,6 +12,7 @@ import (
 	"burnmon/internal/insight"
 	"burnmon/internal/pricing"
 	"burnmon/internal/schema"
+	"burnmon/internal/stage"
 	"burnmon/internal/store"
 )
 
@@ -74,6 +75,20 @@ type Session struct {
 	// insight found no context-runway finding for this session. The marker,
 	// ticker and drawer for every other finding kind stay 43A's job.
 	Runway string `json:"runway"`
+
+	// Stage, StageSince and StageTool are the Station's room for this
+	// session (BurnMon Dev's secret screen, internal/stage), filled only by
+	// ApplyStages, so burnmon.exe and the CLI, which never call it, emit
+	// none of the three.
+	Stage      string `json:"stage,omitempty"`
+	StageSince string `json:"stage_since,omitempty"` // RFC3339
+	StageTool  string `json:"stage_tool,omitempty"`
+
+	// turns and windowStart are ApplyStages' inputs: the windowed turns
+	// BuildSnapshot already sorted (a reference, nothing copied, so a closed
+	// Station costs nothing here) and the window's start.
+	turns       []schema.Event
+	windowStart time.Time
 }
 
 // TurnEvent is one real API-call turn inside the Now page's 30-minute
@@ -292,6 +307,7 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time, bu
 		}
 		s.Findings = insight.Analyze(turns, cfg)
 		s.Runway = insight.RunwayText(s.Findings)
+		s.turns, s.windowStart = turns, now.Add(-ChartWindow)
 		sessions[g.id] = s
 		runningOrder = append(runningOrder, g.id)
 		if p := turns[0].ParentID; p != "" {
@@ -705,6 +721,77 @@ func ApplySessionTotals(sessions []*Session, st *store.Store, cfg *pricing.Confi
 		apply(s)
 	}
 	return nil
+}
+
+// ApplyStages fills Stage, StageSince and StageTool on every session and
+// subagent from one LatestToolCalls read for all of them (never one per
+// session) plus what BuildSnapshot already holds, classified by
+// internal/stage. Call it after ApplySessionTotals, whose lifetime Start it
+// uses for the arrival rule. Only BurnMon Dev calls it, and only while the
+// Station is open.
+func ApplyStages(sessions []*Session, st *store.Store, now time.Time) error {
+	keys := sessionKeys(sessions)
+	if len(keys) == 0 {
+		return nil
+	}
+	calls, err := st.LatestToolCalls(keys)
+	if err != nil {
+		return err
+	}
+	var apply func(s *Session)
+	apply = func(s *Session) {
+		in := stage.Input{Now: now}
+		if n := len(s.turns); n > 0 {
+			in.LastTurn = s.turns[n-1].At
+		}
+		in.Start, _ = time.Parse(time.RFC3339, s.Start)
+		if c, ok := calls[store.SessionKey{Vendor: s.Vendor, SessionID: s.SessionID}]; ok {
+			in.LastTool, in.LastToolAt, in.LastToolDone = c.Tool, c.At, c.ResultBytes != nil
+			in.LastToolInLatestTurn = s.inLatestTurn(c)
+		}
+		for _, f := range s.Findings {
+			if f.Kind == insight.KindCompaction && f.At.After(in.CompactedAt) {
+				in.CompactedAt = f.At
+			}
+		}
+		r := stage.Classify(in)
+		s.Stage, s.StageTool = string(r.Stage), r.Tool
+		s.StageSince = r.Since.UTC().Format(time.RFC3339)
+		for _, sub := range s.Subagents {
+			apply(sub)
+		}
+	}
+	for _, s := range sessions {
+		apply(s)
+	}
+	return nil
+}
+
+// inLatestTurn reports whether c belongs to the session's newest turn.
+// Claude keys a call by its turn's own RequestID, so that is a key match.
+// Codex keys it by a rollout turn_id that never equals an event key (an
+// ordinal or a byte offset), and writes a response's token_count only after
+// that response's tool output (seen in real rollouts, 2026-09-29): for a
+// call whose key matches no windowed turn, a call newer than the
+// second-newest turn belongs to the newest one or to the one still open.
+func (s *Session) inLatestTurn(c schema.ToolCall) bool {
+	n := len(s.turns)
+	if n == 0 {
+		return false
+	}
+	if c.Turn != "" && c.Turn == s.turns[n-1].RequestID {
+		return true
+	}
+	for _, t := range s.turns {
+		if t.RequestID == c.Turn {
+			return false
+		}
+	}
+	prev := s.windowStart
+	if n > 1 {
+		prev = s.turns[n-2].At
+	}
+	return c.At.After(prev)
 }
 
 // sessionKeys collects every (vendor, session_id) pair in sessions,
