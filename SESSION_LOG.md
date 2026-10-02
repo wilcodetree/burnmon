@@ -21,7 +21,7 @@ the test window (P toggles the Station) and by him closing it; the final scripts
 and count real key presses. Live check: rooms followed tools for this Claude Code session and a
 real Codex task. Fresh Opus review, findings fixed or ledgered. uicheck d0 to d23 pass except d19
 and d20, which fail identically on alpha.8 on today's single small screen. Numbers and caveats:
-`STATUS.md`'s alpha.9 entry. Not committed.
+`STATUS.md`'s alpha.9 entry. Committed `44ba02e`, pushed and tagged `v0.4.0-alpha.9` by Wilco.
 
 ## 2026-09-29, WS2 follow-up: Codex live tail and collapsed turns, v0.4.0-alpha.8
 

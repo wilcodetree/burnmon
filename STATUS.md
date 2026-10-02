@@ -365,7 +365,8 @@ exempt from the stuck rule, so a Codex `exec` waiting for approval reads Running
 `stage_since` counts from the call, not from the result; parallel calls with one timestamp pick
 arbitrarily; `performance.memory` is coarse (it read a flat 9.5 MB closed in every run). Spec
 corrected: the atlas regenerates pixel-identical, not byte-identical (Pillow versions encode PNGs
-differently). Not committed, pushed or tagged.
+differently). Committed as `44ba02e`, pushed to `origin` and tagged `v0.4.0-alpha.9` by Wilco
+on 2026-10-02 (checked with `git ls-remote origin`: `main` and the tag both at `44ba02e`).
 
 `v0.4.0-alpha.8`: WS2 follow-up, Codex sessions held open never reached the live watcher, plus
 the Copilot in VS Code tail (`02_roadmap\2026-09-29_ws2_codex_live_tail.md`, items 0 to 5).
