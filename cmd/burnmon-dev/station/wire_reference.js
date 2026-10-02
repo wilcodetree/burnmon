@@ -4,7 +4,9 @@
   if(fc){ for(var i = 0; i < 90; i++){ var b = document.createElement('i'); b.style.height = (10 + Math.abs(Math.sin(i / 6)) * 70 + (i % 7) * 3) + '%'; fc.appendChild(b); } }
   var station = null, stationMode = null, panelSaved = null;
   function ensure(){
-    if(!station) station = BMStation.create({atlas: window.BM_STATION_ATLAS, onAgentClick: function(sid){ console.log('station click', sid); }});
+    if(!station) station = BMStation.create({atlases: {space: window.BM_STATION_ATLAS, site: window.BM_STATION_ATLAS_SITE},
+      theme: /[?#&]theme=space/.test(location.href) ? 'space' : (window.BM_STATION_THEME || 'site'),
+      onAgentClick: function(sid){ console.log('station click', sid); }});
     return station;
   }
   function close(){
@@ -37,6 +39,7 @@
     var k = (e.key || '').toLowerCase();
     if(k === 'p'){ stationMode === 'full' ? close() : open('full'); e.preventDefault(); }
     else if(k === 'o'){ stationMode === 'panel' ? close() : open('panel'); e.preventDefault(); }
+    else if(k === 't' && stationMode){ station.setTheme(station.theme() === 'site' ? 'space' : 'site'); e.preventDefault(); }
     else if((k === 'escape' || k === 'esc') && stationMode === 'full'){ close(); }
   });
   setInterval(function(){ if(station && stationMode) station.update(window.fakeModel()); }, 1000);

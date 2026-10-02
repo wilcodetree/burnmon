@@ -13,10 +13,15 @@ import (
 // turn popup on top, Esc closes the popup first and the Station on the
 // next press; O replaces the whole burn zone (chart to turn ticker, all of
 // it above System) with the plan view filling that zone, and it draws; O
-// brings the zone back. Screenshots of both views.
+// brings the zone back. Screenshots of both views. Station themes (alpha.10):
+// the startup theme is site (HUD "SITE ... on site"), T flips it to the space
+// station ("STATION ... on board") and back while the Station is open, and
+// does nothing once it is closed. A startup theme of "space" in the machine's
+// burnmon-dev.json would fail the first step on purpose.
 const (
 	vkP = 0x50
 	vkO = 0x4F
+	vkT = 0x54
 )
 
 // d23State is one read of the Station's DOM. Lit counts canvas pixels
@@ -37,6 +42,7 @@ type d23State struct {
 	OverlayZ    float64 `json:"overlayZ"`
 	PanelH      float64 `json:"panelH"`
 	ZoneH       float64 `json:"zoneH"`
+	Theme       string  `json:"theme"`
 }
 
 const d23ReadJS = `(function(){
@@ -62,7 +68,8 @@ const d23ReadJS = `(function(){
     hud: hud ? hud.textContent : '', popup: !pop.classList.contains('hidden'),
     popupZ: parseFloat(getComputedStyle(pop).zIndex) || 0, overlayZ: parseFloat(getComputedStyle(ov).zIndex) || 0,
     panelH: box ? box.getBoundingClientRect().height : 0,
-    zoneH: document.querySelector('.zone.burn').getBoundingClientRect().height
+    zoneH: document.querySelector('.zone.burn').getBoundingClientRect().height,
+    theme: window.__bdevStationTheme ? (window.__bdevStationTheme() || '') : ''
   };
 })()`
 
@@ -144,11 +151,21 @@ func init() {
 		}
 
 		step("P opens the full Station and it draws", vkP, func(s d23State) bool {
-			return s.Overlay && s.FullCanvas && s.Lit > 500 && strings.Contains(s.Hud, "3 agents")
+			return s.Overlay && s.FullCanvas && s.Lit > 500 && strings.Contains(s.Hud, "3 agents") &&
+				strings.Contains(s.Hud, "SITE") && strings.Contains(s.Hud, "on site") && s.Theme == "site"
 		})
 		if _, err := screenshot(hwnd, "d23-station-full"); err != nil {
 			return err
 		}
+		step("T switches the Station to the space theme", vkT, func(s d23State) bool {
+			return s.Overlay && s.Lit > 500 && strings.Contains(s.Hud, "STATION") && strings.Contains(s.Hud, "on board") && s.Theme == "space"
+		})
+		if _, err := screenshot(hwnd, "d23-station-space"); err != nil {
+			return err
+		}
+		step("T again switches back to the site theme", vkT, func(s d23State) bool {
+			return s.Overlay && s.Lit > 500 && strings.Contains(s.Hud, "SITE") && strings.Contains(s.Hud, "on site") && s.Theme == "site"
+		})
 		if _, err := evalRaw(`(window.__bdevStationClick('fake-st-1'), true)`); err != nil {
 			errs = append(errs, fmt.Sprintf("station click: %v", err))
 		}
@@ -160,6 +177,15 @@ func init() {
 		})
 		step("Esc again closes the Station", vkEscape, func(s d23State) bool {
 			return !s.Overlay && !s.FullCanvas && s.BarsShown
+		})
+		// A "nothing happens" check must wait before it reads, or it passes
+		// before the key press has even been handled.
+		if err := pressKey(vkT); err != nil {
+			errs = append(errs, fmt.Sprintf("T closed: press: %v", err))
+		}
+		time.Sleep(500 * time.Millisecond)
+		step("T with the Station closed changes nothing", 0, func(s d23State) bool {
+			return !s.Overlay && s.Theme == "site"
 		})
 		step("O swaps the chart for the plan view and it draws", vkO, func(s d23State) bool {
 			return s.Panel && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH >= s.ZoneH-4 && s.Lit > 500 && strings.Contains(s.Hud, "3 agents")
@@ -173,7 +199,7 @@ func init() {
 		if len(errs) > 0 {
 			return fmt.Errorf("d23: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
 		}
-		fmt.Println("uicheck: d23: Station opens on P and O, draws in both views, popup above it, Esc order popup then Station")
+		fmt.Println("uicheck: d23: Station opens on P and O, draws in both views, popup above it, Esc order popup then Station, T flips site and space only while open")
 		return nil
 	}
 }

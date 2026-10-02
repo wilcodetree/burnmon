@@ -1,0 +1,71 @@
+{
+  "_comment": "Station site theme sprites for render_site.py. Keys are logical names; the sprite is <key>_<dir>.png (workers <key>_<dir>_<frame>.png). file is under tools/station_atlas/kits/ (gitignored) or proc:<name> (site_proc.py). Sizes are in tiles (a tile is 1 unit). Car Kit and Quaternius models face the opposite way to the Space Kit's, hence yaw 180; proc props are built facing -Y, render_site.py adds the 180 itself.",
+  "entries": {
+    "site_fence": {"file": "proc:fence", "dirs": ["SW", "NW"], "per_dir": {"SW": {"yaw_abs": 90, "offset": [-0.5, 0]}, "NW": {"yaw_abs": 0, "offset": [0, -0.5]}}},
+    "site_light": {"file": "proc:light", "dirs": ["SE"], "size": {"height": 2.0}},
+    "site_shelf": {"file": "proc:shelf", "dirs": ["SE"], "size": {"long": 0.95}},
+    "site_board": {"file": "proc:board", "dirs": ["SW"], "size": {"long": 0.95}},
+    "site_cone": {"file": "car-kit/Models/GLB format/cone.glb", "dirs": ["SE"], "size": {"height": 0.32}},
+    "site_cones": {
+      "dirs": ["SE"],
+      "parts": [
+        {"file": "car-kit/Models/GLB format/cone.glb", "size": {"height": 0.32}, "pos": [-0.22, -0.12, 0]},
+        {"file": "car-kit/Models/GLB format/cone.glb", "size": {"height": 0.32}, "pos": [0.2, -0.18, 0]},
+        {"file": "car-kit/Models/GLB format/cone.glb", "size": {"height": 0.32}, "pos": [-0.02, 0.22, 0]},
+        {"file": "car-kit/Models/GLB format/cone.glb", "size": {"height": 0.32}, "pos": [0.26, 0.2, 0]}
+      ]
+    },
+    "site_truck": {"file": "car-kit/Models/GLB format/delivery.glb", "dirs": ["SW"], "size": {"long": 2.0}, "yaw": 180},
+    "site_crates": {
+      "dirs": ["SE"],
+      "parts": [
+        {"file": "factory-kit/Models/GLB format/box-wide.glb", "size": {"long": 0.5}, "pos": [-0.22, 0.2, 0]},
+        {"file": "factory-kit/Models/GLB format/box-large.glb", "size": {"long": 0.5}, "pos": [0.22, 0.1, 0]},
+        {"file": "factory-kit/Models/GLB format/box-small.glb", "size": {"long": 0.4}, "pos": [0.22, 0.1, 0.4]},
+        {"file": "factory-kit/Models/GLB format/box-small.glb", "size": {"long": 0.4}, "pos": [-0.12, -0.26, 0]}
+      ]
+    },
+    "site_sign": {"file": "proc:sign", "dirs": ["SW"], "size": {"height": 0.95}},
+    "site_desk": {"file": "proc:desk", "dirs": ["SW", "SE"], "size": {"long": 0.95}},
+    "site_chair": {"file": "proc:chair", "dirs": ["NE", "NW", "SE", "SW"], "size": {"height": 0.5}},
+    "site_table": {"file": "proc:table", "dirs": ["SE"], "size": {"long": 0.97}},
+    "site_barrier": {"file": "proc:barrier", "dirs": ["SW"], "size": {"long": 2.0}},
+    "site_barricade": {"file": "proc:barricade", "dirs": ["SE"], "size": {"long": 0.95}},
+    "site_wall_half": {
+      "dirs": ["SW"], "yaw": 90,
+      "parts": [
+        {"file": "building-kit/Models/GLB format/wall-low.glb", "size": {"long": 0.6}, "pos": [0, 0.2, 0]},
+        {"file": "proc:wallstep", "pos": [0, -0.32, 0]}
+      ]
+    },
+    "site_bricks": {"file": "proc:bricks", "dirs": ["SE"], "size": {"long": 0.9}},
+    "site_scaffold": {
+      "dirs": ["SE"],
+      "parts": [
+        {"file": "factory-kit/Models/GLB format/structure-yellow-tall.glb", "size": {"height": 2.0}, "pos": [0, -0.4, 0]},
+        {"file": "factory-kit/Models/GLB format/structure-yellow-tall.glb", "size": {"height": 2.0}, "pos": [0, 0.4, 0]},
+        {"file": "factory-kit/Models/GLB format/structure-yellow-tall.glb", "size": {"height": 2.0}, "pos": [-0.4, 0, 0], "part_yaw": 90},
+        {"file": "factory-kit/Models/GLB format/structure-yellow-tall.glb", "size": {"height": 2.0}, "pos": [0.4, 0, 0], "part_yaw": 90},
+        {"file": "proc:deck", "pos": [0, 0, 1.0]},
+        {"file": "proc:deck", "pos": [0, 0, 1.95]}
+      ]
+    },
+    "site_excavator": {"file": "excavator/excavadora_0.blend", "dirs": ["SW"], "size": {"long": 2.0}, "yaw": -90, "frame": 1, "exclude": ["Terreno", "Icosphere", "Tierrra", "Tierra_pala"]},
+    "site_hut": {"file": "proc:hut", "dirs": ["SE"], "size": {"long": 1.6}},
+    "site_frame": {"file": "factory-kit/Models/GLB format/scanner-high.glb", "dirs": ["SW"], "size": {"height": 1.4}},
+    "site_screen": {"file": "factory-kit/Models/GLB format/screen-small.glb", "dirs": ["SW"], "size": {"height": 0.6}},
+    "site_generator": {"file": "proc:generator", "dirs": ["SE", "SW"], "size": {"long": 1.0}},
+    "site_pallet": {"file": "proc:pallet", "dirs": ["SE"], "size": {"long": 0.9}},
+    "site_container": {"file": "city-kit-industrial/Models/GLB format/shipping-container-a.glb", "dirs": ["SE"], "size": {"long": 2.0}, "yaw": 90},
+    "site_skip": {"file": "proc:skip", "dirs": ["SE"], "size": {"long": 1.5}},
+    "site_bin": {"file": "proc:bin", "dirs": ["SE"], "size": {"height": 0.6}},
+    "site_car": {"file": "car-kit/Models/GLB format/sedan.glb", "dirs": ["SW"], "size": {"long": 1.6}, "yaw": 180},
+    "site_van": {"file": "car-kit/Models/GLB format/van.glb", "dirs": ["SW"], "size": {"long": 1.8}, "yaw": 180},
+    "site_crane": {"file": "proc:crane", "dirs": ["SE"], "size": {"height": 4.0}},
+    "site_tank": {"file": "city-kit-industrial/Models/GLB format/detail-tank-large.glb", "dirs": ["SE"], "size": {"long": 1.2}},
+    "site_loader": {"file": "car-kit/Models/GLB format/tractor-shovel.glb", "dirs": ["NE", "NW", "SE", "SW"], "size": {"long": 1.3}, "yaw": 180},
+    "workerA": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "frames": [0, 16], "recolour": {"Worker_Vest": "#ff7a1a", "Worker_Yellow": "#f4f4ee"}},
+    "workerB": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "frames": [0, 16], "recolour": {"Worker_Vest": "#ffd21a", "Worker_Yellow": "#ffd21a"}},
+    "workerC": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "frames": [0, 16], "recolour": {"Worker_Vest": "#b6f018", "Worker_Yellow": "#2f6fe0"}}
+  }
+}

@@ -296,6 +296,62 @@ ignored), it just no longer does anything.
 
 ## BurnMon Dev (`burnmon-dev` merged into `main` at `f7f1c26`; this and later work commits on `main` directly)
 
+`v0.4.0-alpha.10`: the Station gets a second theme, a construction site (now the default), and
+BurnMon Dev gets a public light theme (spec `02_roadmap\2026-10-01_station_secret_screen.md`,
+sections "Themes", "Theme engine contract" and "Light and dark").
+
+- **Site theme:** same deck, rooms, stage rules, slots and paths as space; a theme swaps names,
+  props, floors, background, sprites and HUD wording only (`THEME_DEF` in `station.js`). Site props
+  keep every space prop's tile and blocks flag, so both themes share one blocked grid
+  (`tools\station_atlas\preview\check_themes.js` asserts it). Core room: a tower crane whose
+  code-drawn jib swings at a speed that follows the smoothed tok/min. The O plan view has its own
+  pixel sprites (fences, containers, crane, excavator, scaffolding, cones, workers in hi-vis).
+  **T** toggles the theme while the Station is open (lasts until restart); `"station_theme":
+  "site" | "space"` in `burnmon-dev.json` sets the startup theme (moved from `burnmon.json`,
+  Wilco 2026-10-02: that file is shared with `burnmon.exe`). The space theme renders
+  pixel-identical to alpha.9 in both views (headless diff, frozen clock; the only difference is the
+  "aboard" to "on board" wording already in the working tree).
+- **Site art:** 88 sprites in `station_atlas_site.js` (152,614 bytes), rendered in headless Blender
+  with `render_iso.py`'s own camera code (`render_site.py` runs its top half), so `proj` equals the
+  space atlas's exactly (`build_atlas.py --site` refuses to build otherwise). All CC0: Kenney City
+  Kit (Industrial), Factory Kit, Building Kit, Car Kit, Quaternius "Worker" (poly.pizza), an
+  OpenGameArt excavator (author Iacox 2022, not "noway" 2014 as the spec had it). No CC-BY item was
+  needed, so no public credit line; `tools\station_atlas\CREDITS.txt` lists every file. Props no kit
+  had (fence, barrier, hut, skip, crane mast and others) are procedural in `site_proc.py`. Kits
+  download into `tools\station_atlas\kits\` (gitignored). Spec deviation: Blender, not three.js.
+- **Light theme (public, README):** **L** toggles dark (default, unchanged) and light. Tokens on
+  `:root` plus a `[data-theme="light"]` override; session and harness colours get light shades
+  held to 3:1 on white. Remembered in `burnmon-dev-view.json` next to `burnmon-dev.db`, written by
+  the app through `bdevSetUITheme` and applied in the markup by `assemblePage`, so no dark flash.
+  localStorage was dropped: the page is loaded with NavigateToString (opaque origin). Restart
+  checked: L saved `light`, the next start came up light, L again saved `dark`.
+
+Proof. `go vet ./...`, `go test ./... -count=1` and `.\build.ps1` green; `node --check` green on the
+page script, `station.js`, both atlases and `wire_reference.js`; `check_themes.js` all pass.
+Tests first: `TestLoadDevConfigStationTheme`, `TestUIThemeRoundTrip`, `TestUIThemeClamping`,
+`TestAssemblePageUITheme` and the extended `TestAssemblePageSplicesStation` each failed before
+their code. uicheck: d0 to d18 and d21 to d24 pass; d23 now also checks T both ways and T ignored
+while closed; d24 is new (L to light with every series colour at least 3:1, L back restores the
+dark colours exactly, the binding exists). d19 and d20 fail as recorded for alpha.9 on this
+single 1600x1000 screen (To Do fit-dropped; process labels 0 px wide). Measurement, 10 + 10
+minutes, same exe, state checked every 5 s (no bad samples): closed Go 5.70 and WebView2 4.26
+percent of one core (alpha.9's closed runs: 13.1 and 8.0 summed), heap 9.5 MB; open, site theme,
+Go 10.98 and WebView2 16.32, heap up to 31.6 MB. Live check with the Station open: this Claude Code
+session went Grep to Reading, Thinking after the result, a 70 s PowerShell call to Running,
+Thinking, then Waiting; a real Codex task arrived, then showed Waiting after its final reply, but
+its two `exec` calls fell inside its Arriving window (Codex sessions first appear about 50 s in,
+when its `token_count` lands), so Running was not seen for Codex this time.
+
+**Known, not fixed (found this session, also in alpha.9):** with the Station open, CPU climbs with
+uptime. In consecutive 5-minute windows, alpha.9 (built from `HEAD`) used 14.8, 25.7, then 37.1
+percent of one core (Go plus WebView2), alpha.10 24.1, 44.6, then 63.9. Go climbs as well as
+WebView2. Closed, nothing climbs (Go about 5 percent for 12 minutes, payload 38 to 44 KB). Ruled
+out: frame and timer rates (steady, about 8.5 frames a second, one snapshot a second), snapshot
+build time and size, canvas paths left open, canvas allocation, theme switches. In one process,
+alternating themes every 5 minutes, site and space differ by about 3 points once the trend is
+removed, so the theme does not drive it. alpha.9's "+8.7 points open" was a single 10-minute
+sample and missed the climb. Wilco: ship alpha.10, find the cause in a follow-up.
+
 `v0.4.0-alpha.9`: the Station, an undocumented secret screen (`02_roadmap\2026-10-01_station_secret_screen.md`,
 "What is left" steps 1 to 8). **P** opens a full-window isometric deck where every live session
 is an astronaut in the room of its current stage; **O** replaces the whole burn zone (chart to

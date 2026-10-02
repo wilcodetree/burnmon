@@ -43,24 +43,40 @@ import (
 //go:embed page.html
 var pageHTML string
 
-// The Station (02_roadmap\2026-10-01_station_secret_screen.md): the
-// atlas and the screen, spliced into page.html at stationMarker by
-// assemblePage before SetHtml.
+// The Station (02_roadmap\2026-10-01_station_secret_screen.md): the two
+// atlases (space and construction site), the startup theme and the screen,
+// spliced into page.html at stationMarker by assemblePage before SetHtml.
 //
 //go:embed station/station_atlas.js
 var stationAtlasJS string
+
+//go:embed station/station_atlas_site.js
+var stationAtlasSiteJS string
 
 //go:embed station/station.js
 var stationJS string
 
 const stationMarker = "<!--BM_STATION-->"
 
-// assemblePage returns page.html with both Station scripts at its marker.
-// The page keeps working without them (window.BMStation is checked before
-// use), so a missing marker only costs the secret screen.
-func assemblePage() string {
-	return strings.Replace(pageHTML, stationMarker,
-		"<script>\n"+stationAtlasJS+"\n</script>\n<script>\n"+stationJS+"\n</script>", 1)
+// assemblePage returns page.html with the Station scripts at its marker:
+// both atlases, window.BM_STATION_THEME, then station.js. The theme lands
+// in a script string, so only the two known names pass and anything else
+// becomes "site". The page keeps working without the scripts
+// (window.BMStation is checked before use), so a missing marker only costs
+// the secret screen.
+func assemblePage(theme, uiTheme string) string {
+	if theme != "space" {
+		theme = "site"
+	}
+	page := pageHTML
+	if uiTheme == "light" {
+		// Light is set in the markup, so it is there before the first paint.
+		page = strings.Replace(page, `<html lang="en">`, `<html lang="en" data-theme="light">`, 1)
+	}
+	return strings.Replace(page, stationMarker,
+		"<script>\n"+stationAtlasJS+"\n</script>\n<script>\n"+stationAtlasSiteJS+"\n</script>\n"+
+			`<script>window.BM_STATION_THEME = "`+theme+`";</script>`+"\n"+
+			"<script>\n"+stationJS+"\n</script>", 1)
 }
 
 // Microsoft To Do panel payloads (section 9). Kept small and purpose-built
@@ -317,6 +333,17 @@ func main() {
 		a.hidden.Store(hidden)
 	}); err != nil {
 		log.Println("could not bind bdevSetHidden:", err)
+	}
+
+	// bdevSetUITheme: the L key's choice (light or dark), remembered in
+	// burnmon-dev-view.json (viewstate.go) and applied at the next start by
+	// assemblePage. Anything but the two names is ignored.
+	if err := w.Bind("bdevSetUITheme", func(theme string) {
+		if err := saveUITheme(dataDir, theme); err != nil {
+			log.Println("bdevSetUITheme:", err)
+		}
+	}); err != nil {
+		log.Println("could not bind bdevSetUITheme:", err)
 	}
 
 	// sysmonNowPayload adds the header pressure chip's score (internal/sysmon
@@ -676,7 +703,7 @@ func main() {
 
 	startUICheckServer(w)
 
-	w.SetHtml(assemblePage())
+	w.SetHtml(assemblePage(devCfg.StationTheme, loadUITheme(dataDir)))
 	go startBackgroundIngest(a, st, w)
 	w.Run()
 }

@@ -2,6 +2,23 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-10-02, Station site theme and BurnMon Dev light theme, v0.4.0-alpha.10
+
+Started as a repeat of the alpha.9 prompt; steps 1 to 8 were already shipped and tagged, so Wilco
+switched to the spec's next item, the construction site theme. Wilco moved `station_theme` from
+`burnmon.json` to `burnmon-dev.json`, asked mid-session for a dark and light toggle (L, public,
+README), and chose to ship despite the CPU climb below. Plan on Opus, three Sonnet dev tracks in
+parallel (art pipeline, `station.js` theme engine, Go and page wiring plus light theme), verify on
+Opus. The art reuses `render_iso.py`'s calibrated camera in Blender, not the spec's three.js
+route; all 88 sprites are CC0 or procedural. The light theme first used localStorage and was moved
+to a Go-written `burnmon-dev-view.json` because NavigateToString gives the page an opaque origin;
+the restart check passed. The space theme was diffed pixel for pixel against `HEAD`. Scales tuned
+by eye after the first real-atlas screenshot (workers 1.2 to 1.6, gate barrier 1 to 2). uicheck d0
+to d24 pass except d19 and d20 (same as alpha.9 on this screen). An A/B measurement then found the
+open Station's cost climbing with uptime, present in alpha.9 too; frame rates, payloads, canvas
+paths and allocations ruled out, cause open. Live check: Claude stages followed tools; Codex's
+calls fell inside its Arriving window. Numbers: `STATUS.md`'s alpha.10 entry. Not committed.
+
 ## 2026-10-01/02, the Station secret screen, v0.4.0-alpha.9
 
 Spec `02_roadmap\2026-10-01_station_secret_screen.md`, steps 1 to 8, on `main`, Claude Code on

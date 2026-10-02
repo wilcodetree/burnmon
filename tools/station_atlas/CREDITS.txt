@@ -1,0 +1,64 @@
+Station art credits (BurnMon Dev, the Station secret screen)
+=============================================================
+
+Every sprite in cmd/burnmon-dev/station/station_atlas.js (space theme) and
+station_atlas_site.js (site theme) comes from the sources below. All of them are
+CC0 1.0 (public domain, https://creativecommons.org/publicdomain/zero/1.0/).
+No CC-BY item is used, so no credit line is required by a licence. Crediting
+the authors is a courtesy and is done here.
+
+Checked 2026-10-02. The downloaded kits live in tools/station_atlas/kits/
+(gitignored); render_site.py records the kit files it renders in
+kits/_renders_site/sources.json.
+
+Space theme (station_atlas.js)
+------------------------------
+Kenney, Space Kit 2.0, https://kenney.nl/assets/space-kit, CC0.
+Licence text: KENNEY_SPACE_KIT_LICENSE.txt. Credit line: Kenney, www.kenney.nl
+
+Site theme (station_atlas_site.js)
+----------------------------------
+Kenney, City Kit (Industrial) 2.0, https://kenney.nl/assets/city-kit-industrial, CC0.
+  Licence text: KENNEY_CITY_KIT_INDUSTRIAL_LICENSE.txt
+  Files used (Models/GLB format): shipping-container-a.glb (site_container),
+  detail-tank-large.glb (site_tank)
+
+Kenney, Factory Kit 3.0, https://kenney.nl/assets/factory-kit, CC0.
+  Licence text: KENNEY_FACTORY_KIT_LICENSE.txt
+  Files used: box-wide.glb, box-large.glb, box-small.glb (site_crates),
+  structure-yellow-tall.glb (site_scaffold, four frames around two decks),
+  scanner-high.glb (site_frame), screen-small.glb (site_screen)
+
+Kenney, Building Kit 1.0, https://kenney.nl/assets/building-kit, CC0.
+  Licence text: KENNEY_BUILDING_KIT_LICENSE.txt
+  Files used: wall-low.glb (site_wall_half)
+
+Kenney, Car Kit 3.1, https://kenney.nl/assets/car-kit, CC0.
+  Licence text: KENNEY_CAR_KIT_LICENSE.txt
+  Files used: cone.glb (site_cone, site_cones), delivery.glb (site_truck),
+  sedan.glb (site_car), van.glb (site_van), tractor-shovel.glb (site_loader)
+
+Quaternius, "Worker" (rigged, walk animation), https://poly.pizza/m/Yg2bQZO6Hj,
+  CC0 1.0 as stated on that page (the Quaternius character family, from the
+  Ultimate Modular Men pack per the project spec). File used:
+  worker_Yg2bQZO6Hj.glb, the "CharacterArmature|Walk" action at frames 0 and 16.
+  Vest and helmet materials are recoloured in site_manifest.json (workerA, B, C).
+  Quaternius: https://quaternius.com
+  Note: poly.pizza also lists a second "Worker" by Quaternius (E8079Ahx7k) under
+  CC-BY. It is not used.
+
+Iacox, "Excavator", https://opengameart.org/content/excavator, CC0 as stated on
+  that page (submitted 2022-01-31). File used: excavadora_0.blend, posed at
+  frame 1 and frozen to static meshes. The project spec named an excavator.blend
+  by "noway"; no such asset was found on OpenGameArt, this one is the CC0
+  excavator that was.
+
+Original work in this repository (no third-party licence): the procedural props
+in site_proc.py (fence panel, light tower, plan cabinet, whiteboard, warning
+sign, desk, chair, table, boom barrier, barricade, brick pallet, pallet, brick
+wall step, site cabin, generator, skip, wheelie bin, tower crane mast, scaffold
+deck), and render_site.py, build_atlas.py, site_manifest.json.
+
+Not used, listed in the spec as fallbacks: "Scaffolding" by Marisha
+(poly.pizza 1_PM9UWLgAb) and Poly by Google vehicles (CC-BY 3.0). If one is
+ever added, its credit line goes here and on the About page.

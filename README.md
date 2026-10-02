@@ -183,7 +183,7 @@ built and cross-compiled, never run on real macOS or Linux hardware.
 
 ## BurnMon Dev
 
-`burnmon-dev.exe` (`v0.4.0-alpha.8`) is a second, developer-facing window: what running
+`burnmon-dev.exe` (`v0.4.0-alpha.10`) is a second, developer-facing window: what running
 AI agents burn (tokens, cost, turns) on top, what the laptop does (CPU, per-core heat
 grid, memory, disk, network, GPU, harness process groups) below, on one time axis, so a
 performance problem and a token spike show up together. It reuses `burnmon.exe`'s own
@@ -198,6 +198,10 @@ responsive down to a single compact column.
   size, position, maximized state and monitor are remembered and restored if that monitor
   still exists.
 - **F11** toggles fullscreen; **Esc** also leaves it.
+- **L** switches between the dark theme (the default) and a light one, the whole window
+  at once, charts included; the choice is remembered for the next start
+  (in `burnmon-dev-view.json`, next to `burnmon-dev.db`). Vendor colours
+  stay the same families, darkened only where they would be too faint on white.
 - **One tick**: every panel repaints from one snapshot a second. The System chart and
   process-group history arrive as deltas (only samples the page does not hold yet), so
   the payload stays the same size however long the window runs. A late snapshot skips

@@ -57,6 +57,94 @@ byte offset) and writes a response's `token_count` only after that response's to
 so a call whose turn key matches no turn of the session counts as in the latest turn when it
 is newer than the second-newest turn (`internal\live`, `inLatestTurn`).
 
+## Themes: construction site (default) and space station
+
+Decided 2026-10-02 with Wilco. Two themes share one engine, one deck grid and one set of stage
+rules; a theme only swaps room names, props, floors, sprites and the HUD wording.
+
+- **T** toggles the theme while the Station is open, in either view. It lasts until the app
+  restarts.
+- `burnmon-dev.json` sets the startup theme: `"station_theme": "site"` (default when the key
+  is absent or unknown) or `"space"`. Moved from `burnmon.json` (Wilco, 2026-10-02): that file
+  is shared with `burnmon.exe`, and the Station only exists in `burnmon-dev.exe`. Not
+  documented anywhere public, so the screen stays secret.
+- HUD title and count: site theme `SITE` and "N agents on site"; space theme `STATION` and
+  "N agents on board" (the space wording is already live in `station.js`).
+
+| Stage | Space station | Construction site |
+|---|---|---|
+| reading | Archive | Drawing office (plans on the wall) |
+| fetching | Uplink | Delivery gate |
+| planning | Plan table | Site office meeting table |
+| coding | Fabricator | Build zone (half-built walls, scaffolding) |
+| running | Test chamber | Inspection and QA |
+| thinking | Think pods | Foreman's hut |
+| delegating | Briefing | Toolbox meeting |
+| waiting | Lounge | Site canteen |
+| compacting | Recycler | Skip container |
+| dormant | Cryo bay | Parking area |
+| arriving | Airlock | Site entrance with barrier |
+| (core) | Reactor | Tower crane whose swing speed follows tok/min |
+
+### Site art sources (licences checked 2026-10-02)
+
+| Need | Source | Licence |
+|---|---|---|
+| Site office (containers), tanks | Kenney City Kit (Industrial) 2.0 | CC0 |
+| Crane, cones, crates, warning signs, catwalks, screens | Kenney Factory Kit 3.0 | CC0 |
+| Half-built walls, columns, stairs, barricades | Kenney Building Kit | CC0 |
+| Wheel loader, trucks, van, cones | Kenney Car Kit | CC0 |
+| Workers in hard hat and hi-vis vest (rigged, 24 animations) | Quaternius Ultimate Modular Men Pack, "Worker", via poly.pizza | CC0 |
+| Excavator | "noway" on OpenGameArt, `excavator.blend` (2014, untextured, recolour) | CC0 |
+| Scaffolding tower | "Scaffolding" by Marisha, poly.pizza `1_PM9UWLgAb` | CC-BY 3.0, credit required |
+| Bulldozer, dump truck (optional) | Poly by Google via poly.pizza `ddxtaegI3HQ`, `1BpGYg14QGD` | CC-BY 3.0, credit required |
+
+CC-BY items need a credit line in `tools\station_atlas\CREDITS.txt` and the About page;
+everything else is CC0. Rejected: Jayclock's itch.io excavator (no formal licence, only "feel
+free to use"), Meshy AI models (generated, style mismatch), Sketchfab and CGTrader paid or
+CC-BY-NC models.
+
+Pipeline: none of these kits ship isometric renders. Changed 2026-10-02 (alpha.10 build):
+`tools\station_atlas\render_site.py` renders them in headless Blender 5.2 with the exact camera
+`render_iso.py` already uses for the space sprites (elevation 30, azimuth 30, 512 x 512, 130 px
+per tile), driven by a manifest `site_manifest.json`, instead of a three.js re-implementation
+of that camera, so both atlases share one calibrated projection (`proj` must match). The
+existing `build_atlas.py` packs them into `station_atlas_site.js` (`window.BM_STATION_ATLAS_SITE`).
+Kits are downloaded into `tools\station_atlas\kits\` (gitignored). CC0 first: a CC-BY item is
+used only where no CC0 piece does the job, and every one used is listed in `CREDITS.txt`.
+The worker gets 8 directions times 2 walk frames from its walk animation, in three vest
+colours (one per vendor family, as astronautA, astronautB and alien are in space). The O view
+stays code-drawn pixel art, with new pixel sprites for containers, crane, excavator,
+scaffolding, cones and workers.
+
+### Theme engine contract (alpha.10)
+
+- Site sprite names carry a `site_` prefix (workers `workerA|B|C_<dir8>_<0|1>`), so the
+  pixel view's name patterns never match a space sprite by accident.
+- Site rooms keep the space rooms' prop footprint tile for tile (same blocking tiles, same
+  slots), so paths and slots are identical in both themes and a theme swap moves nobody.
+- `BMStation.create({atlases: {space, site}, theme, onAgentClick})`, `st.setTheme(name)`,
+  `st.theme()`. The page passes `window.BM_STATION_THEME` (spliced in by Go from
+  `burnmon-dev.json`) as the startup theme; T calls `setTheme` while the Station is mounted.
+- Tower crane (core): the mast is a sprite, the jib is drawn in code and swings at a speed
+  that follows the smoothed tok/min, as the reactor's pulse does in space.
+
+Built in `v0.4.0-alpha.10` (Claude Code on Windows, 2026-10-02); results, the excavator author
+correction (Iacox 2022, CC0) and the open CPU climb are in `STATUS.md`'s alpha.10 entry.
+
+## Light and dark (alpha.10, public)
+
+Not part of the secret screen; documented in README. **L** toggles BurnMon Dev between its
+dark theme (default) and a light theme, ignored in inputs and with Ctrl, Alt or Meta held,
+like P and O. The choice is remembered across restarts in `burnmon-dev-view.json` next to
+`burnmon-dev.db`, written by the app through the `bdevSetUITheme` binding (a per-machine view
+preference, no config key; `burnmon-dev.json` stays the user's own file and is never
+rewritten). Not localStorage: the page is loaded with NavigateToString, whose opaque origin
+blocks it. At startup Go puts `data-theme="light"` into the `<html>` tag, so there is no
+dark flash and no script. Light swaps the `:root` tokens and every
+hard-coded colour the page and its canvases draw with; session colours stay as they are,
+darkened only where they fail contrast on white. The Station keeps its own scene colours.
+
 ## Art
 
 Kenney Space Kit 2.0, CC0 (public domain), `C:\ZND\50_projects\burnmon\tools\station_atlas\KENNEY_SPACE_KIT_LICENSE.txt`.

@@ -9,7 +9,25 @@
   --amber:#ffa028; --amber2:#ffc46b;
   --txt:#cfd8e3; --dim:#66788c;
   --grn:#00d26a; --red:#ff4b4b; --blu:#4da6ff; --cyn:#38d3e3; --mag:#d68cf0; --mag-dim:#a76dbb; --yel:#ffd75f;
+  --hdr:#000; --strong:#fff; --track:#1a2330; --panel3:#0d1219;
+  --sb:#8a7245; --sb-hover:#a68753; --scrim:rgba(0,0,0,.6);
   --mono:Consolas,"Cascadia Mono","IBM Plex Mono",monospace;
+}
+/* Light theme (L key, remembered by the app in
+   burnmon-dev-view.json, which Go writes into the <html> tag so it is set
+   before first paint). Every token the dark :root above
+   defines is overridden here, nothing else in the CSS is theme specific.
+   The accent and signal colours are darkened until they hold at least 3:1
+   against --panel (#fff) and --panel2, the WCAG bar for graphics; --amber,
+   --txt and --dim are text colours and hold 4.5:1. The session and harness
+   colours drawn from script have their own light set (HARNESS_HUE_LIGHT). */
+:root[data-theme="light"]{
+  --bg:#e9edf2; --panel:#ffffff; --panel2:#f0f3f7; --bd:#cdd5df;
+  --amber:#9a5200; --amber2:#b86a00;
+  --txt:#1f2a37; --dim:#586a7e;
+  --grn:#00873f; --red:#d62c2c; --blu:#0b6fd1; --cyn:#00899b; --mag:#b03fd0; --mag-dim:#8a4aa0; --yel:#9a7400;
+  --hdr:#ffffff; --strong:#0b1220; --track:#dfe5ec; --panel3:#f6f8fb;
+  --sb:#b79a63; --sb-hover:#9c8049; --scrim:rgba(15,23,32,.45);
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -42,7 +60,7 @@ body{
 .loadingoverlay.hidden{display:none}
 .loadingoverlay .logo{font-size:20px}
 #loadingStepText{font-size:12px; color:var(--dim)}
-.loadingbar{width:280px; height:4px; background:#10151d; border:1px solid var(--bd)}
+.loadingbar{width:280px; height:4px; background:var(--panel2); border:1px solid var(--bd)}
 .loadingbar i{display:block; height:100%; background:var(--amber); transition:width .3s ease-out}
 
 /* header, UI review patch section 1: smaller, quieter, no boxed chips.
@@ -50,11 +68,11 @@ body{
    clipped against its left neighbour) now that hltotal reserves its own
    fixed width below rather than sizing exactly to its own text. */
 header{
-  flex:0 0 auto; min-height:32px; background:#000; border-bottom:2px solid var(--amber);
+  flex:0 0 auto; min-height:32px; background:var(--hdr); border-bottom:2px solid var(--amber);
   display:flex; align-items:center; flex-wrap:wrap; gap:6px 24px; padding:5px 14px;
 }
 .brand{display:flex; flex-direction:column; gap:0; flex:0 0 auto; line-height:1.15}
-.logo{font-size:13px; font-weight:700; color:#fff; letter-spacing:1px; white-space:nowrap}
+.logo{font-size:13px; font-weight:700; color:var(--strong); letter-spacing:1px; white-space:nowrap}
 .logo span{color:var(--amber)}
 .pressuretext{font-size:10px; font-weight:700; letter-spacing:.06em; white-space:nowrap}
 /* hltotal, headline patch section 4: whole number with thousands separators
@@ -69,7 +87,7 @@ header{
    hugging the brand, checked by screenshot at five widths (review,
    2026-09-26: an earlier version of this comment overstated the box as
    consuming the header's whole free span on its own). */
-.hltotal{font-size:36px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; white-space:nowrap; min-width:15ch; flex:1 1 auto; text-align:center}
+.hltotal{font-size:36px; font-weight:700; color:var(--strong); font-variant-numeric:tabular-nums; white-space:nowrap; min-width:15ch; flex:1 1 auto; text-align:center}
 @media (min-width: 1152px){
   .hltotal{font-size:48px}
 }
@@ -139,11 +157,11 @@ main{flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; pad
    descending by tokens, so trimming from the end drops the smallest). */
 .burnlegend{display:flex; flex-wrap:wrap; gap:3px 10px; max-height:40px; overflow:hidden; padding:2px 6px; flex:0 0 auto}
 .legenditem{display:inline-flex; align-items:center; font-size:10px; color:var(--dim); white-space:nowrap}
-.legenditem b{color:#fff; font-weight:600; margin-left:4px}
+.legenditem b{color:var(--strong); font-weight:600; margin-left:4px}
 .cards{display:flex; gap:6px; flex-wrap:wrap; flex:0 0 auto}
 .card{flex:1 1 140px; background:var(--panel); border:1px solid var(--bd); padding:8px 10px; min-width:0}
 .card h4{margin:0 0 4px; font:12px/1 var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.ctxbar{height:5px; background:#1a2330; margin:4px 0}
+.ctxbar{height:5px; background:var(--track); margin:4px 0}
 .ctxbar i{display:block; height:100%}
 .card small{display:block; font:11px/1.4 var(--mono); color:var(--dim)}
 .card small b{color:var(--txt); font-weight:600}
@@ -156,7 +174,7 @@ td.num{text-align:right; font-variant-numeric:tabular-nums}
 .dot{display:inline-block; width:8px; height:8px; border-radius:1px; margin-right:5px; vertical-align:middle}
 
 /* vendor strip totals row, section 3 */
-tr.totalrow td{font-weight:700; color:#fff; border-bottom:1px solid var(--bd)}
+tr.totalrow td{font-weight:700; color:var(--strong); border-bottom:1px solid var(--bd)}
 
 /* turn ticker, section 5: dense lines, amber outline tag, white tokens, hover, click.
    Headline patch section 1: the ticker is the one exception to "no scrollbars" - rows
@@ -165,23 +183,23 @@ tr.totalrow td{font-weight:700; color:#fff; border-bottom:1px solid var(--bd)}
    trips because flex children shrink to fit instead of overflowing), and the box
    scrolls vertically with a thin scrollbar in the house style instead. */
 .ticker{display:flex; flex-direction:column; gap:2px; flex:1; min-height:0; overflow-y:auto; overflow-x:hidden;
-  padding:4px 10px; scrollbar-width:thin; scrollbar-color:#8a7245 var(--panel2)}
+  padding:4px 10px; scrollbar-width:thin; scrollbar-color:var(--sb) var(--panel2)}
 .ticker::-webkit-scrollbar{width:8px}
 .ticker::-webkit-scrollbar-track{background:var(--panel2)}
-.ticker::-webkit-scrollbar-thumb{background:#8a7245}
-.ticker::-webkit-scrollbar-thumb:hover{background:#a68753}
+.ticker::-webkit-scrollbar-thumb{background:var(--sb)}
+.ticker::-webkit-scrollbar-thumb:hover{background:var(--sb-hover)}
 .trow{display:flex; gap:8px; align-items:baseline; font:11.5px/1.35 var(--mono); white-space:nowrap; overflow:hidden;
   padding:1px 4px; cursor:default; flex:0 0 22px}
 .trow.clickable{cursor:pointer}
 .trow.clickable:hover{background:var(--panel2)}
 .trow .t{color:var(--dim)}
 .trow .h{font-weight:700}
-.trow .m{color:#fff; overflow:hidden; text-overflow:ellipsis}
+.trow .m{color:var(--strong); overflow:hidden; text-overflow:ellipsis}
 .tag{font:10px/1 var(--mono); padding:1px 5px; border:1px solid var(--amber); color:var(--amber);
   text-transform:uppercase; letter-spacing:.03em}
 
 /* turn detail popup, section 5 */
-#turnPopupOverlay{position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center}
+#turnPopupOverlay{position:fixed; inset:0; background:var(--scrim); z-index:1000; align-items:center; justify-content:center}
 #turnPopupOverlay.hidden{display:none}
 #turnPopupOverlay:not(.hidden){display:flex}
 /* Station (P full window, O in the burn zone): above the page and an
@@ -192,7 +210,7 @@ tr.totalrow td{font-weight:700; color:#fff; border-bottom:1px solid var(--bd)}
 #turnPopupOverlay.over-station{z-index:1600}
 #turnPopup{position:relative; background:var(--panel); border:1px solid var(--amber); color:var(--txt);
   padding:18px 20px; width:480px; max-width:92vw; max-height:84vh; overflow:hidden; font-size:12px}
-#turnPopup h3{margin:0 0 2px; color:#fff; font-size:14px}
+#turnPopup h3{margin:0 0 2px; color:var(--strong); font-size:14px}
 #turnPopup h4{margin:14px 0 5px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--amber)}
 #turnPopupClose{position:absolute; top:10px; right:12px; background:none; border:none; color:var(--dim);
   font-size:18px; line-height:1; cursor:pointer}
@@ -203,7 +221,7 @@ tr.totalrow td{font-weight:700; color:#fff; border-bottom:1px solid var(--bd)}
 /* vendor strip row expand */
 tbody tr.vrow{cursor:pointer}
 tbody tr.vrow:hover{background:var(--panel2)}
-tr.vexpand td{padding:6px 8px 8px 24px; color:var(--txt); font-size:11px; background:#0d1219; border-top:1px dashed var(--bd)}
+tr.vexpand td{padding:6px 8px 8px 24px; color:var(--txt); font-size:11px; background:var(--panel3); border-top:1px dashed var(--bd)}
 tr.vexpand b{font-variant-numeric:tabular-nums}
 
 /* activity + harness heatmap, section 4: side by side. Activity sizes to its
@@ -249,13 +267,13 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 /* system panel, section 6: perfadvisor layout, smoother and a little smaller */
 .cpubox{padding:8px 10px; flex:0 0 auto}
 .cpubox h4{margin:0 0 6px; font:11px/1 var(--mono); color:var(--dim); letter-spacing:.05em; text-transform:uppercase; font-weight:400}
-.cpubar{position:relative; height:16px; background:#10151d; border:1px solid var(--bd); margin-bottom:2px; overflow:hidden}
+.cpubar{position:relative; height:16px; background:var(--panel2); border:1px solid var(--bd); margin-bottom:2px; overflow:hidden}
 .cpubar i{display:block; height:100%; background:var(--grn)}
-.cpubar span{position:absolute; right:6px; top:0; line-height:16px; font-size:11px; color:#fff; font-variant-numeric:tabular-nums}
+.cpubar span{position:absolute; right:6px; top:0; line-height:16px; font-size:11px; color:var(--strong); font-variant-numeric:tabular-nums}
 .cpumeta{font-size:10px; color:var(--dim); margin-bottom:6px}
 .coregrid{display:grid; grid-template-columns:repeat(5,1fr); gap:3px 6px}
 .coreitem{display:flex; align-items:center; gap:4px; font-size:10px; color:var(--dim); min-width:0}
-.corebar{position:relative; flex:1; height:8px; background:#10151d; border:1px solid var(--bd); min-width:0}
+.corebar{position:relative; flex:1; height:8px; background:var(--panel2); border:1px solid var(--bd); min-width:0}
 .corebar i{display:block; height:100%}
 /* WS2 alpha.3 item 2: fixed slots on both sides of every .corebar so all 20
    bars share the identical track length regardless of the label/value text
@@ -281,10 +299,10 @@ tr.vexpand b{font-variant-numeric:tabular-nums}
 .sysbottom{display:flex; gap:4px; flex:0 0 auto}
 .sysbox{flex:1; background:var(--panel); border:1px solid var(--bd); padding:8px 10px; min-width:0}
 .sysbox h4{margin:0 0 6px; font:10px/1 var(--mono); color:var(--dim); letter-spacing:.05em; text-transform:uppercase; font-weight:400}
-.sysbar{position:relative; height:10px; background:#10151d; border:1px solid var(--bd); margin-bottom:4px}
+.sysbar{position:relative; height:10px; background:var(--panel2); border:1px solid var(--bd); margin-bottom:4px}
 .sysbar i{display:block; height:100%}
 .sysbox .line{font-size:11px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.sysbox .line b{color:#fff; font-variant-numeric:tabular-nums}
+.sysbox .line b{color:var(--strong); font-variant-numeric:tabular-nums}
 .sysbox .dim{color:var(--dim)}
 /* alpha.7 item 5: Memory, Disks and Network share one row pattern (value
    line, its bar, a dim detail line) on one fixed row height, so row N sits
@@ -500,7 +518,21 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     'copilot-cli': HARNESS_HUE.copilotCli,
     'copilot-vscode': HARNESS_HUE.copilotVscode
   };
-  function agentColor(agent){ return AGENT_COLOR[agent] || HARNESS_HUE.other; }
+  // Light theme (L key): the same nine hues, darkened until each holds 3:1
+  // (WCAG, graphics) against the white panel. Only 'other' already passes,
+  // so it is the one entry left as it is. themed() swaps a dark hue for its
+  // light twin by key, so the maps above and below stay the one place that
+  // says which tool gets which hue.
+  var HARNESS_HUE_LIGHT = {
+    claudeCode: '#c26a00', cowork: '#1a73d9', codex: '#7c5ce6',
+    copilotCli: '#3f9a14', copilotVscode: '#0f9448', hermes: '#b53fcf',
+    burnmonDev: '#a68100', wsl: '#d6246f', other: '#66788c'
+  };
+  var LIGHT_OF_HUE = {};
+  Object.keys(HARNESS_HUE).forEach(function(k){ LIGHT_OF_HUE[HARNESS_HUE[k]] = HARNESS_HUE_LIGHT[k]; });
+  function isLightTheme(){ return document.documentElement.getAttribute('data-theme') === 'light'; }
+  function themed(hex){ return isLightTheme() ? (LIGHT_OF_HUE[hex] || hex) : hex; }
+  function agentColor(agent){ return themed(AGENT_COLOR[agent] || HARNESS_HUE.other); }
 
   // hexToHSL/hslToHex (WS2 follow-up, 2026-09-28): shared hex<->HSL math,
   // used by sessionColor below to hold a vendor's own hue and saturation
@@ -538,6 +570,18 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     return '#' + ((1 << 24) + (to255(hue2rgb(p, q, h + 1 / 3)) << 16) +
       (to255(hue2rgb(p, q, h)) << 8) + to255(hue2rgb(p, q, h - 1 / 3))).toString(16).slice(1);
   }
+  // lightFloor: darkens hex (hue and saturation held) until it has 3:1
+  // contrast against the white light-theme panel, the WCAG bar for graphics.
+  function relLum(hex){
+    var n = parseInt(hex.slice(1), 16);
+    function lin(v){ v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+    return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  }
+  function lightFloor(hex){
+    var hsl = hexToHSL(hex), l = hsl.l;
+    while(l > 0.1 && 1.05 / (relLum(hex) + 0.05) < 3){ l -= 0.02; hex = hslToHex(hsl.h, hsl.s, l); }
+    return hex;
+  }
 
   // HARNESS_COLOR: internal/sysmon's own vocabulary (process groups, harness
   // heatmap), the same nine hues as AGENT_COLOR above for the tools both
@@ -565,7 +609,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     'burnmon-dev-webview2': HARNESS_HUE.burnmonDev,
     'node': HARNESS_HUE.other
   };
-  function harnessColor(h){ return HARNESS_COLOR[h] || HARNESS_HUE.other; }
+  function harnessColor(h){ return themed(HARNESS_COLOR[h] || HARNESS_HUE.other); }
 
   // sessionColor (WS2 follow-up, 2026-09-28, supersedes the 2026-09-24
   // "distinct colours per session" decision): a session's colour is now its
@@ -580,6 +624,11 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   // shades collide once clamped for an already-light base (codex, hermes
   // are both L>=0.73 before shading).
   var SESSION_SHADE_L = [0.66, 0.49, 0.83, 0.32];
+  // Light theme: the same four steps, same order, on the darkened hues;
+  // lightFloor then pulls any shade still under 3:1 on white darker.
+  var SESSION_SHADE_L_LIGHT = [0.42, 0.30, 0.54, 0.20];
+  var sessionShadeInfo = {};      // sid -> {agent, idx}, what the light shade is built from
+  var sessionColorLightMap = {};
   var sessionColorMap = {};
   var sessionRankMap = {};
   var sessionColorOrder = 0;
@@ -649,6 +698,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     vendorSessionCounts[vendor] = (vendorSessionCounts[vendor] || 0) + 1;
     var hsl = hexToHSL(base);
     sessionColorMap[sid] = hslToHex(hsl.h, hsl.s, SESSION_SHADE_L[shadeIdx]);
+    sessionShadeInfo[sid] = { agent: agent, idx: shadeIdx };
     return sessionColorMap[sid];
   }
 
@@ -662,12 +712,27 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   // collision is not the concern the rewrite above targets. Returns
   // HARNESS_HUE.other uncached while agent is not yet known, same reasoning
   // as assignSessionColor's own guard.
-  function sessionColor(sid, agent){
+  function sessionColorDark(sid, agent){
     if(sessionColorMap[sid]) return sessionColorMap[sid];
     if(!AGENT_COLOR[agent]) return HARNESS_HUE.other;
     var vendor = agent;
     var shadeIdx = (vendorSessionCounts[vendor] || 0) % SESSION_SHADE_L.length;
     return assignSessionColor(sid, agent, vendor, shadeIdx);
+  }
+
+  // sessionColor: sessionColorDark's pick in the dark theme, its light twin
+  // (same vendor hue and shade slot, darkened) in the light one. The Station
+  // keeps its own scene colours and is fed sessionColorDark.
+  function sessionColor(sid, agent){
+    var dark = sessionColorDark(sid, agent);
+    if(!isLightTheme()) return dark;
+    var info = sessionShadeInfo[sid];
+    if(!info) return themed(dark);
+    if(!sessionColorLightMap[sid]){
+      var hsl = hexToHSL(themed(AGENT_COLOR[info.agent]));
+      sessionColorLightMap[sid] = lightFloor(hslToHex(hsl.h, hsl.s, SESSION_SHADE_L_LIGHT[info.idx]));
+    }
+    return sessionColorLightMap[sid];
   }
 
   // cropToFit renders itemHtml (already ordered so the items to drop first
@@ -1175,6 +1240,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     tr.dataset.agent = agent;
     var tdName = document.createElement('td');
     tdName.innerHTML = '<span class="dot" style="background:' + agentColor(agent) + '"></span>' + label;
+    tdName.firstChild.dataset.agent = agent; // applyTheme recolours it
     var tdToday = document.createElement('td'); tdToday.className = 'num';
     var tdWeek = document.createElement('td'); tdWeek.className = 'num';
     var tdMonth = document.createElement('td'); tdMonth.className = 'num';
@@ -1460,6 +1526,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
       row._t.textContent = fmtHMS(new Date(t.at));
       row._h.textContent = t.agent;
       row._h.style.color = agentColor(t.agent);
+      row._h.dataset.agent = t.agent; // applyTheme recolours rows a paused repaint skipped
       row._tag.textContent = t.finding ? t.finding.Kind : '';
       row._tag.style.display = t.finding ? '' : 'none';
       var tok = (t.fresh || 0) + (t.cache_write || 0) + (t.cache_read || 0) + (t.output || 0);
@@ -1536,7 +1603,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   // opened) would send every agent to the lounge for one beat.
   function snapHasStages(b){ return !(b && b.sessions && b.sessions.length && !b.sessions[0].stage); }
   function feedStation(){
-    if(station && station.isMounted() && lastBurnSnap && snapHasStages(lastBurnSnap)) station.update(BMStation.fromSnapshot(lastBurnSnap, sessionColor));
+    if(station && station.isMounted() && lastBurnSnap && snapHasStages(lastBurnSnap)) station.update(BMStation.fromSnapshot(lastBurnSnap, sessionColorDark));
   }
   function stationAgentClick(sid){
     var turn = stationTurnCount(sid);
@@ -1546,9 +1613,20 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   }
   window.__bdevStationClick = stationAgentClick; // tools\uicheck (check_d23.go) only
   function ensureStation(){
-    if(!station && window.BMStation) station = BMStation.create({atlas: window.BM_STATION_ATLAS, onAgentClick: stationAgentClick});
+    if(!station && window.BMStation) station = BMStation.create({
+      atlases: {space: window.BM_STATION_ATLAS, site: window.BM_STATION_ATLAS_SITE},
+      theme: window.BM_STATION_THEME || 'site', onAgentClick: stationAgentClick
+    });
     return station;
   }
+  // T: the Station's own theme (site or space), only while it is open. It
+  // lasts until the app restarts: no storage, the next start reads
+  // burnmon-dev.json again.
+  function toggleStationTheme(){
+    if(!stationMode || !station || typeof station.setTheme !== 'function' || typeof station.theme !== 'function') return;
+    station.setTheme(station.theme() === 'space' ? 'site' : 'space');
+  }
+  window.__bdevStationTheme = function(){ return station && typeof station.theme === 'function' ? station.theme() : null; }; // tools\uicheck (check_d23.go) only
   function mountStation(){
     if(station.isMounted()) return;
     if(stationMode === 'full'){
@@ -1608,7 +1686,36 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     var k = (e.key || '').toLowerCase();
     if(k === 'p'){ stationMode === 'full' ? closeStation() : openStation('full'); e.preventDefault(); }
     else if(k === 'o'){ stationMode === 'panel' ? closeStation() : openStation('panel'); e.preventDefault(); }
+    else if(k === 't'){ toggleStationTheme(); e.preventDefault(); }
+    else if(k === 'l'){ toggleLightTheme(); e.preventDefault(); }
   });
+
+  // ---------- Light and dark (L key)
+  // The whole page follows data-theme on <html> through the :root tokens
+  // (see the CSS). What CSS cannot reach is repainted here from the last
+  // payloads: the harness colours that script writes into inline styles, the
+  // history canvas and the sparklines. The choice is remembered
+  // by the Go side (bdevSetUITheme writes burnmon-dev-view.json, assemblePage
+  // sets data-theme in the markup at the next start); the page is loaded
+  // with NavigateToString, whose opaque origin rules out localStorage.
+  function applyTheme(light, remember){
+    var root = document.documentElement;
+    if(light) root.setAttribute('data-theme', 'light'); else root.removeAttribute('data-theme');
+    if(remember && typeof window.bdevSetUITheme === 'function') window.bdevSetUITheme(light ? 'light' : 'dark');
+    refreshTokenColors();
+    Object.keys(vendorRowEls).forEach(function(agent){
+      var dot = vendorRowEls[agent].tr.querySelector('.dot');
+      if(dot) dot.style.background = agentColor(agent);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#turnTicker .trow .h'), function(h){
+      if(h.dataset.agent) h.style.color = agentColor(h.dataset.agent);
+    });
+    renderBurnPanels(lastBurnSnap);
+    renderHistoryChart(lastSysmonHistory, lastHistWindowStart);
+    renderHarnessHeatmap(lastProcessGroupsHistory);
+    renderProcessGroups(lastProcessGroupsNow, lastProcessGroupsHistory, lastSysmonNow);
+  }
+  function toggleLightTheme(){ applyTheme(!isLightTheme(), true); }
   document.addEventListener('visibilitychange', function(){
     if(!stationMode) return;
     if(document.hidden) unmountStation(); else mountStation();
@@ -1841,13 +1948,24 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   // (section 6). cpu/ram/gpu already share a natural 0-100 percent scale;
   // disk and net (bytes/sec, no fixed ceiling) are each scaled to their own
   // peak within the visible window, per the reference panel's own "disk
-  // and net scaled to own peak" note.
+  // and net scaled to own peak" note. Each series names the :root token it
+  // draws with (tok), so the line, its legend dot and the light theme all
+  // read one colour; the canvas cannot take var(), hence tokenColor.
+  var tokenCache = {};
+  function refreshTokenColors(){
+    var cs = getComputedStyle(document.documentElement);
+    ['--grn', '--blu', '--yel', '--mag', '--red'].forEach(function(n){ tokenCache[n] = cs.getPropertyValue(n).trim(); });
+  }
+  function tokenColor(name){
+    if(!tokenCache[name]) refreshTokenColors();
+    return tokenCache[name];
+  }
   var HIST_SERIES = [
-    { key: 'CPUPct', label: 'cpu', color: '#00d26a', fmt: function(v){ return Math.round(v) + '%'; } },
-    { key: 'ram', label: 'ram', color: '#4da6ff', fmt: function(v){ return Math.round(v) + '%'; } },
-    { key: 'DiskReadBps', key2: 'DiskWriteBps', label: 'disk', color: '#ffd75f', ownPeak: true, fmt: fmtBytes },
-    { key: 'NetDownBps', key2: 'NetUpBps', label: 'net', color: '#d68cf0', ownPeak: true, fmt: fmtBytes },
-    { key: 'GPUPct', label: 'gpu', color: '#ff4b4b', fmt: function(v){ return Math.round(v) + '%'; } }
+    { key: 'CPUPct', label: 'cpu', tok: '--grn', fmt: function(v){ return Math.round(v) + '%'; } },
+    { key: 'ram', label: 'ram', tok: '--blu', fmt: function(v){ return Math.round(v) + '%'; } },
+    { key: 'DiskReadBps', key2: 'DiskWriteBps', label: 'disk', tok: '--yel', ownPeak: true, fmt: fmtBytes },
+    { key: 'NetDownBps', key2: 'NetUpBps', label: 'net', tok: '--mag', ownPeak: true, fmt: fmtBytes },
+    { key: 'GPUPct', label: 'gpu', tok: '--red', fmt: function(v){ return Math.round(v) + '%'; } }
   ];
   function seriesValue(s, def){
     var v = def.key2 != null ? (s[def.key] || 0) + (s[def.key2] || 0) : s[def.key];
@@ -1941,11 +2059,11 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
         prevT = s.t;
       });
       if(segs) debugSegments = segs;
-      ctx.strokeStyle = def.color;
+      ctx.strokeStyle = tokenColor(def.tok);
       ctx.lineWidth = 1.4;
       ctx.stroke();
       var current = vals[vals.length - 1];
-      legendHtml += '<span><span class="dot" style="background:' + def.color + '"></span>' + def.label + ' <b>' + def.fmt(current) + '</b></span>';
+      legendHtml += '<span><span class="dot" style="background:var(' + def.tok + ')"></span>' + def.label + ' <b>' + def.fmt(current) + '</b></span>';
     });
     legendHtml += '<span class="note">disk and net scaled to own peak</span>';
     legend.innerHTML = legendHtml;

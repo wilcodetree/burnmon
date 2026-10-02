@@ -14,3 +14,6 @@ dist/
 
 # stray WebView2 caches created with a mis-encoded user-data path (2026-09-28)
 /*/EBWebView/
+
+# downloaded art kits for the Station site atlas (CC0 Kenney kits, Quaternius worker, OpenGameArt excavator)
+tools/station_atlas/kits/
