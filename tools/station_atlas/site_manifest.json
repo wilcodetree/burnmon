@@ -50,9 +50,9 @@
         {"file": "proc:deck", "pos": [0, 0, 1.95]}
       ]
     },
-    "site_excavator": {"file": "excavator/excavadora_0.blend", "dirs": ["SW"], "size": {"long": 2.0}, "yaw": -90, "frame": 1, "exclude": ["Terreno", "Icosphere", "Tierrra", "Tierra_pala"]},
+    "site_excavator": {"file": "excavator/excavadora_0.blend", "dirs": ["SW", "SE"], "size": {"long": 2.0}, "yaw": -90, "frame": 1, "exclude": ["Terreno", "Icosphere", "Tierrra", "Tierra_pala"]},
     "site_hut": {"file": "proc:hut", "dirs": ["SE"], "size": {"long": 1.6}},
-    "site_frame": {"file": "factory-kit/Models/GLB format/scanner-high.glb", "dirs": ["SW"], "size": {"height": 1.4}},
+    "site_frame": {"file": "factory-kit/Models/GLB format/scanner-high.glb", "dirs": ["SW", "SE"], "size": {"height": 1.4}},
     "site_screen": {"file": "factory-kit/Models/GLB format/screen-small.glb", "dirs": ["SW"], "size": {"height": 0.6}},
     "site_generator": {"file": "proc:generator", "dirs": ["SE", "SW"], "size": {"long": 1.0}},
     "site_pallet": {"file": "proc:pallet", "dirs": ["SE"], "size": {"long": 0.9}},
@@ -66,6 +66,9 @@
     "site_loader": {"file": "car-kit/Models/GLB format/tractor-shovel.glb", "dirs": ["NE", "NW", "SE", "SW"], "size": {"long": 1.3}, "yaw": 180},
     "workerA": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "frames": [0, 16], "recolour": {"Worker_Vest": "#ff7a1a", "Worker_Yellow": "#f4f4ee"}},
     "workerB": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "frames": [0, 16], "recolour": {"Worker_Vest": "#ffd21a", "Worker_Yellow": "#ffd21a"}},
-    "workerC": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "frames": [0, 16], "recolour": {"Worker_Vest": "#b6f018", "Worker_Yellow": "#2f6fe0"}}
+    "workerC": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "frames": [0, 16], "recolour": {"Worker_Vest": "#b6f018", "Worker_Yellow": "#2f6fe0"}},
+    "workerA_sit": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["NE", "NW", "SE", "SW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "ref_frame": 0, "pose": {"action": "CharacterArmature|Idle_Neutral", "frame": 0, "bones": {"Body": {"loc": [0, -0.004, 0]}, "UpperLeg.L": {"rot": [0, 0, 82]}, "UpperLeg.R": {"rot": [0, 0, -82]}, "LowerLeg.L": {"rot": [82, 0, 0]}, "LowerLeg.R": {"rot": [82, 0, 0]}}}, "recolour": {"Worker_Vest": "#ff7a1a", "Worker_Yellow": "#f4f4ee"}},
+    "workerB_sit": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["NE", "NW", "SE", "SW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "ref_frame": 0, "pose": {"action": "CharacterArmature|Idle_Neutral", "frame": 0, "bones": {"Body": {"loc": [0, -0.004, 0]}, "UpperLeg.L": {"rot": [0, 0, 82]}, "UpperLeg.R": {"rot": [0, 0, -82]}, "LowerLeg.L": {"rot": [82, 0, 0]}, "LowerLeg.R": {"rot": [82, 0, 0]}}}, "recolour": {"Worker_Vest": "#ffd21a", "Worker_Yellow": "#ffd21a"}},
+    "workerC_sit": {"file": "worker/worker_Yg2bQZO6Hj.glb", "dirs": ["NE", "NW", "SE", "SW"], "size": {"height": 0.85}, "yaw": 180, "action": "CharacterArmature|Walk", "ref_frame": 0, "pose": {"action": "CharacterArmature|Idle_Neutral", "frame": 0, "bones": {"Body": {"loc": [0, -0.004, 0]}, "UpperLeg.L": {"rot": [0, 0, 82]}, "UpperLeg.R": {"rot": [0, 0, -82]}, "LowerLeg.L": {"rot": [82, 0, 0]}, "LowerLeg.R": {"rot": [82, 0, 0]}}}, "recolour": {"Worker_Vest": "#b6f018", "Worker_Yellow": "#2f6fe0"}}
   }
 }

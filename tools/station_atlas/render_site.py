@@ -22,13 +22,18 @@
 #            (station x, y) from the tile centre, for edge pieces like the fence
 #   recolour {material name or "*": "#rrggbb"}; replaces the material
 #   frames   animation frames to render (sprite suffix _0, _1 ...), with
+#   pose     {"action": name, "frame": n, "bones": {bone: {"loc": [x, y, z], "rot": [x, y, z]}}}:
+#            a rig posed by hand (a seated worker). Starts from a still frame of
+#            the action (default CharacterArmature|Idle_Neutral, frame 0), then adds
+#            each bone's local loc (the armature's own units) and rot (degrees).
+#            The entry is sized and centred on its "action" at "ref_frame" (standing).
 #   action   the action name to play; frame is a single still frame for a
 #            .blend scene with animated parts
 #   exclude  object names to drop from a .blend
 # Pure ASCII.
 import json, math, os, sys
 import bpy
-from mathutils import Vector
+from mathutils import Euler, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -171,6 +176,20 @@ def set_pose(arms, action, frame):
     bpy.context.scene.frame_set(int(frame))
 
 
+def apply_pose(arms, pose):
+    for arm in arms:
+        set_pose([arm], pose.get('action', 'CharacterArmature|Idle_Neutral'), pose.get('frame', 0))
+        bpy.context.view_layer.update()
+        arm.animation_data.action = None   # the evaluated pose stays on the bones
+        for name, b in pose['bones'].items():
+            pb = arm.pose.bones[name]
+            if 'loc' in b:
+                pb.location = tuple(pb.location[i] + b['loc'][i] for i in range(3))
+            if 'rot' in b:
+                pb.rotation_quaternion = pb.rotation_quaternion @ Euler([math.radians(a) for a in b['rot']]).to_quaternion()
+    bpy.context.view_layer.update()
+
+
 def build_part(spec, frame_ref, action):
     """Loads one model, scaled to its size target, footprint centred on the
     origin and standing on z=0. Returns its unit empty."""
@@ -239,8 +258,10 @@ def render(name, spec, d, frame_idx):
     sc, co = RI['reset']()
     action = spec.get('action')
     frames = spec.get('frames')
-    ref = frames[0] if frames else None
+    ref = frames[0] if frames else spec.get('ref_frame')
     group = build_entry(spec, ref, action)
+    if spec.get('pose'):
+        apply_pose([o for o in all_children(group) if o.type == 'ARMATURE'], spec['pose'])
     # the pose may differ from the reference frame: set it after sizing
     if frames and frame_idx is not None:
         arms = [o for o in all_children(group) if o.type == 'ARMATURE']

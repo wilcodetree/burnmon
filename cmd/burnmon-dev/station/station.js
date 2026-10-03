@@ -80,7 +80,7 @@
       props: [['satelliteDish_large_SW',3,2,1,2.3],['satelliteDish_SW',1,0,1,1.7],['satelliteDish_SW',5,0,1,1.7],
               ['machine_wireless_SW',0,2,1],['machine_wireless_SW',6,2,1],
               ['desk_computer_SW',1,5,1],['desk_computer_SW',3,5,1],['desk_computer_SW',5,5,1],
-              ['desk_chair_NE',1,6,0],['desk_chair_NE',3,6,0],['desk_chair_NE',5,6,0]],
+              ['desk_chair_NE',1,6,0],['desk_chair_NE',3,6,0],['desk_chair_NE',5,6,0],['desk_chair_NE',3,4,0]],
       slots: [[1,6,'NE'],[3,6,'NE'],[5,6,'NE'],[2,3],[4,3],[1,3],[5,3]]},
     plan: {name: 'PLAN TABLE', hue: '#a3e635', focus: [3.5, 3.5],
       props: [['platform_low_SE',2,2,1],['platform_low_SE',3,2,1],['platform_low_SE',4,2,1],
@@ -150,15 +150,15 @@
     uplink: {satelliteDish_large_SW: ['site_truck_SW', 1], satelliteDish_SW: ['site_crates_SE', 1],
              machine_wireless_SW: ['site_sign_SW', 1], desk_computer_SW: ['site_desk_SW', 1]},
     plan: {platform_low_SE: ['site_table_SE', 1], desk_computerScreen_SW: ['site_board_SW', 1]},
-    airlock: {gate_complex_SW: ['site_barrier_SW', 2], barrels_SE: ['site_cones_SE', 1], barrel_SE: ['site_cone_SE', 1],
+    airlock: {gate_complex_SW: ['site_barrier_SW', 2], barrels_SE: ['site_cones_SE', 1], 'barrels_SE@0,1': ['site_container_SE', 1], barrel_SE: ['site_cone_SE', 1],
               machine_generator_SW: ['site_generator_SW', 1]},
     fab: {desk_computer_SW: ['site_wall_half_SW', 1], desk_chair_NE: ['site_bricks_SE', 1],
-          desk_computerCorner_SE: ['site_scaffold_SE', 1], desk_computerCorner_SW: ['site_excavator_SW', 1]},
+          desk_computerCorner_SE: ['site_excavator_SE', 1], desk_computerCorner_SW: ['site_excavator_SW', 1]},
     think: {pipe_ringSupport_SE: ['site_hut_SE', 1]},
-    test: {gate_simple_SW: ['site_frame_SW', 1], machine_generator_SE: ['site_generator_SE', 1], machine_generator_SW: ['site_generator_SW', 1],
+    test: {gate_simple_SW: ['site_frame_SE', 1], machine_generator_SE: ['site_generator_SE', 1], machine_generator_SW: ['site_generator_SW', 1],
            desk_computerScreen_SW: ['site_screen_SW', 1]},
     brief: {platform_small_SE: ['site_pallet_SE', 1], desk_computerScreen_SW: ['site_board_SW', 1], machine_wireless_SW: ['site_sign_SW', 1]},
-    lounge: {platform_small_SE: ['site_table_SE', 1], 'barrels_SE@0,6': ['site_container_SE', 1], 'barrels_SE@6,6': ['site_crates_SE', 1]},
+    lounge: {platform_small_SE: ['site_table_SE', 1], 'barrels_SE@0,6': ['site_crates_SE', 1], 'barrels_SE@6,6': ['site_crates_SE', 1]},
     recycler: {machine_generatorLarge_SE: ['site_skip_SE', 1], machine_barrel_SE: ['site_bin_SE', 1], machine_barrel_SW: ['site_bin_SE', 1],
                barrel_SE: ['site_cone_SE', 1]},
     cryo: {'machine_barrelLarge_SW@1,1': ['site_car_SW', 1], 'machine_barrelLarge_SW@3,1': ['site_van_SW', 1], 'machine_barrelLarge_SW@5,1': ['site_car_SW', 1],
@@ -179,7 +179,7 @@
 
   // Every room has a door in the middle of each side that faces a corridor;
   // agents enter and leave rooms only through doors.
-  var ROOMS = {}, PROPS = [], SITE_PROPS = [], SLOTS = {}, DOORS = {}, ROOM_IDS = [], PLANTS = [];
+  var ROOMS = {}, PROPS = [], SITE_PROPS = [], SLOTS = {}, DOORS = {}, ROOM_IDS = [], PLANTS = [], CHAIR_AT = {}, LABEL_OCC = {};
   var roomAt = new Int8Array(GX * GY).fill(-1), doorAt = new Uint8Array(GX * GY);
   LAYOUT.forEach(function(row, ry){
     row.forEach(function(id, cx){
@@ -191,6 +191,8 @@
       for(var ly = 0; ly < RW; ly++) for(var lx = 0; lx < RW; lx++){ roomAt[(y0 + ly) * GX + x0 + lx] = ri; if(isDoor(lx, ly)) doorAt[(y0 + ly) * GX + x0 + lx] = 1; }
       T.props.forEach(function(p){
         if(isDoor(p[1], p[2])) return;
+        var chf = /^desk_chair(?:Arms)?_(\w+)$/.exec(p[0]); if(chf) CHAIR_AT[(x0 + p[1]) + ',' + (y0 + p[2])] = chf[1];
+        (LABEL_OCC[id] = LABEL_OCC[id] || {})[p[1] + ',' + p[2]] = 1;
         PROPS.push([p[0], x0 + p[1], y0 + p[2], p[3], p[4]]);
         var sp = siteProp(id, p); SITE_PROPS.push([sp[0], x0 + p[1], y0 + p[2], p[3], sp[1]]);
       });
@@ -198,7 +200,7 @@
       // plants in free room corners (plan view only)
       [[0, RW - 1], [RW - 1, RW - 1]].forEach(function(cn){
         var taken = T.props.some(function(p){ return p[1] === cn[0] && p[2] === cn[1]; }) || T.slots.some(function(sl){ return sl[0] === cn[0] && sl[1] === cn[1]; });
-        if(!taken && id !== 'core') PLANTS.push(['plant', x0 + cn[0], y0 + cn[1], 0]);
+        if(!taken && id !== 'core'){ PLANTS.push(['plant', x0 + cn[0], y0 + cn[1], 0]); (LABEL_OCC[id] = LABEL_OCC[id] || {})[cn[0] + ',' + cn[1]] = 1; }
       });
     });
   });
@@ -207,8 +209,59 @@
     PROPS.push(['structure_SE', pc * (RW + CW) - 1, pr * (RW + CW) - 1, 0, 0.9, 'iso']);
     SITE_PROPS.push(['site_light_SE', pc * (RW + CW) - 1, pr * (RW + CW) - 1, 0, 1, 'iso']);
   }
+  // A chair's facing by tile, the slots that have a chair (their agent sits),
+  // and the pose test: an agent standing at the centre of a chair tile is
+  // seated, one that is walking across it is not.
+  function chairFace(x, y){ return CHAIR_AT[x + ',' + y] || null; }
+  var SEATS = [];
+  ROOM_IDS.forEach(function(id){ SLOTS[id].forEach(function(sl){ if(chairFace(sl[0], sl[1])) SEATS.push(sl); }); });
+  function seatFace(x, y){
+    var tx = Math.floor(x), ty = Math.floor(y);   // slots are tile centres: tile + 0.5
+    return Math.abs(x - tx - 0.5) > 0.05 || Math.abs(y - ty - 0.5) > 0.05 ? null : chairFace(tx, ty);
+  }
+  function seatedSprite(base, face){ return base + '_sit_' + face; }
+  // Where a room's name sits. w is the name's width in tiles at full size, minScale
+  // the smallest it may shrink to. It lies on one row of the room (the bottom row
+  // when it can), centred on the room, and never on a prop or a plant of that room
+  // (LABEL_OCC): the biggest size that fits wins, then the position nearest the
+  // centre, the right side on a tie. Lounge and Core have a chair or barrel at the
+  // bottom centre, so their names move right (agents stand there too).
+  // Returns {cx: centre in room tiles, row: tile row, scale}.
+  var labelMemo = {};
+  function labelSpot(id, w, minScale, maxScale){
+    maxScale = maxScale || 1;
+    var key = id + '|' + Math.round(w * 20) + '|' + minScale + '|' + maxScale;
+    if(labelMemo[key]) return labelMemo[key];
+    var occ = LABEL_OCC[id] || {}, row, sc, cx, res = null;
+    for(row = RW - 1; row >= 0 && !res; row--){
+      for(sc = maxScale; sc >= minScale - 1e-9 && !res; sc -= 0.1){
+        var half = w * sc / 2 + 0.1, best = null;
+        for(cx = 0.5; cx <= RW - 0.5 + 1e-9; cx += 0.25){
+          var a = cx - half, b = cx + half, ok = a >= 0 && b <= RW;
+          for(var x = Math.floor(a); ok && x < Math.ceil(b); x++) if(occ[x + ',' + row]) ok = false;
+          var d = Math.abs(cx - RW / 2);
+          if(ok && (!best || d < best.d - 1e-9 || (Math.abs(d - best.d) < 1e-9 && cx > best.cx))) best = {cx: cx, d: d};
+        }
+        if(best) res = {cx: best.cx, row: row, scale: Math.round(sc * 10) / 10};
+      }
+    }
+    return labelMemo[key] = res || {cx: RW / 2, row: RW - 1, scale: minScale};
+  }
+  // All room names share one size: the smallest any room needs. widths maps room
+  // id to the name's width in tiles at full size. Returns {scale, spots: id -> {cx, row}}.
+  function labelLayout(widths, minScale){
+    var u = 1, spots = {};
+    ROOM_IDS.forEach(function(id){ u = Math.min(u, labelSpot(id, widths[id], minScale, 1).scale); });
+    ROOM_IDS.forEach(function(id){ var sp = labelSpot(id, widths[id], u, u); spots[id] = {cx: sp.cx, row: sp.row}; });
+    return {scale: u, spots: spots};
+  }
+  function plantTiles(id){ return PLANTS.filter(function(pl){ return roomAt[pl[2] * GX + pl[1]] === ROOM_IDS.indexOf(id); }).map(function(pl){ return [pl[1] - ROOMS[id].x0, pl[2] - ROOMS[id].y0]; }); }
   function roomXY(id, lx, ly){ return [ROOMS[id].x0 + lx, ROOMS[id].y0 + ly]; }
   var AIRLOCK_DOOR = [ROOMS.airlock.x0 + 3.5, 0.9];
+  // One rover (space) or wheel loader (site), patrolling the corridors.
+  // Plan table hologram opacity (idle, someone planning), iso cone and cards and the plan view line.
+  var HOLO = {coneIdle: 0.3, coneBusy: 0.6, cardIdle: 0.7, cardBusy: 1, planIdle: 0.85, planBusy: 1};
+  var ROVER_STARTS = [{x: RW + 0.5, y: RW + 0.5, next: 1500}];
 
   var VENDOR_SPRITE = {
     'claude-code': 'astronautA', 'cowork': 'astronautA', 'codex': 'astronautB',
@@ -376,8 +429,7 @@
     var propCv = null, propItems = [], dirtyProps = true;
     var agents = {}, order = [], slotTaken = {}, first = true, hoverId = null, placed = [];
     var lastModelAt = 0, modelNow = 0, clockSkew = 0;
-    var rovers = [{x: ROOMS.lounge.x0 + 3.5, y: ROOMS.lounge.y0 + 4.5, path: [], face: 'SE', next: 0, area: 'lounge'},
-                  {x: RW + 0.5, y: RW + 0.5, path: [], face: 'SE', next: 1500, area: null}];
+    var rovers = ROVER_STARTS.map(function(r){ return {x: r.x, y: r.y, path: [], face: 'SE', next: r.next}; });
     var burn = {last: 0, at: 0, rate: 0};
     var spin = 0;                   // tower crane jib angle (site core), added to every step
     var drag = null;
@@ -552,22 +604,24 @@
         x.beginPath(); x.moveTo(sx(0, cyp + 0.5), sy(0, cyp + 0.5)); x.lineTo(sx(GX, cyp + 0.5), sy(GX, cyp + 0.5)); x.stroke();
       }
       x.restore();
-      // room tint and floor labels
+      // room tint and floor labels, one size for all names (labelLayout)
+      x.font = '800 58px "Segoe UI", system-ui, sans-serif';
+      var lw = {}; ROOM_IDS.forEach(function(k){ lw[k] = x.measureText(rname(k)).width / 100; });
+      var lay = labelLayout(lw, 0.6);
       Object.keys(ROOMS).forEach(function(k){
         var rm = ROOMS[k], r = rm.r;
         x.fillStyle = hexA(rm.hue, 0.05);
         quad(x, r[0], r[1], r[2], r[3]); x.fill();
         x.save();
         x.setTransform(dpr * PA * s, dpr * PC * s, dpr * PB * s, dpr * PD * s, dpr * cam.ox, dpr * cam.oy);
-        // label painted on the floor along the room's front-left edge
-        x.translate(r[0] + 1.15, r[3] - 0.3);
-        x.scale(0.01, 0.01);
+        // label painted on the floor along the room's front-left edge, off every prop (labelSpot)
         x.font = '800 58px "Segoe UI", system-ui, sans-serif';
         x.fillStyle = S ? 'rgba(30,26,20,0.55)' : hexA(rm.hue, 0.6);
-        x.textBaseline = 'alphabetic';
-        var nm = rname(k), nw = x.measureText(nm).width;
-        if(nw > 520) x.scale(520 / nw, 520 / nw);   // long site names stay inside the room
-        x.fillText(nm, 0, 0);
+        x.textBaseline = 'alphabetic'; x.textAlign = 'center';
+        var sp = lay.spots[k], ls = 0.01 * lay.scale;
+        x.translate(r[0] + sp.cx, r[1] + sp.row + 0.7);
+        x.scale(ls, ls);
+        x.fillText(rname(k), 0, 0);
         x.restore();
       });
     }
@@ -701,12 +755,11 @@
         } else if(a.alpha < 1){ a.alpha = Math.min(1, a.alpha + dt * 1.2); }
       });
       spin += dt * (0.1 + clamp(Math.log10(1 + burn.rate) / 6, 0.08, 1)); // crane jib, rad/s, same k as the reactor
-      // rovers: one keeps to the lounge, one patrols the corridors
+      // the rover patrols the corridors
       rovers.forEach(function(rv, ri){
         if(!rv.path.length && now > rv.next){
           var r1 = rng(Math.floor(now) + ri * 97)(), r2 = rng(Math.floor(now) + ri * 97 + 5)(), tx, ty;
-          if(rv.area){ var ar = ROOMS[rv.area].r; tx = ar[0] + Math.floor(r1 * RW); ty = ar[1] + Math.floor(r2 * RW); }
-          else if(r1 < 0.5){ tx = Math.floor(r2 * GX); ty = (1 + Math.floor(r1 * 2 * (ROWS - 1))) * (RW + CW) - 1; }
+          if(r1 < 0.5){ tx = Math.floor(r2 * GX); ty = (1 + Math.floor(r1 * 2 * (ROWS - 1))) * (RW + CW) - 1; }
           else { ty = Math.floor(r2 * GY); tx = (1 + Math.floor((r1 - 0.5) * 2 * (COLS - 1))) * (RW + CW) - 1; }
           if(walkable(tx, ty)) rv.path = findPath(rv.x, rv.y, tx, ty);
           rv.next = now + 2000 + r1 * 4000;
@@ -985,9 +1038,10 @@
         for(k = 0; k < 4; k++){ P(c, X + 2, Y - 8 + k * 6, 12, 1, '#aab4c0'); P(c, X + 3 + k * 2, Y - 7 + k * 5, 1, 1, '#aab4c0'); P(c, X + 5 + k * 2, Y - 3 + k * 4, 1, 1, '#aab4c0'); }
         P(c, X + 2, Y - 10, 1, 20, '#aab4c0'); P(c, X + 13, Y - 10, 1, 20, '#aab4c0'); P(c, X + 2, Y - 3, 12, 2, '#c79a5b'); P(c, X + 2, Y + 7, 12, 2, '#c79a5b');
       } else if(/^site_excavator/.test(name)){                                // excavator
+        var fl = /_SE$/.test(name), fx = function(x, w){ return X + (fl ? 15 - x - w : x); };   // _SE: the arm points left
         P(c, X, Y + 5, 15, 5, '#1a1f2e'); P(c, X + 1, Y + 6, 13, 3, '#3a3f47');
-        box(c, X + 2, Y - 3, 9, 5, 5, '#f2b705', '#b98a00'); P(c, X + 3, Y - 2, 4, 3, '#7fd0ff');
-        P(c, X + 10, Y - 5, 6, 2, '#f2b705'); P(c, X + 14, Y - 4, 2, 8, '#e0a800'); P(c, X + 13, Y + 4, 4, 3, '#7a5a00'); pxLeds.push([X + 9, Y - 4, '#ffd84d']);
+        box(c, fx(2, 9), Y - 3, 9, 5, 5, '#f2b705', '#b98a00'); P(c, fx(3, 4), Y - 2, 4, 3, '#7fd0ff');
+        P(c, fx(10, 6), Y - 5, 6, 2, '#f2b705'); P(c, fx(14, 2), Y - 4, 2, 8, '#e0a800'); P(c, fx(13, 4), Y + 4, 4, 3, '#7a5a00'); pxLeds.push([fx(9, 1), Y - 4, '#ffd84d']);
       } else if(/^site_hut/.test(name)){                                      // foreman hut with a roof lamp
         box(c, X + 1, Y - 3, 14, 5, 11, '#d8d2c0', '#a8a08a'); P(c, X - 1, Y - 6, 18, 4, '#1a1f2e'); P(c, X, Y - 5, 16, 3, '#8b2f2f'); P(c, X, Y - 5, 16, 1, '#b04545');
         P(c, X + 6, Y + 4, 4, 8, '#5a3b1e'); P(c, X + 2, Y + 3, 3, 3, '#9fd4ff'); P(c, X + 11, Y + 3, 3, 3, '#9fd4ff');
@@ -1055,8 +1109,7 @@
         for(var y = r[1]; y < r[3]; y++) for(var x = r[0]; x < r[2]; x++) floorTile(c, bx(x), by(y), f[0], f[1], x - r[0], y - r[1]);
         if(id === 'plan'){ // blueprint rug under the table
           var X0 = bx(r[0] + 1) + 4, Y0 = by(r[1] + 1) + 4, w = 5 * PT - 8;
-          P(c, X0, Y0, w, w, '#3d5f8c'); c.strokeStyle = '#7aa3d4'; c.lineWidth = 1;
-          for(var g = 8; g < w; g += 12){ c.beginPath(); c.moveTo(X0 + g + 0.5, Y0 + 2); c.lineTo(X0 + g + 0.5, Y0 + 7); c.lineTo(X0 + g + 5.5, Y0 + 7); c.stroke(); }
+          P(c, X0, Y0, w, w, '#3d5f8c');
         }
       });
       // outer hull
@@ -1117,11 +1170,12 @@
     // Pixel worker, 10 x 19, feet at (X, Y): hard hat and a hi-vis vest with
     // a reflective stripe; the vest and hat colour family is the vendor kind.
     var VEST = {workerA: '#ff8a1f', workerB: '#ffd23a', workerC: '#a4e24a'};
-    function pxWorker(c, X, Y, dir, frame, kind, alpha){
+    function pxWorker(c, X, Y, dir, frame, kind, alpha, seated){
       c.globalAlpha = alpha;
       var vest = VEST[kind] || VEST.workerC, hat = shade(vest, 0.3), lg = frame ? 1 : 0, skin = '#e2b48c';
       P(c, X - 5, Y - 1, 10, 2, 'rgba(0,0,0,0.35)');
-      P(c, X - 3, Y - 4 - lg, 2, 4 + lg, '#2f3a52'); P(c, X + 1, Y - 4 - (1 - lg), 2, 4 + (1 - lg), '#2f3a52');
+      if(seated){ lg = 0; Y += 3; }   // seated: the body drops into the chair, only the shins show below it
+      else { P(c, X - 3, Y - 4 - lg, 2, 4 + lg, '#2f3a52'); P(c, X + 1, Y - 4 - (1 - lg), 2, 4 + (1 - lg), '#2f3a52'); }
       P(c, X - 4, Y - 12, 8, 9, '#1a1f2e'); P(c, X - 3, Y - 11, 6, 7, vest); P(c, X - 3, Y - 7, 6, 1, '#eef2f6');
       if(dir === 'down' || dir === 'up'){ P(c, X - 2, Y - 11, 1, 4, '#eef2f6'); P(c, X + 1, Y - 11, 1, 4, '#eef2f6'); }
       P(c, X - 6, Y - 10 + (frame ? 1 : 0), 2, 4, '#37455f'); P(c, X + 4, Y - 10 + (frame ? 0 : 1), 2, 4, '#37455f');
@@ -1133,6 +1187,7 @@
       else P(c, X - 2, Y - 16, 4, 5, shade(skin, -0.25));
       P(c, X - 4, Y - 20, 8, 5, '#1a1f2e'); P(c, X - 3, Y - 19, 6, 3, hat); P(c, X - 3, Y - 19, 6, 1, shade(hat, 0.3));
       P(c, X - 4 + (dir === 'right' ? 1 : 0), Y - 16, dir === 'left' || dir === 'right' ? 6 : 8, 1, hat);
+      if(seated){ P(c, X - 3, Y - 2, 2, 3, '#2f3a52'); P(c, X + 1, Y - 2, 2, 3, '#2f3a52'); }
       c.globalAlpha = 1;
     }
     function pxLine(c, x0, y0, x1, y1, col){
@@ -1220,7 +1275,7 @@
       // plan hologram
       F = ROOMS.plan.focus; var HX = bx(F[0]), HY = by(F[1]);
       if(occ.plan){ for(var hk = 0; hk < 3; hk++){ var hy = HY - 10 - ((t * 10 + hk * 6) % 18); c.fillStyle = hexA('#a3e635', 0.7 - ((t * 10 + hk * 6) % 18) / 30); c.fillRect(HX - 8, Math.round(hy), 16, 1); } }
-      P(c, HX - 6, HY - 6, 12, 1, hexA('#d9f99d', occ.plan ? 0.9 : 0.4));
+      P(c, HX - 6, HY - 6, 12, 1, hexA('#d9f99d', occ.plan ? HOLO.planBusy : HOLO.planIdle));
       // scanner beams in the test chamber
       if(occ.test){ TH.props.forEach(function(p){ if(TH.scan.test(p[0])){ var gy = by(p[2]) - 8 + Math.round((Math.sin(t * 4 + p[1]) + 1) * 8); P(c, bx(p[1]) + 4, gy, 8, 1, '#5dff9d'); } }); }
       // reactor
@@ -1258,7 +1313,7 @@
         var kind = TH.vendor[a.vendor] || TH.vendorDef;
         P(c, X - 6, Y, 12, 1, hexA(a.color, 0.9));
         if(a.sub) pxDrone(c, X, Y, a.color, t + a.phase * 3, Math.max(0, a.alpha));
-        else if(TH.id === 'site') pxWorker(c, X, Y, d4, frame, kind, Math.max(0, a.alpha));
+        else if(TH.id === 'site') pxWorker(c, X, Y, d4, frame, kind, Math.max(0, a.alpha), !a.walking && !a.pending && !!seatFace(a.x, a.y));
         else pxAstronaut(c, X, Y, d4, frame, a.color, kind, Math.max(0, a.alpha));
         var dormant = (a.roomStage || a.stage) === 'dormant' && !a.walking && !a.pending;
         if(dormant){ c.fillStyle = TH.id === 'site' ? 'rgba(148,163,184,0.35)' : 'rgba(125,211,252,0.3)'; c.fillRect(X - 5, Y - 19, 10, 19); }
@@ -1277,12 +1332,17 @@
       // text overlays at screen resolution: room names, tok/min, agent names
       var fs = clamp(cam.s * 5.2, 9, 13);
       ctx.font = '700 ' + fs + 'px Consolas, "Cascadia Mono", monospace'; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+      var pw = {}; ROOM_IDS.forEach(function(id){ pw[id] = ctx.measureText(rname(id)).width / (PT * cam.s); });
+      var play = labelLayout(pw, 0.75), f2 = fs * play.scale;   // one size for all names
+      ctx.font = '700 ' + f2 + 'px Consolas, "Cascadia Mono", monospace';
       ROOM_IDS.forEach(function(id){
-        var r = ROOMS[id].r; ctx.fillStyle = 'rgba(10,14,24,0.65)';
-        var tw = ctx.measureText(rname(id)).width;
-        ctx.fillRect(cam.ox + (bx(r[0]) + 24) * cam.s - 3, cam.oy + by(r[1]) * cam.s - 2, tw + 6, fs + 3);
-        ctx.fillStyle = ROOMS[id].hue; ctx.fillText(rname(id), cam.ox + (bx(r[0]) + 24) * cam.s, cam.oy + by(r[1]) * cam.s);
+        var r = ROOMS[id].r, sp = play.spots[id], tw = ctx.measureText(rname(id)).width;
+        // bottom of the room, off every prop (labelLayout)
+        var lx = cam.ox + bx(r[0] + sp.cx) * cam.s - tw / 2, ly = cam.oy + by(r[1] + sp.row + 1) * cam.s - f2 - 3;
+        ctx.fillStyle = 'rgba(10,14,24,0.65)'; ctx.fillRect(lx - 3, ly - 2, tw + 6, f2 + 3);
+        ctx.fillStyle = ROOMS[id].hue; ctx.fillText(rname(id), lx, ly);
       });
+      ctx.font = '700 ' + fs + 'px Consolas, "Cascadia Mono", monospace';
       ctx.textAlign = 'center'; ctx.fillStyle = TH.id === 'site' ? '#1f2937' : '#bae6fd';
       ctx.fillText(fmtTokens(Math.round(burn.rate)) + ' tok/min', cam.ox + RX * cam.s, cam.oy + (RY + 20) * cam.s);
       if(cam.s >= 1.6){
@@ -1373,11 +1433,11 @@
     function holoTable(t, n){
       var F = ROOMS.plan.focus, X = sx(F[0], F[1]), Y = sy(F[0], F[1]) - 75 * cam.s, s = cam.s * 1.5;
       var g = ctx.createLinearGradient(X, Y + 40 * s, X, Y - 50 * s);
-      g.addColorStop(0, hexA('#a3e635', n ? 0.35 : 0.12)); g.addColorStop(1, 'rgba(163,230,53,0)');
+      g.addColorStop(0, hexA('#a3e635', n ? HOLO.coneBusy : HOLO.coneIdle)); g.addColorStop(1, 'rgba(163,230,53,0)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.moveTo(X - 55 * s, Y + 30 * s); ctx.lineTo(X + 55 * s, Y + 30 * s); ctx.lineTo(X + 30 * s, Y - 40 * s); ctx.lineTo(X - 30 * s, Y - 40 * s); ctx.closePath(); ctx.fill();
       // a rotating wireframe of task cards
-      ctx.strokeStyle = hexA('#d9f99d', n ? 0.85 : 0.35); ctx.lineWidth = Math.max(1, 1.3 * s);
+      ctx.strokeStyle = hexA('#d9f99d', n ? HOLO.cardBusy : HOLO.cardIdle); ctx.lineWidth = Math.max(1, 1.3 * s);
       for(var i = 0; i < 4; i++){
         var ang = t * 0.7 + i * Math.PI / 2, cx = X + Math.cos(ang) * 28 * s, cy = Y - 8 * s + Math.sin(ang) * 9 * s - i * 6 * s;
         ctx.strokeRect(cx - 9 * s, cy - 6 * s, 18 * s, 12 * s);
@@ -1495,6 +1555,9 @@
         var base = TH.vendor[a.vendor] || TH.vendorDef;
         // site workers have two walk frames, frame 0 is the standing pose
         var name = base + '_' + a.face + (TH.id === 'site' ? '_' + (a.walking ? Math.floor(t * 5 + a.phase * 2) % 2 : 0) : '');
+        // a site worker standing on a chair tile sits in it, facing the way the chair does
+        var seat = TH.id === 'site' && !a.walking && !a.pending && !a.sub ? seatFace(a.x, a.y) : null;
+        if(seat && MAP[seatedSprite(base, seat)]) name = seatedSprite(base, seat); else seat = null;
         // teleport shimmer on arrival and departure
         if(a.alpha < 1){
           ctx.fillStyle = 'rgba(186,230,253,' + (0.5 * (1 - a.alpha)) + ')';
@@ -1505,8 +1568,9 @@
           ctx.fillStyle = TH.dormTint; ctx.fillRect(box[0], box[1], box[2], box[3]);
         }
         a.box = box;
-        a.head = [X, Y - 72 * s - bob];
-        effect(a, t, X, Y - 72 * s - bob, s);
+        var headH = seat ? 54 : 72;   // a seated head is lower
+        a.head = [X, Y - headH * s - bob];
+        effect(a, t, X, Y - headH * s - bob, s);
       };
     }
     function spriteAt(name, X, Y, s, alpha){
@@ -1848,5 +1912,6 @@
   var styleEl = document.createElement('style'); styleEl.textContent = css;
   (document.head || document.documentElement).appendChild(styleEl);
 
-  window.BMStation = {create: create, fromSnapshot: fromSnapshot, STAGES: STAGES, ROOMS: ROOMS, THEMES: THEMES, THEME_DEF: THEME_DEF, GRID: [GX, GY], SITE_UNMAPPED: SITE_UNMAPPED};
+  window.BMStation = {create: create, fromSnapshot: fromSnapshot, STAGES: STAGES, ROOMS: ROOMS, THEMES: THEMES, THEME_DEF: THEME_DEF, GRID: [GX, GY], HOLO: HOLO, SITE_UNMAPPED: SITE_UNMAPPED,
+    ROOM_W: RW, SLOTS: SLOTS, SEATS: SEATS, ROVER_STARTS: ROVER_STARTS, labelSpot: labelSpot, labelLayout: labelLayout, PLANT_TILES: plantTiles, chairFace: chairFace, seatFace: seatFace, seatedSprite: seatedSprite};
 })();

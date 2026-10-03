@@ -2,6 +2,28 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-10-03, Station UI pass, step 1 (five items), not committed
+
+Step 1 of `02_roadmap6-10-03_station_ui_and_backlog.md`. Room names now come from one pure
+`labelLayout` in `station.js` that both views share: bottom row, centred, never on a prop or plant
+of the room (tile data checked in `check_themes.js` for all 24 names), one common size (the
+smallest any room needs, 60 percent at most shrink), Lounge and Core right of centre. The rover
+that kept to the Lounge is gone (`ROVER_STARTS`, one corridor patroller left). Uplink has a
+`desk_chair_NE` at tile 3,4 (blocks 0, no slot). Site workers sit on chair slots: a seated pose
+rendered from the same CC0 Quaternius rig (`render_site.py` got a `pose` key, 12 new sprites,
+atlas now 100 sprites, old ones drift 0.24 of 255 on average from the shared palette), seated
+pixel worker in the plan view. Item 4 answered: the shapes above the plan table are `holoTable()`,
+a deliberate hologram, not rails. Found along the way: agents stand at tile centres (slot + 0.5),
+and d23 screenshots were taken before the repaint (now settled, 12 s wait, re-focus); real key
+presses in d23 failed twice in six runs from lost window focus. Second round the same day (site theme only unless noted): the container moved from the Canteen to
+the Site Entrance and the Canteen has crates in both bottom corners; the Build Zone has an
+excavator in both top corners (new `site_excavator_SE`, mirrored in the plan view) instead of the
+scaffold tower, whose sprite stays in the atlas unused; the Inspection frames use new
+`site_frame_SE`, the same plane axis as the space gates (checked by sprite width); the plan table
+hologram is brighter in both views (`HOLO`) and the L marks on the plan view rug are gone, both
+themes. Atlas now 102 sprites. Open: the "E" of PLAN TABLE in the
+space theme is clipped by the Test Chamber's top-row consoles (a neighbour's sprite, left alone).
+
 ## 2026-10-02, Station site theme and BurnMon Dev light theme, v0.4.0-alpha.10
 
 Started as a repeat of the alpha.9 prompt; steps 1 to 8 were already shipped and tagged, so Wilco

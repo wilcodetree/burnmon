@@ -13,7 +13,7 @@ import (
 // turn popup on top, Esc closes the popup first and the Station on the
 // next press; O replaces the whole burn zone (chart to turn ticker, all of
 // it above System) with the plan view filling that zone, and it draws; O
-// brings the zone back. Screenshots of both views. Station themes (alpha.10):
+// brings the zone back. Screenshots of both views in both themes (P site, P space, O site, O space). Station themes (alpha.10):
 // the startup theme is site (HUD "SITE ... on site"), T flips it to the space
 // station ("STATION ... on board") and back while the Station is open, and
 // does nothing once it is closed. A startup theme of "space" in the machine's
@@ -95,6 +95,15 @@ const d23FakeJS = `(function(){
   return true;
 })()`
 
+// d23Shot waits for the canvas to repaint before the capture: the DOM read
+// that precedes it can already show the new theme while the window still holds
+// the previous frame (found 2026-10-03, two "different" shots were identical).
+func d23Shot(hwnd uintptr, name string) error {
+	time.Sleep(900 * time.Millisecond)
+	_, err := screenshot(hwnd, name)
+	return err
+}
+
 func d23Read() (d23State, error) {
 	var s d23State
 	err := evalInto(d23ReadJS, &s)
@@ -154,13 +163,17 @@ func init() {
 			return s.Overlay && s.FullCanvas && s.Lit > 500 && strings.Contains(s.Hud, "3 agents") &&
 				strings.Contains(s.Hud, "SITE") && strings.Contains(s.Hud, "on site") && s.Theme == "site"
 		})
-		if _, err := screenshot(hwnd, "d23-station-full"); err != nil {
+		// The fake agents walk in from the airlock; give them time to reach their
+		// rooms and sit, so the shots show the settled pose (alpha.10 follow-up).
+		time.Sleep(12 * time.Second)
+		bringToFront(hwnd) // focus can drift during a long wait; the key presses below need it
+		if err := d23Shot(hwnd, "d23-station-full"); err != nil {
 			return err
 		}
 		step("T switches the Station to the space theme", vkT, func(s d23State) bool {
 			return s.Overlay && s.Lit > 500 && strings.Contains(s.Hud, "STATION") && strings.Contains(s.Hud, "on board") && s.Theme == "space"
 		})
-		if _, err := screenshot(hwnd, "d23-station-space"); err != nil {
+		if err := d23Shot(hwnd, "d23-station-space"); err != nil {
 			return err
 		}
 		step("T again switches back to the site theme", vkT, func(s d23State) bool {
@@ -190,9 +203,19 @@ func init() {
 		step("O swaps the chart for the plan view and it draws", vkO, func(s d23State) bool {
 			return s.Panel && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH >= s.ZoneH-4 && s.Lit > 500 && strings.Contains(s.Hud, "3 agents")
 		})
-		if _, err := screenshot(hwnd, "d23-station-panel"); err != nil {
+		if err := d23Shot(hwnd, "d23-station-panel"); err != nil {
 			return err
 		}
+		// T works in the plan view too (the Station is mounted in the burn zone).
+		step("T switches the plan view to the space theme", vkT, func(s d23State) bool {
+			return s.Panel && s.Lit > 500 && strings.Contains(s.Hud, "STATION") && s.Theme == "space"
+		})
+		if err := d23Shot(hwnd, "d23-station-panel-space"); err != nil {
+			return err
+		}
+		step("T again switches the plan view back to the site theme", vkT, func(s d23State) bool {
+			return s.Panel && s.Lit > 500 && strings.Contains(s.Hud, "SITE") && s.Theme == "site"
+		})
 		step("O again brings the chart back", vkO, func(s d23State) bool {
 			return !s.Panel && s.BarsShown && s.AxisShown && s.TickerShown && !s.Overlay
 		})
