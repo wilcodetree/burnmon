@@ -96,6 +96,36 @@ ok(moved.length === 0, 'every room name stays on the bottom row of its room' + (
 ok(Object.keys(B.ROOMS).filter(function(r){ return r !== 'lounge' && r !== 'core'; }).every(function(r){ return spots[r + ':space'].cx === RWT / 2 && spots[r + ':site'].cx === RWT / 2; }), 'ten room names are centred on their room in both themes');
 ok(['lounge', 'core'].every(function(r){ return spots[r + ':space'].cx > RWT / 2 + 0.5 && spots[r + ':site'].cx > RWT / 2 + 0.5; }), 'Lounge and Core names sit right of centre in both themes');
 ok((src.match(/labelLayout\(/g) || []).length >= 3, 'both views (floor labels, plan labels) place room names with labelLayout');
+// 1b. no room name is hidden by another room's sprite (2026-10-03: the "E" of PLAN TABLE, space
+// theme, was cut by a Test Chamber top-row console, whose sprite rises into the room above).
+// Props are baked over the floor, so any prop sprite box that contains a point of a name's
+// glyph band (cap height, on the floor plane) hides it. Boxes are the atlas rects at the draw
+// scale (override, else station.js PROP_SCALE, copied here), so this is conservative: a sprite
+// with empty corners can still fail. Props of the name's own room are excluded, the tile test
+// above covers them.
+var PSC = [[/^desk_/, 1.9], [/^satelliteDish/, 1.6], [/^machine_wireless/, 1.6], [/^gate_/, 1.5], [/^barrel/, 1.5], [/^machine_barrel_/, 1.6],
+  [/^machine_generator_/, 1.5], [/^pipe_ringSupport/, 1.4], [/^platform_small/, 1.0], [/^structure_SE/, 0.9]];
+function propSc(n){ for(var i = 0; i < PSC.length; i++) if(PSC[i][0].test(n)) return PSC[i][1]; return 1; }
+var hidden = [];
+[['space', SPACE, window.BM_STATION_ATLAS], ['site', SITE, window.BM_STATION_ATLAS_SITE]].forEach(function(t){
+  var th = t[0], TD = t[1], AT = t[2]; if(!AT) return;
+  var P = AT.proj, lay = B.labelLayout(LABEL_W[th], 0.6);
+  function px(x, y){ return P[0] * x + P[1] * y; } function py(x, y){ return P[2] * x + P[3] * y; }
+  Object.keys(B.ROOMS).forEach(function(r){
+    var R = B.ROOMS[r], sp = lay.spots[r], half = LABEL_W[th][r] * lay.scale / 2, base = R.y0 + sp.row + 0.7, top = base - 0.72 * 0.58 * lay.scale;
+    var hit = {};
+    for(var x = R.x0 + sp.cx - half; x <= R.x0 + sp.cx + half; x += 0.05) for(var y = top; y <= base; y += 0.05){
+      var X = px(x, y), Y = py(x, y);
+      TD.props.forEach(function(p){
+        var m = AT.map[p[0]]; if(!m || (p[1] >= R.x0 && p[1] < R.x0 + RWT && p[2] >= R.y0 && p[2] < R.y0 + RWT)) return;
+        var sc = p[4] || propSc(p[0]), ax = px(p[1] + 0.5, p[2] + 0.5) + m[4] * sc, ay = py(p[1] + 0.5, p[2] + 0.5) + m[5] * sc;
+        if(X >= ax && X <= ax + m[2] * sc && Y >= ay && Y <= ay + m[3] * sc) hit[p[0] + '@' + p[1] + ',' + p[2]] = 1;
+      });
+    }
+    Object.keys(hit).forEach(function(k){ hidden.push(r + ':' + th + ' under ' + k); });
+  });
+});
+ok(hidden.length === 0, 'no room name is hidden by a sprite of another room, space and site' + (hidden.length ? ': ' + hidden.join('; ') : ''));
 // 2. one rover or loader only: the one that kept to the lounge is gone
 ok(B.ROVER_STARTS.length === 1 && !B.ROVER_STARTS[0].area, 'one rover or loader only, the corridor patroller (none keeps to the lounge)');
 // 3. uplink: a chair at the middle table, off the slots, one shared blocked grid

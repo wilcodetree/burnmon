@@ -21,6 +21,10 @@ func init() {
 		if err := ensureWindowSizeWH(hwnd, 1920, 1080); err != nil {
 			return err
 		}
+		if windowCapped {
+			fmt.Println("uicheck: d20: SKIPPED, this screen is too small for a 1920x1080 window, so the heatmap row is fit-dropped and its labels measure 0px")
+			return nil
+		}
 		time.Sleep(300 * time.Millisecond)
 		script := `(function(){
   var nowMs = Date.now(), windowMs = 30 * 60 * 1000, ws = nowMs - windowMs;

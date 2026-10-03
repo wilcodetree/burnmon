@@ -2,6 +2,22 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-10-03, Station UI pass, step 2 (bugs), not committed
+
+Step 2 of the roadmap file. Station CPU climb: three clean-enough runs of 30 minutes on `HEAD`
+(open, closed, and another session's fake-agent run) did not reproduce the recorded ramp; CPU
+tracks the page's animation rate and the open Station costs about 4.5 points more than closed, and a
+slow 0.2 to 0.3 point a minute creep exists closed too (GPU process, history rings filling). No
+Station code changed for it, no root cause claimed; numbers in
+`04_assets\2026-10-03_station_cpu_measurements.md`. Two of my runs were lost (one page paused, one
+had a synthetic key from the other session) and were redone. d19 and d20 were never code bugs: they
+fail only when the screen cannot hold the 1600x1000, 1920x1080 and 2560x1300 windows; they pass today
+on three monitors, and a capped window is now SKIPPED, checked on the laptop panel with the new
+`UICHECK_ORIGIN`. The PLAN TABLE "E" is fixed by moving two Test Chamber consoles (new
+`check_themes.js` check, failed first). d23 failed once in four runs, cause open. Also: the uicheck runs
+rewrote `burnmon-dev-window.json` (100,100, 1936x1119 on DISPLAY2). Verified: `go vet ./...`,
+`go test ./... -count=1`, `.\build.ps1`, `check_themes.js`, d19 d20 d23 d24.
+
 ## 2026-10-03, Station UI pass, step 1 (five items), not committed
 
 Step 1 of `02_roadmap6-10-03_station_ui_and_backlog.md`. Room names now come from one pure

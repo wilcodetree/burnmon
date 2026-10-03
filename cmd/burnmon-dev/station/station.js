@@ -107,7 +107,7 @@
     test: {name: 'TEST CHAMBER', hue: '#34d399', focus: [3.5, 2.5],
       props: [['gate_simple_SW',1,2,1,1.6],['gate_simple_SW',3,2,1,1.6],['gate_simple_SW',5,2,1,1.6],
               ['machine_generator_SE',0,5,1],['machine_generator_SW',6,5,1],
-              ['desk_computerScreen_SW',1,0,1],['desk_computerScreen_SW',3,0,1],['desk_computerScreen_SW',5,0,1]],
+              ['desk_computerScreen_SW',0,0,1],['desk_computerScreen_SW',3,0,1],['desk_computerScreen_SW',6,0,1]],
       slots: [[1,3,'NE'],[3,3,'NE'],[5,3,'NE'],[2,4,'NE'],[4,4,'NE'],[3,5],[1,5],[5,5]]},
     brief: {name: 'BRIEFING', hue: '#f472b6', focus: [3.5, 3.5],
       props: [['platform_small_SE',2,3,1],['platform_small_SE',3,3,1],['platform_small_SE',4,3,1],

@@ -27,10 +27,19 @@ func init() {
 			expectDrop bool
 		}{{1600, 1000, true, false}, {1920, 1080, true, false}, {2560, 1300, true, false}, {1920, 1080, false, false}, {1280, 860, true, true}}
 		var errs []string
+		skipped := 0
 		defer evalRaw(`(window.__bdevExitFakeMode && window.__bdevExitFakeMode())`)
 		for _, c := range cases {
 			if err := ensureWindowSizeWH(hwnd, c.w, c.h); err != nil {
 				return err
+			}
+			// A window the screen could not hold was never this size, so its
+			// numbers say nothing about the layout at it (a laptop-only
+			// 1600x1000 screen failed this check for that reason).
+			if windowCapped {
+				fmt.Printf("uicheck: d19 %dx%d todo=%v: SKIPPED, this screen is too small for that window\n", c.w, c.h, c.todo)
+				skipped++
+				continue
 			}
 			time.Sleep(500 * time.Millisecond)
 			script := fmt.Sprintf(`(function(todoOn){
@@ -128,6 +137,10 @@ func init() {
 		}
 		if len(errs) > 0 {
 			return fmt.Errorf("d19: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
+		}
+		if skipped > 0 {
+			fmt.Printf("uicheck: d19: PARTIAL, %d of %d cases skipped because the screen is too small; run on a screen that holds 2560x1300 CSS px for a full pass\n", skipped, len(cases))
+			return nil
 		}
 		fmt.Println("uicheck: d19: To Do layout clean (chart at 70% with To Do on, To Do fills the bottom, unchanged with To Do off, no overflow)")
 		return nil

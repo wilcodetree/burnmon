@@ -8,8 +8,8 @@ share the ingest fixes of alpha.8 and alpha.9 once rebuilt. Project state: parke
 2026-11-01 except the Station feature (decision `C:\ZND\10_holding\03_logs\decisions.md`
 2026-10-01 and 2026-10-02); see `C:\ZND\10_holding\01_projects\burnmon.md`. Newest work
 is the "BurnMon Dev" section below, newest entry first (alpha.10: Station site theme and
-light theme; alpha.9: the Station; alpha.8: Codex live tail). Open bug: with the Station
-open the CPU climbs with uptime, cause not found, see that section. The text from here to
+light theme; alpha.9: the Station; alpha.8: Codex live tail). Open: the Station CPU
+climb is not reproduced and its cause is not found (2026-10-03, see that section). The text from here to
 the next heading describes v0.3.2 and is kept as history.
 
 What was true at v0.3.2 (2026-09-26): **v0.3.2** (WS3, shared ingest performance and
@@ -307,6 +307,34 @@ ignored), it just no longer does anything.
   same as V3-6's own Done-when check 2, and this session did not repeat that live pass.
 
 ## BurnMon Dev (`burnmon-dev` merged into `main` at `f7f1c26`; this and later work commits on `main` directly)
+
+2026-10-03, Station UI pass step 2 (bugs; uncommitted, no version bump; roadmap
+`02_roadmap\2026-10-03_station_ui_and_backlog.md`). Measurements and method:
+`04_assets\2026-10-03_station_cpu_measurements.md`.
+
+- **CPU climb, cause not found.** Two clean 30 minute runs on `HEAD`, five-minute windows of Go
+  plus all WebView2 processes: Station open 22, 17, 13, 14, 18, 32 percent of one core; closed 15,
+  9, 8, 9, 11, 12. The recorded ramp (24, 45, 64) did not appear. What the data does show: CPU
+  follows the page's `requestAnimationFrame` rate (r 0.7 to 0.76 per minute), which jumps to 40 to
+  60 a second while tokens flow, because every changing number starts an `animateNumber` tween; the
+  open Station costs about 4.5 points more than closed in quiet minutes (12.9 against 8.4); and a
+  slow creep of 0.2 to 0.3 points a minute exists open and closed, in the GPU process when closed,
+  with `paintTick` growing from 3.3 ms to 8.5 ms as the history rings fill. Go does not climb in
+  quiet minutes. Inferred only: `renderHistoryChart` and the heatmaps cause the creep, no bisect.
+  Not repeated at 200 percent scaling (the earlier A/B screen). A second Claude session ran 3
+  fake agents for 30 minutes: Go 3.2 to 3.5 percent in every window, no climb.
+- **d19 and d20:** both pass now, with three monitors attached. They failed on a laptop-only
+  screen because `uicheck` caps a window to the monitor (leaving 100 px) and these checks measure
+  at 1600x1000, 1920x1080 and 2560x1300 CSS px. A capped window is now reported SKIPPED (d19 PARTIAL,
+  d20 SKIPPED) instead of failing; `UICHECK_ORIGIN="x,y"` puts the window on another monitor.
+  Measured on the laptop panel (`-3100,-125`): window capped to 1500x900, 4 of 5 d19 cases and
+  all of d20 skipped, the 1280x860 case passed. `tools\uicheck` has its first unit tests
+  (`capToScreen`, `parseOrigin`).
+- **PLAN TABLE "E" (space):** the Test Chamber's top-row consoles at lx 1 and 5 hid it; now at lx 0
+  and 6 (both themes, same tiles). `check_themes.js` has a new check (no room name under another
+  room's sprite box); it failed before on `desk_computerScreen_SW@21,8`, passes now.
+- **Not fixed:** d23 failed once of four runs with "0 agents on site" (fake feed missing) when run
+  straight after d19 and d20, then passed alone and twice after d20; cause unknown.
 
 `v0.4.0-alpha.10`: the Station gets a second theme, a construction site (now the default), and
 BurnMon Dev gets a public light theme (spec `02_roadmap\2026-10-01_station_secret_screen.md`,

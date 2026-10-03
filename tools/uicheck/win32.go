@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -182,6 +183,45 @@ func ensureWindowSize(hwnd uintptr) error {
 const hwndTopmost = ^uintptr(0) // -1
 const swpShowWindow = 0x0040
 
+// windowOriginX/Y is where ensureWindowSizeWH puts the window: (100,100) on
+// the primary screen, or UICHECK_ORIGIN="x,y" in virtual-screen pixels to
+// run a check on another monitor (for example a small laptop panel next to
+// a large primary one, to see what a laptop-only setup does).
+var windowOriginX, windowOriginY = func() (int32, int32) { x, y, _ := parseOrigin(os.Getenv("UICHECK_ORIGIN")); return x, y }()
+
+// windowCapped is true when the last ensureWindowSizeWH could not give the
+// window the size asked for because its monitor is too small. A check whose
+// numbers only hold at the named size reports such a case as skipped instead
+// of failing on a window that was never that size.
+var windowCapped bool
+
+// parseOrigin reads "x,y"; anything else gives the default (100,100), false.
+func parseOrigin(s string) (int32, int32, bool) {
+	parts := strings.Split(s, ",")
+	if len(parts) != 2 {
+		return 100, 100, false
+	}
+	x, errX := strconv.Atoi(strings.TrimSpace(parts[0]))
+	y, errY := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if errX != nil || errY != nil {
+		return 100, 100, false
+	}
+	return int32(x), int32(y), true
+}
+
+// capToScreen limits a window that starts at (originX, originY) so it ends
+// no further right or down than scr, and says whether it had to.
+func capToScreen(outerW, outerH, originX, originY int32, scr rect) (int32, int32, bool) {
+	capped := false
+	if maxW := scr.Right - originX; outerW > maxW {
+		outerW, capped = maxW, true
+	}
+	if maxH := scr.Bottom - originY; outerH > maxH {
+		outerH, capped = maxH, true
+	}
+	return outerW, outerH, capped
+}
+
 func ensureWindowSizeWH(hwnd uintptr, cssWidth, cssHeight int32) error {
 	const swRestore = 9
 	procShowWindow.Call(hwnd, swRestore)
@@ -191,7 +231,7 @@ func ensureWindowSizeWH(hwnd uintptr, cssWidth, cssHeight int32) error {
 	// (matters on a multi-monitor, mixed-DPI setup) rather than wherever a
 	// previous check happened to leave it.
 	const swpNoSize = 0x0001
-	ret, _, err := procSetWindowPos.Call(hwnd, hwndTopmost, 100, 100, 0, 0, swpShowWindow|swpNoSize)
+	ret, _, err := procSetWindowPos.Call(hwnd, hwndTopmost, uintptr(windowOriginX), uintptr(windowOriginY), 0, 0, swpShowWindow|swpNoSize)
 	if ret == 0 {
 		return fmt.Errorf("SetWindowPos (position): %w", err)
 	}
@@ -222,25 +262,18 @@ func ensureWindowSizeWH(hwnd uintptr, cssWidth, cssHeight int32) error {
 	}
 
 	requestedW, requestedH := outerW, outerH
+	windowCapped = false
 	if scr, err := screenRect(hwnd); err == nil {
-		const margin = 100 // matches the fixed (100,100) window position
-		maxW := scr.Right - scr.Left - margin
-		maxH := scr.Bottom - scr.Top - margin
-		if outerW > maxW {
-			outerW = maxW
-		}
-		if outerH > maxH {
-			outerH = maxH
-		}
+		outerW, outerH, windowCapped = capToScreen(outerW, outerH, windowOriginX, windowOriginY, scr)
 	} else {
 		fmt.Printf("uicheck: could not read screen bounds to cap window size (%v)\n", err)
 	}
-	if outerW != requestedW || outerH != requestedH {
+	if windowCapped {
 		fmt.Printf("uicheck: %dx%d CSS px at %.0f%% scale needs %dx%d physical px, which does not fit this screen; capping the window to %dx%d physical px\n",
 			cssWidth, cssHeight, scale*100, requestedW, requestedH, outerW, outerH)
 	}
 
-	ret, _, err = procSetWindowPos.Call(hwnd, hwndTopmost, 100, 100, uintptr(outerW), uintptr(outerH), swpShowWindow)
+	ret, _, err = procSetWindowPos.Call(hwnd, hwndTopmost, uintptr(windowOriginX), uintptr(windowOriginY), uintptr(outerW), uintptr(outerH), swpShowWindow)
 	if ret == 0 {
 		return fmt.Errorf("SetWindowPos: %w", err)
 	}
