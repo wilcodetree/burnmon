@@ -2,7 +2,7 @@
 
 One paragraph per work session, newest on top.
 
-## 2026-10-03, Station UI pass, step 2 (bugs), not committed
+## 2026-10-03, Station UI pass, step 2 (bugs), committed `1b86eec`
 
 Step 2 of the roadmap file. Station CPU climb: three clean-enough runs of 30 minutes on `HEAD`
 (open, closed, and another session's fake-agent run) did not reproduce the recorded ramp; CPU
@@ -18,9 +18,9 @@ on three monitors, and a capped window is now SKIPPED, checked on the laptop pan
 rewrote `burnmon-dev-window.json` (100,100, 1936x1119 on DISPLAY2). Verified: `go vet ./...`,
 `go test ./... -count=1`, `.\build.ps1`, `check_themes.js`, d19 d20 d23 d24.
 
-## 2026-10-03, Station UI pass, step 1 (five items), not committed
+## 2026-10-03, Station UI pass, step 1 (five items), committed `2908574`
 
-Step 1 of `02_roadmap6-10-03_station_ui_and_backlog.md`. Room names now come from one pure
+Step 1 of `02_roadmap\2026-10-03_station_ui_and_backlog.md`. Room names now come from one pure
 `labelLayout` in `station.js` that both views share: bottom row, centred, never on a prop or plant
 of the room (tile data checked in `check_themes.js` for all 24 names), one common size (the
 smallest any room needs, 60 percent at most shrink), Lounge and Core right of centre. The rover
@@ -55,7 +55,8 @@ by eye after the first real-atlas screenshot (workers 1.2 to 1.6, gate barrier 1
 to d24 pass except d19 and d20 (same as alpha.9 on this screen). An A/B measurement then found the
 open Station's cost climbing with uptime, present in alpha.9 too; frame rates, payloads, canvas
 paths and allocations ruled out, cause open. Live check: Claude stages followed tools; Codex's
-calls fell inside its Arriving window. Numbers: `STATUS.md`'s alpha.10 entry. Not committed.
+calls fell inside its Arriving window. Numbers: `STATUS.md`'s alpha.10 entry. Committed `dd5125c`,
+pushed and tagged `v0.4.0-alpha.10` by Wilco (checked 2026-10-03 with `git ls-remote origin`).
 
 ## 2026-10-01/02, the Station secret screen, v0.4.0-alpha.9
 
@@ -80,7 +81,7 @@ and d20, which fail identically on alpha.8 on today's single small screen. Numbe
 
 ## 2026-09-29, WS2 follow-up: Codex live tail and collapsed turns, v0.4.0-alpha.8
 
-Spec `02_roadmap6-09-29_ws2_codex_live_tail.md`, items 0 to 5, on `main`. Item 0 proved on
+Spec `02_roadmap\2026-09-29_ws2_codex_live_tail.md`, items 0 to 5, on `main`. Item 0 proved on
 the real file first: 26 `token_count` lines, 1 stored event for that session. Codex rows keyed
 by `ordinal` when present, else by the line's byte offset; every collapsed `:0` row (11) removed
 and its file re-read from byte 0, on every Collect. A 2 s tail poll reads held-open files' sizes
@@ -89,7 +90,8 @@ projects. Copilot in VS Code tails its OTel file (about 490 ms per poll before, 
 after). Codex month 165,847,499 tokens before the re-ingest, 176,203,422 right after. A
 15-minute real run: 13 turns, each in the store within about 2 s, file mtimes untouched.
 Review by a fresh Opus agent, three medium findings fixed. Numbers and caveats: `STATUS.md`'s
-alpha.8 entry. Not committed.
+alpha.8 entry. Committed `b22292a`, pushed and tagged `v0.4.0-alpha.8` by Wilco (checked
+2026-10-03 with `git ls-remote origin`).
 
 ## 2026-09-28, bug fix: session colour locked grey before its vendor was known, v0.4.0-alpha.6
 

@@ -1,8 +1,9 @@
 # BurnMon, status
 
 What is true at this commit (2026-10-03): **`burnmon-dev.exe` is v0.4.0-alpha.10**
-(`dd5125c`, 2026-10-02; `HEAD`, `origin/main` and tag `v0.4.0-alpha.10` all equal it,
-checked with `git ls-remote origin`). **`burnmon.exe` and `burnmon-cli.exe` still report
+(tag `v0.4.0-alpha.10` at `dd5125c`, 2026-10-02). `HEAD` and `origin/main` are `1b86eec`, two
+commits later: Station UI pass steps 1 (`2908574`) and 2 (`1b86eec`), no version bump (checked
+2026-10-03 with `git ls-remote origin`). **`burnmon.exe` and `burnmon-cli.exe` still report
 `0.3.2`** (version constants in `cmd\burnmon\app.go` and `cmd\burnmon-cli\main.go`), but
 share the ingest fixes of alpha.8 and alpha.9 once rebuilt. Project state: parked until
 2026-11-01 except the Station feature (decision `C:\ZND\10_holding\03_logs\decisions.md`

@@ -7,9 +7,11 @@ Every UI item must hold in all four combinations (P space, P site, O space, O si
 ## Decision recorded
 
 BurnMon has no Valona pilot. It is ZND only; developers use it through the public ZND GitHub.
-DEADLINES.md line for 2026-10-24 is removed (done 2026-10-03). Still to do by Wilco: add the
-decision to `C:\ZND\10_holding\03_logs\decisions.md` and the hub one-pager; strike assumption A1
-and the Valona rows (lines 23, 55 to 57, 97, 110) in `2026-09-22_burnmon_plan.md`.
+DEADLINES.md line for 2026-10-24 is removed (done 2026-10-03). The decision itself was already in
+`C:\ZND\10_holding\03_logs\decisions.md` (2026-09-29), so no second entry was added. Done
+2026-10-03: the hub one-pager's two stale Valona lines corrected, and in `2026-09-22_burnmon_plan.md`
+the Valona rows struck, assumption A1 marked KILLED, and H1's measure marked OPEN (Wilco sets it at
+the 2026-12-19 scoring).
 
 ## Step 1: Station UI (five items)
 

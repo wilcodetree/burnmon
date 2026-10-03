@@ -19,8 +19,9 @@ BurnMon is the successor of claudecost: one portable executable that reads Claud
 Codex, Copilot CLI, Hermes and Cowork trails from the developer's own disk into a local
 SQLite store, prices them three ways, forecasts the month, and attributes tokens and active
 time to projects and clients. Built one session a week beside Siteoffice from 2026-09-22.
-v0.1 (Windows, Claude and Codex adapters, SQLite, coverage floor, the live Now page) by 2026-10-17; the
-Valona Amsterdam team tests from that build (team-lead yes pending). v0.2 (Copilot CLI,
+v0.1 (Windows, Claude and Codex adapters, SQLite, coverage floor, the live Now page) by 2026-10-17.
+No Valona pilot: BurnMon is a ZND product only, handed out through the public ZND GitHub, and H1
+is rescored on Talon (decision `C:\ZND_holding_logs\decisions.md` 2026-09-29). v0.2 (Copilot CLI,
 Hermes, forecast) by 2026-11-14, v0.3 (client attribution, export and merge, macOS and
 Linux builds) by 2026-12-12. Decision on 2026-12-19: continue to a team line, keep as a
 free tool, or stop.
@@ -29,7 +30,7 @@ free tool, or stop.
 
 | # | Hypothesis | Measure | Kill signal |
 |---|---|---|---|
-| H1 | Developers on mixed agents want one local number and will run a tool that never phones home | At least 5 of the Valona pilot developers still run BurnMon in week 4 of the pilot | Fewer than 3 after week 4, or "I use ccusage" from the majority |
+| H1 | Developers on mixed agents want one local number and will run a tool that never phones home | OPEN: rescored on Talon (decision 2026-09-29); Wilco sets the measure at the 2026-12-19 scoring. The Valona measure (5 pilot developers in week 4) is void | OPEN, set with the measure |
 | H2 | A forecast with its own error band changes behaviour | At least 2 pilot developers report a change (model switch, compact earlier, plan change) citing the forecast | Nobody cites it after 6 weeks, or the error band stays above 30% in month 2 |
 | H3 | Client attribution is worth money to a small firm | Talon uses a BurnMon export as one of the three PoC closing numbers, and one of Talon or an advisory client asks for the team line | No firm asks by 2026-12-19 |
 
@@ -52,9 +53,6 @@ per-person comparison; code signing; NL README (v1.1); a paid tier before a firm
 ## 3. Roles
 
 - Wilco: product owner, builder, first user, price-book keeper (15 minutes per vendor per month).
-- Valona Amsterdam team lead: says yes or no to the pilot (RELAYED nothing yet); no data or
-  budget from Valona.
-- Valona pilot developers: install the public build, report weekly in one message.
 - Talon (Martijn, Bart, Jeroen): receive BurnMon through the Groundwork Kit slot claudecost
   holds today; supply one export per laptop for the PoC closing number.
 - Claude sessions: Fable or Opus for adapter design and forecast method, Sonnet for
@@ -71,7 +69,7 @@ week slips every row below by a week, and the plan says so rather than compressi
 | Week 39 (2026-09-22) | Grill closed, hub propagated, repo `burnmon` forked from claudecost, name reserved | this plan is in the hub; repo builds `burnmon.exe` that equals claudecost today |
 | Week 40 (to 10-03) | Schema and SQLite store; Claude adapter moved onto the schema | claudecost numbers reproduce from the store byte for byte |
 | Week 41 (to 10-10) | Codex adapter (cumulative `token_count`, `turn_context` model, `rate_limits` sample) | Wilco's own Codex sessions priced and deduped |
-| Week 42 (to 10-17) | v0.1: Now page (file watchers, running Claude and Codex sessions, context fill, live burn chart), vendor column, price books as dated JSON, `price-check` | Now page shows Wilco's running Claude and Codex sessions with context fill and a live chart; exe handed to the Valona team lead. Cache clock and ticker slip to v0.2 if the week is short |
+| Week 42 (to 10-17) | v0.1: Now page (file watchers, running Claude and Codex sessions, context fill, live burn chart), vendor column, price books as dated JSON, `price-check` | Now page shows Wilco's running Claude and Codex sessions with context fill and a live chart. Cache clock and ticker slip to v0.2 if the week is short |
 | Week 43 (to 10-24) | Pilot start (if yes); Copilot CLI adapter against a real pilot install (A3) | first pilot report received; Copilot tokens visible or the gap named |
 | Weeks 44 to 46 (to 11-14) | Hermes adapter (5 s poll); forecast live line with error band and track record; re-prefill and compaction events; Copilot rows with the honest label; dev and business switch; v0.2 | forecast shown only once it has one closed week to score against; the switch flips every number on the Now page |
 | Weeks 47 to 50 (to 12-12) | Client map, active time, `export` and `merge`, macOS and Linux builds from Actions; v0.3 | Talon receives v0.3 through the Groundwork Kit; one merged report exists |
@@ -94,7 +92,6 @@ PRs.
 |---|---|---|
 | Copilot storage changes again during the build | facts list C, scan section 3 | Week 43 row: adapter built against a live pilot install, docs of CodeBurn as the map; A3 |
 | Forecast is wrong once and never trusted | note 4.2 | Week 44 to 46 "done when": not shown without a scored week; error band always visible |
-| Valona says no or says nothing | note section 7, A1 | Week 42 hands the build to the team lead; if no answer by 10-24, Wilco and Talon are the pilot and H1 is rescored on Talon |
 | CodeBurn ships client attribution first | scan section 4 (Teams waitlist) | H3 is about a paying ask, not a feature; the entity and EU posture do not copy |
 | One session a week is not enough | roadmap decision 7 | rows slip a week each, plan says so; kill check at week 46: no v0.2, then park |
 | macOS build broken and nobody notices | decision 5 | README label; first Mac pilot user is asked in week 43 |
@@ -107,7 +104,7 @@ PRs.
 
 | # | Assumption | Source | Confirms or kills it | Status |
 |---|---|---|---|---|
-| A1 | Valona Amsterdam team is available as pilot | Wilco, phase 0 | team-lead answer by 2026-10-24 | ASSUMED |
+| A1 | (struck) Valona Amsterdam team as pilot | Wilco, phase 0 | killed by decision 2026-09-29: ZND only, no Valona pilot | KILLED |
 | A2 | Every agent leaves a readable local trail | facts list A to D | done | CONFIRMED (Copilot layout VERIFY, see A3) |
 | A3 | Current Copilot CLI stores tokens in `data.db` | tokenuse docs, ccusage #1174 | inspect one pilot install in week 43 | VERIFY |
 | A4 | Claude Pro/Max plan prices as listed | aggregators | read claude.com/pricing in week 42 | VERIFY |
