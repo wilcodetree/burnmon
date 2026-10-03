@@ -1,6 +1,18 @@
 # BurnMon, status
 
-What is true at this commit (2026-09-26): **v0.3.2** (WS3, shared ingest performance and
+What is true at this commit (2026-10-03): **`burnmon-dev.exe` is v0.4.0-alpha.10**
+(`dd5125c`, 2026-10-02; `HEAD`, `origin/main` and tag `v0.4.0-alpha.10` all equal it,
+checked with `git ls-remote origin`). **`burnmon.exe` and `burnmon-cli.exe` still report
+`0.3.2`** (version constants in `cmd\burnmon\app.go` and `cmd\burnmon-cli\main.go`), but
+share the ingest fixes of alpha.8 and alpha.9 once rebuilt. Project state: parked until
+2026-11-01 except the Station feature (decision `C:\ZND\10_holding\03_logs\decisions.md`
+2026-10-01 and 2026-10-02); see `C:\ZND\10_holding\01_projects\burnmon.md`. Newest work
+is the "BurnMon Dev" section below, newest entry first (alpha.10: Station site theme and
+light theme; alpha.9: the Station; alpha.8: Codex live tail). Open bug: with the Station
+open the CPU climbs with uptime, cause not found, see that section. The text from here to
+the next heading describes v0.3.2 and is kept as history.
+
+What was true at v0.3.2 (2026-09-26): **v0.3.2** (WS3, shared ingest performance and
 local time everywhere, `02_roadmap\2026-09-26_ws3_shared_ingest_performance.md`). Step 0
 profiling on Wilco's real store (54,855 events, ~12,700 Cowork session folders) found the
 reported "climbs to 900MB+/13k handles within a minute" symptom was almost entirely one
