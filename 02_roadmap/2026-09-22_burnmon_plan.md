@@ -21,7 +21,7 @@ SQLite store, prices them three ways, forecasts the month, and attributes tokens
 time to projects and clients. Built one session a week beside Siteoffice from 2026-09-22.
 v0.1 (Windows, Claude and Codex adapters, SQLite, coverage floor, the live Now page) by 2026-10-17.
 No Valona pilot: BurnMon is a ZND product only, handed out through the public ZND GitHub, and H1
-is rescored on Talon (decision `C:\ZND_holding_logs\decisions.md` 2026-09-29). v0.2 (Copilot CLI,
+is rescored on Talon (decision `C:\ZND\10_holding\03_logs\decisions.md` 2026-09-29). v0.2 (Copilot CLI,
 Hermes, forecast) by 2026-11-14, v0.3 (client attribution, export and merge, macOS and
 Linux builds) by 2026-12-12. Decision on 2026-12-19: continue to a team line, keep as a
 free tool, or stop.
