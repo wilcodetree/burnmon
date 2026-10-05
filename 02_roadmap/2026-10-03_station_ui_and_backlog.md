@@ -104,3 +104,13 @@ D. Space theme, P view: the blue "engine glow" under the deck has a hard straigh
    cx = B[0], cy = B[1] + d*2, r = 260*s. Space theme only; site theme has no glow.
    Check at several zoom levels and pan positions in P, and that O and the site theme are
    unchanged.
+
+E. Site theme sky: clouds should look like clouds (Wilco, screenshot 16). Cause, read from code
+   (INFERRED, not yet seen live): `buildSky` in `cmd\burnmon-dev\station\station.js` (lines 492
+   to 496) draws each cloud as four flat ellipses at 50 percent white in a row, so the overlaps
+   double up and read as stacked discs. Fix: draw each cloud on its own small offscreen canvas as
+   a cumulus (5 to 8 round puffs of varied radius in a dome, flat base, soft radial-gradient
+   edges, white top and a pale grey-blue underside), then composite it onto the sky at one
+   alpha so overlaps never show. Keep the seeded `rng(5)` so the sky stays stable, keep the
+   sun glow, and keep the sky baked once (no per-frame cost). Site theme only; check the light
+   page theme and a resized window.

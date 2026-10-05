@@ -481,6 +481,30 @@
       buildStars(); dirtyFloor = true;
     }
 
+    // One cumulus on its own canvas: 5 to 8 soft round puffs of varied radius in
+    // a dome on a flat base, white on top and pale grey-blue underneath. The
+    // sky draws it once at one alpha, so overlapping puffs never show as discs.
+    function cloudCanvas(cw, ch, r){
+      var cv = document.createElement('canvas'); cv.width = Math.ceil(cw); cv.height = Math.ceil(ch);
+      var c = cv.getContext('2d'), base = ch * 0.8, n = 5 + Math.floor(r() * 4), i;
+      for(i = 0; i < n; i++){
+        var t = (i + 0.5) / n, pr = cw * (0.09 + 0.09 * Math.sin(Math.PI * t) + r() * 0.03),
+            px = cw * (0.14 + 0.72 * t) + (r() - 0.5) * cw * 0.04, py = base - pr * (0.55 + 0.15 * r()),
+            g = c.createRadialGradient(px, py, 0, px, py, pr);
+        g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.55, 'rgba(255,255,255,0.9)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        c.fillStyle = g; c.beginPath(); c.arc(px, py, pr, 0, 6.283); c.fill();
+      }
+      c.globalCompositeOperation = 'source-atop';   // underside: shade only where the puffs are
+      var sh = c.createLinearGradient(0, base - cw * 0.3, 0, base);
+      sh.addColorStop(0, 'rgba(255,255,255,1)'); sh.addColorStop(0.5, 'rgba(255,255,255,1)'); sh.addColorStop(1, 'rgba(160,178,198,1)');
+      c.fillStyle = sh; c.fillRect(0, 0, cv.width, cv.height);
+      c.globalCompositeOperation = 'destination-out';   // flat base, softened over its last few pixels
+      var fb = c.createLinearGradient(0, base - cw * 0.04, 0, base);
+      fb.addColorStop(0, 'rgba(0,0,0,0)'); fb.addColorStop(1, 'rgba(0,0,0,1)');
+      c.fillStyle = fb; c.fillRect(0, base - cw * 0.04, cv.width, cv.height);
+      return cv;
+    }
+
     // Site backdrop: a muted daytime sky over bare ground, no stars.
     function buildSky(x, w, h){
       var r = rng(5), hz = h * 0.3, g = x.createLinearGradient(0, 0, 0, hz);
@@ -489,10 +513,14 @@
       var sun = x.createRadialGradient(w * 0.82, h * 0.06, 0, w * 0.82, h * 0.06, h * 0.3);
       sun.addColorStop(0, 'rgba(255,244,214,0.55)'); sun.addColorStop(1, 'rgba(255,244,214,0)');
       x.fillStyle = sun; x.fillRect(0, 0, w, hz);
-      x.fillStyle = 'rgba(255,255,255,0.5)';
+      // Same six places as before (r() order unchanged, so the ground below is
+      // too); each cloud's own shape comes from a generator seeded per cloud.
       for(var i = 0; i < 6; i++){
-        var cx = r() * w, cy = (0.05 + r() * 0.2) * h, cw = (0.05 + r() * 0.08) * w;
-        for(var k = 0; k < 4; k++){ x.beginPath(); x.ellipse(cx + (k - 1.5) * cw * 0.45, cy + (k % 2) * cw * 0.05, cw * 0.4, cw * 0.14, 0, 0, 6.283); x.fill(); }
+        var cx = r() * w, cy = (0.05 + r() * 0.2) * h, cw = (0.05 + r() * 0.08) * w, cr = rng(50 + i);
+        var CW = cw * 2.4, CH = CW * 0.5, hc = CW * 0.33, by = Math.min(hz * 0.95, Math.max(cy + hc * 0.3, hc + h * 0.02));
+        x.globalAlpha = 0.65 + cr() * 0.25;
+        x.drawImage(cloudCanvas(CW, CH, cr), cx - CW / 2, by - CH * 0.8);
+        x.globalAlpha = 1;
       }
       var gd = x.createLinearGradient(0, hz, 0, h);
       gd.addColorStop(0, '#8d7e62'); gd.addColorStop(1, '#6b5c43');
@@ -574,9 +602,9 @@
         x.beginPath(); x.moveTo(L[0], L[1] + d * 0.55); x.lineTo(B[0], B[1] + d * 0.55); x.lineTo(R[0], R[1] + d * 0.55); x.stroke();
         x.shadowBlur = 0;
         // engine glow under the deck
-        var eg = x.createRadialGradient(B[0], B[1] + d * 2, 0, B[0], B[1] + d * 2, 260 * s);
+        var gy = B[1] + d * 2, gr = 260 * s, eg = x.createRadialGradient(B[0], gy, 0, B[0], gy, gr);
         eg.addColorStop(0, 'rgba(56,189,248,0.22)'); eg.addColorStop(1, 'rgba(56,189,248,0)');
-        x.fillStyle = eg; x.fillRect(B[0] - 300 * s, B[1], 600 * s, 320 * s);
+        x.fillStyle = eg; x.fillRect(B[0] - gr, gy - gr, 2 * gr, 2 * gr);
       }
       // tiles
       for(var ty = 0; ty < GY; ty++) for(var tx = 0; tx < GX; tx++){

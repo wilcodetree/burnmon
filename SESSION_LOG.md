@@ -2,6 +2,19 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-10-05, Station backlog D and E (uncommitted)
+
+D: the space theme's engine glow is now filled into a square that covers its whole gradient
+(`station.js`, `buildFloor`); new check `d26` failed first (fill did not cover the gradient square, alpha
+step 37 to 38 across the old rect top at fit, zoom and zoom plus pan) and passes (step 1, cover true).
+O never runs `buildFloor` (`drawTop` and `buildPixel`), so it cannot change; the site floor hash is the
+same before and after. The I view shares `buildFloor` and gets the same fix. E: site clouds are now
+cumulus built by `cloudCanvas` (5 to 8 soft puffs, flat base, grey-blue underside) on an offscreen canvas
+per cloud, composited once at one alpha; same six places, same `rng(5)` order, so the ground below is
+byte-identical. New check `d27` failed first (0 offscreen clouds, 24 ellipses, pixel step 44 to 56) and
+passes (6 clouds, step 7.5 at 1600x900, 10.7 at 1100x700, seeded, baked once). go vet, go test, build,
+check_themes.js and uicheck d23 pass. Nothing committed.
+
 ## 2026-10-05, Station backlog A, B, C (uncommitted)
 
 A: a click on a Station agent now opens the latest turn as a compact card (320 px, next to the click,
