@@ -114,3 +114,24 @@ E. Site theme sky: clouds should look like clouds (Wilco, screenshot 16). Cause,
    alpha so overlaps never show. Keep the seeded `rng(5)` so the sky stays stable, keep the
    sun glow, and keep the sky baked once (no per-frame cost). Site theme only; check the light
    page theme and a resized window.
+
+## Decisions 2026-10-05 (Wilco)
+
+- Esc closes every Station mode, O included: KEPT.
+- H1 measure without Valona: Wilco's own daily use plus public GitHub signals (stars, release
+  downloads, issues on the public ZND repo, counted over a fixed window before the 2026-12-19
+  decision). No direct developer outreach. Still to do: write this into the H1 row of
+  `2026-09-22_burnmon_plan.md` and set the window dates (OPEN: window start and the thresholds
+  that count as a yes, waits on Wilco).
+
+F. Hover card too wide and jumps left (Wilco, screenshots 17 to 20, Cowork agent). The long Cowork
+   cwd path makes the hover card as wide as the window, and a small mouse move shifts it left.
+   Cause, read from code (INFERRED, not yet seen live): `showTip` in `cmd\burnmon-dev\station\
+   station.js` (about line 1752) sets display:block, reads `tip.offsetWidth`, then sets left to
+   `clamp(mx + 14, 4, W - tw - 4)`. The card is absolutely positioned, so its shrink-to-fit width
+   depends on the left it had last time; an unbreakable path then flips between widths as the
+   cursor moves. Fix: give the hover card a max width (about 320 px, the same as the click card),
+   wrap long values (overflow-wrap:anywhere), and reset left to 0 before measuring so the width
+   no longer depends on the last position. Cover Project, Model, Tool and any other long field.
+   Test: move the pointer a few px across an agent with a 200 character project and assert the
+   card width stays constant and inside the window (uicheck, both themes, P and O and I).
