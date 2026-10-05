@@ -41,14 +41,14 @@ type Finding struct {
 // configurable in v0.2, unlike the re-prefill threshold, per the spec.
 const compactionDropRatio = 0.30
 
-// copilotVSCodeAgent and copilotCompactionFloor scope the compaction rule for
+// CopilotVSCodeAgent and copilotCompactionFloor scope the compaction rule for
 // Copilot in VS Code. Its OTel spans are one row per request and interleave
 // the main conversation (a growing context, 60k to 700k tokens in the real
 // store) with a helper model's small requests (titles, summaries; 253 to 3,826
 // tokens, an independent prompt each time). The helper is no running context,
 // so a drop to or between helper requests is not a compaction.
 const (
-	copilotVSCodeAgent     = "copilot-vscode"
+	CopilotVSCodeAgent     = "copilot-vscode"
 	copilotCompactionFloor = 10_000
 )
 
@@ -57,7 +57,7 @@ const (
 // with the previous turn. Copilot compares with the previous turn of the same
 // model, and only when that context is at least copilotCompactionFloor.
 func compactionBaseline(turns []schema.Event, i int) (before int64, ok bool) {
-	if turns[i].Agent != copilotVSCodeAgent {
+	if turns[i].Agent != CopilotVSCodeAgent {
 		return contextOf(turns[i-1]), true
 	}
 	for j := i - 1; j >= 0; j-- {
@@ -67,6 +67,23 @@ func compactionBaseline(turns []schema.Event, i int) (before int64, ok bool) {
 		}
 	}
 	return 0, false
+}
+
+// ContextTurn is the turn whose context stands for the session now. Every agent
+// but Copilot in VS Code: the newest turn. Copilot: the newest turn at or above
+// copilotCompactionFloor, since its newest request is often a helper's. A
+// session with only helper-sized requests keeps the newest turn.
+func ContextTurn(turns []schema.Event) schema.Event {
+	last := turns[len(turns)-1]
+	if last.Agent != CopilotVSCodeAgent {
+		return last
+	}
+	for i := len(turns) - 1; i >= 0; i-- {
+		if contextOf(turns[i]) >= copilotCompactionFloor {
+			return turns[i]
+		}
+	}
+	return last
 }
 
 // runwayFitTurns is how many of the session's most recent turns

@@ -275,7 +275,10 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time, bu
 			cost += turnCost(t, cfg)
 		}
 
-		lastCtx := contextOf(last)
+		// Context and its window come from insight.ContextTurn: for Copilot in
+		// VS Code the newest request is often a helper's, not the conversation's.
+		ctxTurn := insight.ContextTurn(turns)
+		lastCtx := contextOf(ctxTurn)
 		fresh := last.Input
 		cacheR := int64(0)
 		if last.CacheRead != nil {
@@ -285,7 +288,7 @@ func BuildSnapshot(events []schema.Event, cfg *pricing.Config, now time.Time, bu
 		if fresh+cacheR > 0 {
 			hitRatio = float64(cacheR) / float64(fresh+cacheR)
 		}
-		window, _ := cfg.ContextWindow(last.Model)
+		window, _ := cfg.ContextWindow(ctxTurn.Model)
 
 		s := &Session{
 			Vendor:        turns[0].Vendor,
@@ -740,7 +743,7 @@ func ApplyStages(sessions []*Session, st *store.Store, now time.Time) error {
 	}
 	var apply func(s *Session)
 	apply = func(s *Session) {
-		in := stage.Input{Now: now}
+		in := stage.Input{Now: now, NoToolTrail: s.Agent == insight.CopilotVSCodeAgent}
 		if n := len(s.turns); n > 0 {
 			in.LastTurn = s.turns[n-1].At
 		}

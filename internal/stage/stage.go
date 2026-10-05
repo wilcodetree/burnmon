@@ -61,6 +61,11 @@ type Input struct {
 
 	// CompactedAt is the newest compaction finding's turn time.
 	CompactedAt time.Time
+
+	// NoToolTrail is true for an agent whose trail never records tool calls
+	// (Copilot in VS Code: OTel spans are one row per request). "The newest
+	// turn called no tool" then says nothing about a hand-back.
+	NoToolTrail bool
 }
 
 // Result is the classified stage plus the moment it began and the tool
@@ -89,6 +94,13 @@ func Classify(in Input) Result {
 		return Result{Stage: Compacting, Since: in.CompactedAt}
 	case idle >= IdleCutoff:
 		return Result{Stage: Dormant, Since: last.Add(IdleCutoff)}
+	}
+
+	if in.NoToolTrail {
+		if idle >= StuckToolAfter {
+			return Result{Stage: Waiting, Since: last.Add(StuckToolAfter)}
+		}
+		return Result{Stage: Thinking, Since: last}
 	}
 
 	if in.LastTool != "" && in.LastToolInLatestTurn {

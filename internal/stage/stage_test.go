@@ -79,3 +79,42 @@ func TestCodexExecRuns(t *testing.T) {
 		t.Fatalf("got %s", s)
 	}
 }
+
+// TestNoToolTrail: Copilot in VS Code records one OTel row per request and no
+// tool calls, so a session mid-work has no tool to anchor a stage on. Measured
+// on the real store (2026-10-05, 513 gaps between consecutive requests): the
+// median gap is 9 s, 93 percent are within 3 minutes. Until that long a
+// silence is the agent between requests (thinking), not a hand-back.
+func TestNoToolTrail(t *testing.T) {
+	sec := time.Second
+	base := Input{Now: t0, Start: t0.Add(-time.Hour), LastTurn: t0.Add(-5 * sec), NoToolTrail: true}
+	cases := []struct {
+		name string
+		mod  func(in *Input)
+		want Stage
+	}{
+		{"request just landed, agent is between requests", func(in *Input) {}, Thinking},
+		{"one minute of silence is still between requests", func(in *Input) { in.LastTurn = t0.Add(-time.Minute) }, Thinking},
+		{"past the stuck-tool window the human is up", func(in *Input) { in.LastTurn = t0.Add(-StuckToolAfter - sec) }, Waiting},
+		{"silent past the cutoff is dormant", func(in *Input) { in.LastTurn = t0.Add(-11 * time.Minute) }, Dormant},
+		{"new session still arrives", func(in *Input) { in.Start = t0.Add(-5 * sec) }, Arriving},
+		{"compaction still wins", func(in *Input) { in.CompactedAt = t0.Add(-20 * sec) }, Compacting},
+		{"without the flag the same silence is waiting", func(in *Input) { in.NoToolTrail = false }, Waiting},
+	}
+	for _, c := range cases {
+		in := base
+		c.mod(&in)
+		if got := Classify(in).Stage; got != c.want {
+			t.Errorf("%s: got %s, want %s", c.name, got, c.want)
+		}
+	}
+	r := Classify(base)
+	if want := base.LastTurn; !r.Since.Equal(want) {
+		t.Errorf("Since = %v, want the last request %v", r.Since, want)
+	}
+	waiting := base
+	waiting.LastTurn = t0.Add(-StuckToolAfter - sec)
+	if want := waiting.LastTurn.Add(StuckToolAfter); !Classify(waiting).Since.Equal(want) {
+		t.Errorf("waiting Since = %v, want %v", Classify(waiting).Since, want)
+	}
+}
