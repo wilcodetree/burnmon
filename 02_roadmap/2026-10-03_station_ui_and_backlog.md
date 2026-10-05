@@ -58,3 +58,34 @@ No brief yet. Idea source github.com/Javis603/token-monitor (MIT). Write the bri
 
 No git writes on this mount. A Windows build, uicheck and the CPU measurements need a Windows
 session (Claude Code on the laptop). Commits, tags and pushes are Wilco's.
+
+## Added 2026-10-05: Copilot in VS Code always shows Compacting (bug)
+
+Reported by Wilco with screenshots: a running GitHub Copilot session sits in the Recycler,
+stage Compacting, all the time. Turn 60 in the drawer shows fresh 253, cache read 0, output 74
+on gpt-4o-mini, a tiny request.
+Likely cause (INFERRED from code, not yet proven on real data): `internal\insight\insight.go`
+fires a compaction finding when `contextOf` (input plus cache read plus cache write) drops more
+than 30 percent from the previous turn. Copilot's OTel spans are one row per request, cache
+fields are empty, and small side requests follow large ones, so the rule fires on almost every
+turn. `internal\live\live.go` line 753 then takes the newest such finding as `CompactedAt`, and
+`internal\stage\stage.go` line 88 returns Compacting while it is inside CompactWindow.
+Fix: failing test first with a Copilot-shaped event sequence; then restrict the rule (same model
+as the previous turn, and a vendor whose context is a running total), and re-check Claude Code
+and Codex compaction findings still fire. Prove on the real store before and after.
+
+## Added 2026-10-05, from Wilco's screenshot 12
+
+A. Click popup too big (Wilco, screenshots 13 and 14). The hover card (screenshot 14) is the
+   right size. The popup you get on clicking an agent for "the latest turn" (screenshot 13)
+   spans the full window width, runs a long Cowork cwd path on one line, and is clipped on the
+   left. Make it the same compact card as the hover card: fixed max width near the agent, long
+   values wrap (overflow-wrap:anywhere), nothing clipped. In P, O and the new I view, both
+   themes. Test first if the card geometry can be checked headless; add a uicheck assertion.
+B. New key I: replaces the whole burn zone with the 3D (isometric) Station, the same way O
+   replaces it with the plan view. Esc closes it (after a turn popup, before fullscreen, same
+   order as O). Decided key: I (Wilco, 2026-10-05). No README mention while the Station stays
+   undocumented. Add a d-check to uicheck for it, both themes.
+C. Cowork session shows Waiting while it is busy (Wilco: "this session is busy, but something
+   else"). INFERRED, unproven: Cowork writes events at turn end, so a long turn reads as
+   Waiting. Same family as the Copilot Waiting symptom. Prove on a copy of the store first.
