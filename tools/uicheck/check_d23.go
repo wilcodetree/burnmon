@@ -13,7 +13,9 @@ import (
 // turn popup on top, Esc closes the popup first and the Station on the
 // next press; O replaces the whole burn zone (chart to turn ticker, all of
 // it above System) with the plan view filling that zone, and it draws; O
-// brings the zone back. Screenshots of both views in both themes (P site, P space, O site, O space). Station themes (alpha.10):
+// brings the zone back; I does the same with the 3D view, and Esc closes O and
+// I after a turn popup and before fullscreen (2026-10-05). Screenshots of the
+// views in both themes (P, O and I, site and space). Station themes (alpha.10):
 // the startup theme is site (HUD "SITE ... on site"), T flips it to the space
 // station ("STATION ... on board") and back while the Station is open, and
 // does nothing once it is closed. A startup theme of "space" in the machine's
@@ -43,6 +45,10 @@ type d23State struct {
 	PanelH      float64 `json:"panelH"`
 	ZoneH       float64 `json:"zoneH"`
 	Theme       string  `json:"theme"`
+	// View is the mounted Station's projection: "iso" (3D) or "top" (plan).
+	View string `json:"view"`
+	// ExitCalls counts bdevExitFullscreen calls since the spy went in.
+	ExitCalls int `json:"exitCalls"`
 }
 
 const d23ReadJS = `(function(){
@@ -69,7 +75,9 @@ const d23ReadJS = `(function(){
     popupZ: parseFloat(getComputedStyle(pop).zIndex) || 0, overlayZ: parseFloat(getComputedStyle(ov).zIndex) || 0,
     panelH: box ? box.getBoundingClientRect().height : 0,
     zoneH: document.querySelector('.zone.burn').getBoundingClientRect().height,
-    theme: window.__bdevStationTheme ? (window.__bdevStationTheme() || '') : ''
+    theme: window.__bdevStationTheme ? (window.__bdevStationTheme() || '') : '',
+    view: window.__bdevStationView ? (window.__bdevStationView() || '') : '',
+    exitCalls: window.__bdevExitCalls || 0
   };
 })()`
 
@@ -216,13 +224,65 @@ func init() {
 		step("T again switches the plan view back to the site theme", vkT, func(s d23State) bool {
 			return s.Panel && s.Lit > 500 && strings.Contains(s.Hud, "SITE") && s.Theme == "site"
 		})
+		// Esc closes the plan view (O) and the 3D view (I) after a turn popup
+		// and before fullscreen: a spy on bdevExitFullscreen counts the calls
+		// (F11 itself is a global hotkey, so the Esc path is the only one a
+		// key press in the page can reach).
+		if _, err := evalRaw(`(window.__bdevExitCalls = 0, window.__bdevExitOrig = window.bdevExitFullscreen, window.bdevExitFullscreen = function(){ window.__bdevExitCalls++; }, true)`); err != nil {
+			errs = append(errs, fmt.Sprintf("exit spy: %v", err))
+		}
+		defer evalRaw(`(window.__bdevExitOrig && (window.bdevExitFullscreen = window.__bdevExitOrig), true)`)
+		escOrder := func(name string, open func(d23State) bool) {
+			if _, err := evalRaw(`(window.__bdevStationClick('fake-st-1'), true)`); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: station click: %v", name, err))
+			}
+			step(name+": a Station click opens the turn popup", 0, func(s d23State) bool { return s.Popup && open(s) })
+			step(name+": Esc closes the popup first, the view stays, fullscreen is left alone", vkEscape, func(s d23State) bool {
+				return !s.Popup && open(s) && s.ExitCalls == 0
+			})
+			step(name+": Esc again closes the view, the chart is back, fullscreen is still left alone", vkEscape, func(s d23State) bool {
+				return !s.Popup && !s.Panel && !s.Overlay && s.BarsShown && s.TickerShown && s.ExitCalls == 0
+			})
+			step(name+": Esc with nothing open reaches fullscreen", vkEscape, func(s d23State) bool { return s.ExitCalls == 1 })
+			_, _ = evalRaw(`(window.__bdevExitCalls = 0, true)`)
+		}
 		step("O again brings the chart back", vkO, func(s d23State) bool {
+			return !s.Panel && s.BarsShown && s.AxisShown && s.TickerShown && !s.Overlay
+		})
+		step("O opens the plan view for the Esc check", vkO, func(s d23State) bool { return s.Panel && s.View == "top" && s.Lit > 500 })
+		escOrder("O", func(s d23State) bool { return s.Panel && s.View == "top" })
+
+		// I (3D Station in the burn zone, 2026-10-05): the same zone and
+		// frame as O, the isometric projection instead of the plan.
+		step("I swaps the chart for the 3D Station and it draws", vkI, func(s d23State) bool {
+			return s.Panel && s.View == "iso" && !s.BarsShown && !s.AxisShown && !s.TickerShown && s.PanelH >= s.ZoneH-4 && s.Lit > 500 &&
+				strings.Contains(s.Hud, "3 agents") && !s.Overlay
+		})
+		if err := d23Shot(hwnd, "d23-station-iso"); err != nil {
+			return err
+		}
+		step("T switches the 3D view to the space theme", vkT, func(s d23State) bool {
+			return s.Panel && s.View == "iso" && s.Lit > 500 && strings.Contains(s.Hud, "STATION") && s.Theme == "space"
+		})
+		if err := d23Shot(hwnd, "d23-station-iso-space"); err != nil {
+			return err
+		}
+		step("T again switches the 3D view back to the site theme", vkT, func(s d23State) bool {
+			return s.Panel && s.View == "iso" && s.Lit > 500 && strings.Contains(s.Hud, "SITE") && s.Theme == "site"
+		})
+		step("O while the 3D view is open swaps to the plan view", vkO, func(s d23State) bool {
+			return s.Panel && s.View == "top" && s.Lit > 500
+		})
+		step("I swaps back to the 3D view", vkI, func(s d23State) bool { return s.Panel && s.View == "iso" && s.Lit > 500 })
+		escOrder("I", func(s d23State) bool { return s.Panel && s.View == "iso" })
+		step("I opens the 3D view once more", vkI, func(s d23State) bool { return s.Panel && s.View == "iso" && s.Lit > 500 })
+		step("I again brings the chart back", vkI, func(s d23State) bool {
 			return !s.Panel && s.BarsShown && s.AxisShown && s.TickerShown && !s.Overlay
 		})
 		if len(errs) > 0 {
 			return fmt.Errorf("d23: %d problem(s):\n%s", len(errs), strings.Join(errs, "\n"))
 		}
-		fmt.Println("uicheck: d23: Station opens on P and O, draws in both views, popup above it, Esc order popup then Station, T flips site and space only while open")
+		fmt.Println("uicheck: d23: Station opens on P, O and I, draws in all three, popup above it, Esc order popup then Station then fullscreen, T flips site and space only while open")
 		return nil
 	}
 }

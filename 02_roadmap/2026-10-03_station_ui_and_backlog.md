@@ -89,3 +89,18 @@ B. New key I: replaces the whole burn zone with the 3D (isometric) Station, the 
 C. Cowork session shows Waiting while it is busy (Wilco: "this session is busy, but something
    else"). INFERRED, unproven: Cowork writes events at turn end, so a long turn reads as
    Waiting. Same family as the Copilot Waiting symptom. Prove on a copy of the store first.
+
+Status 2026-10-05 (uncommitted): A done (`d25`). B done (`d23`; Esc now closes O too, it did not
+before). C disproved on the store: Cowork rows land about 0.2 s after their stamp, and long gaps after
+a tool call are as rare as in Claude Code (0.52 against 0.79 percent over 180 s). The one live case
+Wilco saw is not reproduced: send the time or a screenshot to look at that session.
+
+D. Space theme, P view: the blue "engine glow" under the deck has a hard straight top edge
+   (Wilco, screenshot 15). Cause, read from code (INFERRED, not yet seen live):
+   `cmd\burnmon-dev\station\station.js` lines 577 to 579 draw a radial gradient of radius
+   260*s centred at B[1] + d*2, but fill only `fillRect(B[0]-300*s, B[1], 600*s, 320*s)`. The
+   rect starts at the deck's bottom corner, so the upper part of the glow is clipped flat.
+   Fix: fill a square that covers the whole gradient, `fillRect(cx - r, cy - r, 2*r, 2*r)` with
+   cx = B[0], cy = B[1] + d*2, r = 260*s. Space theme only; site theme has no glow.
+   Check at several zoom levels and pan positions in P, and that O and the site theme are
+   unchanged.

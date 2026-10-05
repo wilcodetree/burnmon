@@ -2,6 +2,22 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-10-05, Station backlog A, B, C (uncommitted)
+
+A: a click on a Station agent now opens the latest turn as a compact card (320 px, next to the click,
+long values wrapped, pushed back inside the window) in P, O and I. New check `d25` failed first (480 px
+card, scrollWidth 3229 against 478, mid-window) and passes on both Station themes and the light page.
+B: key I mounts the 3D Station in the burn zone (`mount(el, 'panel', 'iso')`); `d23` extended and red
+first. Esc did NOT close O before (only P): it now closes any Station mode, after a turn popup and
+before fullscreen, for O and I alike; that is one line in `cmd\burnmon-dev\page.html` if it should be
+reverted. C: disproved on a copy of the store (copy deleted, aggregates only): Cowork turn rows land
+about 0.2 s after their stamp and calls land throughout; gaps after a tool call exceed 180 s in 0.52
+percent of Cowork cases against 0.79 for Claude Code; Cowork hand-back verdicts have a median 169 s
+to the next activity. No code change; the live case Wilco saw is not reproduced and needs a time. Verified: go vet, go test
+./... -count=1, `.\build.ps1`, `.\scripts\uicheck.ps1` d3 d23 d24 d25 and w0 w2 to w8 pass; `w1` fails on
+the 1.5 s first paint of `burnmon.exe` (code untouched, known flake). d23 and d25 each failed once on lost
+key focus and passed on rerun.
+
 ## 2026-10-03, Station UI pass, step 2 (bugs), committed `1b86eec`
 
 Step 2 of the roadmap file. Station CPU climb: three clean-enough runs of 30 minutes on `HEAD`

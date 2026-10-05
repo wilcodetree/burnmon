@@ -12,11 +12,13 @@
 //   var st = BMStation.create({atlases: {space: window.BM_STATION_ATLAS,
 //                                        site: window.BM_STATION_ATLAS_SITE},
 //                              theme: 'site' | 'space',
-//                              onAgentClick: function(sid){...}});
+//                              onAgentClick: function(sid, data, {x, y}){...}});
 //   (opts.atlas still names the space atlas; both atlases default to the
 //   window globals.)
 //   st.setTheme('site' | 'space');   st.theme();
-//   st.mount(el, 'full' | 'panel');   st.unmount();
+//   st.mount(el, 'full' | 'panel', 'iso' | 'top');   st.unmount();   st.view();
+//   (the view defaults to iso for 'full' and top for 'panel'; 'panel' with
+//   'iso' is the 3D Station in a small host, the I key.)
 //   st.update({now: ms, sessions: [{id, parent, agent, color, project,
 //              model, stage, since, tool, ctx, tokens}]});
 //   BMStation.fromSnapshot(snap, colorFn) turns a bmLive snapshot into
@@ -1768,7 +1770,7 @@
       var wasDrag = drag && drag.moved; drag = null; canvas.style.cursor = 'grab';
       if(wasDrag) return;
       var r = canvas.getBoundingClientRect(), a = hit(e.clientX - r.left, e.clientY - r.top);
-      if(a && opts.onAgentClick) opts.onAgentClick(a.id, a.data);
+      if(a && opts.onAgentClick) opts.onAgentClick(a.id, a.data, {x: e.clientX, y: e.clientY});
     }
     function onWheel(e){
       e.preventDefault();
@@ -1816,9 +1818,9 @@
       if(timer){ clearTimeout(timer); timer = 0; loop(); }
     }
 
-    function mount(el, m){
+    function mount(el, m, v){
       unmount();
-      host = el; mode = m || 'full'; view = mode === 'panel' ? 'top' : 'iso';
+      host = el; mode = m || 'full'; view = v || (mode === 'panel' ? 'top' : 'iso');
       el.classList.add('bms-host');
       canvas = document.createElement('canvas'); canvas.className = 'bms-canvas';
       hud = document.createElement('div'); hud.className = 'bms-hud bms-' + mode;
@@ -1862,7 +1864,8 @@
     }
 
     return {mount: mount, unmount: unmount, update: update, setTheme: setTheme, theme: function(){ return themeName; },
-            isMounted: function(){ return !!host; }, mode: function(){ return host ? mode : null; }};
+            isMounted: function(){ return !!host; }, mode: function(){ return host ? mode : null; },
+            view: function(){ return host ? view : null; }};
   }
 
   // ---- snapshot adapter --------------------------------------------------------

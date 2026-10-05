@@ -207,7 +207,13 @@ tr.totalrow td{font-weight:700; color:var(--strong); border-bottom:1px solid var
    the Station itself gets .over-station so it shows on top. */
 #stationOverlay{position:fixed; inset:0; z-index:1500; display:none}
 #stationOverlay.on{display:block}
-#turnPopupOverlay.over-station{z-index:1600}
+#turnPopupOverlay.over-station{z-index:1600; background:transparent}
+/* From the Station the popup is the compact card: as small as the hover
+   card, next to the click (placeStationCard sets left and top), long values
+   wrapped. */
+#turnPopupOverlay.over-station #turnPopup{position:absolute; width:320px; max-width:calc(100vw - 8px);
+  padding:10px 12px; overflow-wrap:anywhere}
+#turnPopupOverlay.over-station #turnPopup td{white-space:normal}
 #turnPopup{position:relative; background:var(--panel); border:1px solid var(--amber); color:var(--txt);
   padding:18px 20px; width:480px; max-width:92vw; max-height:84vh; overflow:hidden; font-size:12px}
 #turnPopup h3{margin:0 0 2px; color:var(--strong); font-size:14px}
@@ -1588,7 +1594,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
 
   // ---------- Station (02_roadmap\2026-10-01_station_secret_screen.md)
   // P opens the full-window Station, O swaps the burn zone for its plan
-  // view. Nothing exists until the first P or O. While it is closed or the
+  // view, I for the 3D view. Esc closes any of them. Nothing exists until the first P or O. While it is closed or the
   // window is hidden nothing draws, nothing is fed, and the tick asks the
   // Go side for no stages (cursor.stages), so it costs nothing.
   var station = null, stationMode = null, stationPanel = null, lastBurnSnap = null;
@@ -1605,9 +1611,24 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   function feedStation(){
     if(station && station.isMounted() && lastBurnSnap && snapHasStages(lastBurnSnap)) station.update(BMStation.fromSnapshot(lastBurnSnap, sessionColorDark));
   }
-  function stationAgentClick(sid){
+  // The card from a Station click sits next to the click and always inside
+  // the window; the size follows the content, so this runs on every resize
+  // of the card (loading text, then the turn) and of the window.
+  var cardAnchor = null;
+  function placeStationCard(){
+    var ov = document.getElementById('turnPopupOverlay'), p = document.getElementById('turnPopup');
+    if(!ov.classList.contains('over-station') || ov.classList.contains('hidden')) return;
+    var a = cardAnchor || {x: window.innerWidth / 2, y: window.innerHeight / 3};
+    var w = p.offsetWidth, h = p.offsetHeight;
+    p.style.left = Math.max(4, Math.min(a.x + 14, window.innerWidth - w - 4)) + 'px';
+    p.style.top = Math.max(4, Math.min(a.y + 14, window.innerHeight - h - 4)) + 'px';
+  }
+  if(window.ResizeObserver) new ResizeObserver(placeStationCard).observe(document.getElementById('turnPopup'));
+  window.addEventListener('resize', placeStationCard);
+  function stationAgentClick(sid, data, pos){
     var turn = stationTurnCount(sid);
     if(!turn) return;
+    cardAnchor = pos || null;
     document.getElementById('turnPopupOverlay').classList.add('over-station');
     openTurnPopup(sid, turn);
   }
@@ -1626,6 +1647,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     if(!stationMode || !station || typeof station.setTheme !== 'function' || typeof station.theme !== 'function') return;
     station.setTheme(station.theme() === 'space' ? 'site' : 'space');
   }
+  window.__bdevStationView = function(){ return station && typeof station.view === 'function' ? station.view() : null; }; // tools\uicheck (check_d23.go) only
   window.__bdevStationTheme = function(){ return station && typeof station.theme === 'function' ? station.theme() : null; }; // tools\uicheck (check_d23.go) only
   function mountStation(){
     if(station.isMounted()) return;
@@ -1645,7 +1667,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
       box.style.cssText = 'flex:1;min-height:0';
       host.appendChild(box);
       stationPanel = {box: box, hidden: hidden};
-      station.mount(box, 'panel');
+      station.mount(box, 'panel', stationMode === 'iso' ? 'iso' : 'top');
     }
     feedStation();
   }
@@ -1686,6 +1708,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
     var k = (e.key || '').toLowerCase();
     if(k === 'p'){ stationMode === 'full' ? closeStation() : openStation('full'); e.preventDefault(); }
     else if(k === 'o'){ stationMode === 'panel' ? closeStation() : openStation('panel'); e.preventDefault(); }
+    else if(k === 'i'){ stationMode === 'iso' ? closeStation() : openStation('iso'); e.preventDefault(); }
     else if(k === 't'){ toggleStationTheme(); e.preventDefault(); }
     else if(k === 'l'){ toggleLightTheme(); e.preventDefault(); }
   });
@@ -1724,6 +1747,8 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
   function closeTurnPopup(){
     var overlay = document.getElementById('turnPopupOverlay');
     if(overlay){ overlay.classList.add('hidden'); overlay.classList.remove('over-station'); }
+    var card = document.getElementById('turnPopup');
+    if(card){ card.style.left = ''; card.style.top = ''; }
     currentTurnKey = null;
   }
 
@@ -1798,6 +1823,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
       fileN--;
       body.innerHTML = head + toolCallsHtml(toolN) + '<h4>Files read</h4>' + filesHtml(fileN);
     }
+    placeStationCard(); // now, not on the observer's next frame: no beat in the wrong place
   }
 
   document.addEventListener('click', function(e){
@@ -1824,7 +1850,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
       closeTurnPopup();
       return;
     }
-    if(stationMode === 'full'){
+    if(stationMode){
       closeStation();
       return;
     }
