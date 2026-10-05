@@ -41,6 +41,34 @@ type Finding struct {
 // configurable in v0.2, unlike the re-prefill threshold, per the spec.
 const compactionDropRatio = 0.30
 
+// copilotVSCodeAgent and copilotCompactionFloor scope the compaction rule for
+// Copilot in VS Code. Its OTel spans are one row per request and interleave
+// the main conversation (a growing context, 60k to 700k tokens in the real
+// store) with a helper model's small requests (titles, summaries; 253 to 3,826
+// tokens, an independent prompt each time). The helper is no running context,
+// so a drop to or between helper requests is not a compaction.
+const (
+	copilotVSCodeAgent     = "copilot-vscode"
+	copilotCompactionFloor = 10_000
+)
+
+// compactionBaseline is the context turn i is compared against, and whether a
+// comparison is meaningful at all. Every agent but Copilot in VS Code compares
+// with the previous turn. Copilot compares with the previous turn of the same
+// model, and only when that context is at least copilotCompactionFloor.
+func compactionBaseline(turns []schema.Event, i int) (before int64, ok bool) {
+	if turns[i].Agent != copilotVSCodeAgent {
+		return contextOf(turns[i-1]), true
+	}
+	for j := i - 1; j >= 0; j-- {
+		if turns[j].Model == turns[i].Model {
+			before = contextOf(turns[j])
+			return before, before >= copilotCompactionFloor
+		}
+	}
+	return 0, false
+}
+
 // runwayFitTurns is how many of the session's most recent turns
 // context-runway fits its line over, per the spec ("a linear fit over the
 // last 10 turns of context size").
@@ -102,8 +130,9 @@ func Analyze(events []schema.Event, cfg *pricing.Config) []Finding {
 	// just happened" first, per the cause order the spec fixes.
 	compactionAt := map[int]bool{}
 	for i := 1; i < len(turns); i++ {
-		before, after := contextOf(turns[i-1]), contextOf(turns[i])
-		if before <= 0 || after >= before {
+		before, ok := compactionBaseline(turns, i)
+		after := contextOf(turns[i])
+		if !ok || before <= 0 || after >= before {
 			continue
 		}
 		drop := float64(before-after) / float64(before)
@@ -297,12 +326,12 @@ func expensiveTurns(turns []schema.Event) []Finding {
 			}
 		}
 		evidence := map[string]float64{
-			"fresh":       fresh,
-			"cache_write": cw,
-			"cache_read":  cr,
-			"output":      out,
-			"total":       totals[i],
-			"p95":         p95,
+			"fresh":             fresh,
+			"cache_write":       cw,
+			"cache_read":        cr,
+			"output":            out,
+			"total":             totals[i],
+			"p95":               p95,
 			"dominant_" + class: 1,
 		}
 		findings = append(findings, Finding{
