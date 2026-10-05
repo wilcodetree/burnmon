@@ -1763,6 +1763,7 @@
         '<div><span>Tokens</span>' + fmtTokens(d.tokens) + (d.ctx != null ? ' \u00b7 context ' + Math.round(d.ctx * 100) + '%' : '') + '</div>' +
         (opts.onAgentClick ? '<div class="bms-tt-f">click for the latest turn</div>' : '');
       tip.style.display = 'block';
+      tip.style.left = '0px'; // the width of an absolute box follows its left, so measure from a fixed one
       var tw = tip.offsetWidth, th = tip.offsetHeight;
       tip.style.left = clamp(mx + 14, 4, W - tw - 4) + 'px';
       tip.style.top = clamp(my + 14, 4, H - th - 4) + 'px';
@@ -1936,7 +1937,7 @@
     '.bms-strip i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}' +
     '.bms-hint{position:fixed;right:14px;bottom:10px;color:#64748b;font-size:11px}' +
     '.bms-panel .bms-hint{position:fixed;display:none}' +
-    '.bms-tip{position:absolute;display:none;pointer-events:none;background:rgba(6,10,18,.94);border:1px solid #1c2532;color:#cbd5e1;font:12px "Segoe UI",system-ui,sans-serif;padding:8px 10px;border-radius:4px;min-width:190px;z-index:5}' +
+    '.bms-tip{position:absolute;display:none;pointer-events:none;background:rgba(6,10,18,.94);border:1px solid #1c2532;color:#cbd5e1;font:12px "Segoe UI",system-ui,sans-serif;padding:8px 10px;border-radius:4px;min-width:190px;max-width:320px;box-sizing:border-box;overflow-wrap:anywhere;z-index:5}' +
     '.bms-tip div{line-height:18px}.bms-tip span{display:inline-block;width:58px;color:#64748b}' +
     '.bms-tt-h{font-weight:700;color:#e2e8f0;border-left:3px solid;padding-left:6px;margin-bottom:4px}' +
     '.bms-tt-f{color:#64748b;font-size:11px;margin-top:4px}';
