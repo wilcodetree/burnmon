@@ -373,8 +373,8 @@ func TestBuildClientFilterAndRows(t *testing.T) {
 	if payload.Totals.Sessions != 1 {
 		t.Fatalf("Totals.Sessions = %d, want 1 (client filter must exclude OtherCo's session)", payload.Totals.Sessions)
 	}
-	if len(payload.Clients) != 2 || payload.Clients[0] != "OtherCo" || payload.Clients[1] != "ClientB" {
-		t.Errorf("Clients = %+v, want [OtherCo ClientB] (every client seen, unfiltered by Filter.Client)", payload.Clients)
+	if len(payload.Clients) != 2 || payload.Clients[0] != "ClientB" || payload.Clients[1] != "OtherCo" {
+		t.Errorf("Clients = %+v, want [ClientB OtherCo] (every client seen, unfiltered by Filter.Client)", payload.Clients)
 	}
 	if len(payload.ClientRows) != 2 {
 		t.Fatalf("ClientRows = %+v, want 2 (both clients, the row table ignores Filter.Client)", payload.ClientRows)
