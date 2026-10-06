@@ -111,7 +111,7 @@ exact model a session used, shows "no price"/"tokens only" rather than a guessed
 ## Owner and client rules, active time
 
 `burnmon.json` can carry an ordered `owners` table of rules, e.g.
-`{"match": "C:\\dev\\Work\\*", "owner": "Valona", "client": "Talon", "remote": "github.com/org/repo"}`,
+`{"match": "C:\\dev\\work\\*", "owner": "Acme", "client": "ClientA", "remote": "github.com/org/repo"}`,
 applied to a session's project path at ingest. Owner: the first rule whose `match` path
 prefixes the project wins, an unmatched path gets `"personal"`. Client (optional, v0.3):
 a rule whose `remote` matches the project's git origin (read straight from `.git\config`,
@@ -157,7 +157,7 @@ vendor and week.
 ## The app
 
 Double-click `burnmon.exe`. One window opens, no console, no tray icon, no browser tab.
-It collects on startup, again every 30 minutes (`-interval`, floor 5 minutes) while the
+It collects on startup, again every 15 minutes (`-interval`, floor 5 minutes) while the
 window stays open, and whenever you press "Refresh now". Close the window and the app is
 gone; nothing keeps running in the background. No open ports, no admin rights
 (`asInvoker`). Needs the WebView2 runtime (ships with Edge on Windows 10/11); without it,
@@ -180,6 +180,26 @@ background; reload the browser tab to see newer numbers. No bound live functions
 outside the WebView2 window, so the page falls back to its own "only available in the
 BurnMon app window" text for anything live, the same as any saved report. **Untested**:
 built and cross-compiled, never run on real macOS or Linux hardware.
+
+### Help test macOS and Linux
+
+This repo is public, and the macOS and Linux builds need real hardware. If you have a
+Mac or a Linux box with Claude Code, Codex, Copilot CLI or Hermes on it, please try it
+and open an issue with what you see. Either build from source (Go, then
+`go build -o burnmon ./cmd/burnmon` and `go build -o burnmon-cli ./cmd/burnmon-cli`), or
+take the `burnmon-<os>-<arch>` files the release workflow attaches to a tagged release.
+Things worth checking:
+
+- Does the browser open `dashboard.html`, and do your sessions show up on Now and Sessions?
+- Are the default transcript roots in the table below right for your install?
+- Does the store open: `~/.config/burnmon/burnmon.db` on Linux, `~/Library/Application
+  Support/burnmon/burnmon.db` on macOS (Go's `os.UserConfigDir`)?
+- Do file changes get picked up while the page is open? Neither platform has the native
+  Windows watcher; they use the older per-directory watch, which was never run on a large
+  tree.
+- Does `burnmon-cli price-check` and `burnmon-cli export` work?
+
+Please leave out prompts, project names and client names from anything you paste.
 
 ## BurnMon Dev
 
@@ -245,6 +265,50 @@ responsive down to a single compact column.
   over 10 minutes with `burnmon.exe` co-running, under the 2 percent target despite the
   process walk now running three times as often.
 
+### The Station
+
+A hidden screen in `burnmon-dev.exe`: every live session is a character standing in the
+room of the stage it is in right now. It exists for fun and for glanceability, and it reads
+the same data as the rest of the window. It draws and reads nothing while it is closed.
+
+- **P** opens the full-window isometric view. **P** again, or **Esc**, closes it.
+- **O** swaps the whole burn zone (chart, session cards, vendor strip, turn ticker) for a
+  flat pixel-art plan view of the same floor. **O** again closes it.
+- **I** mounts the isometric view inside the burn zone, with System still visible below.
+- **T** switches theme while it is open: a construction site (default) or a space station.
+  `"station_theme": "site"` or `"space"` in `burnmon-dev.json` sets the one it starts in.
+- Drag pans, the wheel zooms, a double-click resets the camera. Hover shows a small card;
+  a click opens the session's latest turn as a compact card. **Esc** closes a turn popup
+  first, then the Station, then fullscreen. Keys are ignored while you type in a field.
+
+The stage comes from the session's latest tool call (the rules live in `internal\stage`,
+first match wins):
+
+| Stage | Site room | Space room | When |
+|---|---|---|---|
+| arriving | Site entrance | Airlock | session started under 15 s ago |
+| reading | Drawing office | Archive | Read, Grep, Glob and similar |
+| fetching | Delivery gate | Uplink | web fetch or search, any `mcp__` tool |
+| planning | Site office | Plan table | todo, task and plan-mode tools |
+| coding | Build zone | Fabricator | Edit, Write, `apply_patch`, unknown tools |
+| running | Inspection and QA | Test chamber | Bash, PowerShell, Codex `exec` |
+| delegating | Toolbox meeting | Briefing | a subagent task is open |
+| thinking | Foreman's hut | Think pods | tool result in, silent 8 s or more |
+| waiting | Site canteen | Lounge | no tool called, or a prompt is probably open |
+| compacting | Skip container | Recycler | a compaction in the last 60 s |
+| dormant | Parking area | Cryo bay | silent 10 minutes or more |
+
+A twelfth room, the crane (site) or reactor (space), is not a stage. Its pulse follows the
+summed token rate of all sessions.
+
+What it cannot do: the transcripts show tool calls and finished turns, not the model's
+thought, so "thinking" is a silence gap, not an observed state. A fast tool shows its room
+for about 8 seconds before thinking takes over, and an agent stays at least 3.5 seconds in
+a room before it walks on. Codex sessions first appear about 50 seconds in, when their
+first token count lands. Art is CC0 (Kenney, Quaternius and others), listed in
+`tools\station_atlas\CREDITS.txt`. Open issue: it costs more CPU than the rest of the
+window, see Known issues.
+
 ## Configuration
 
 Prices and the subscription calibration are compiled-in illustrative defaults (see
@@ -297,7 +361,7 @@ Requires Go (winget install GoLang.Go). Then, in PowerShell, from this folder:
     .\build.ps1
 
 First run needs internet access: it fetches `go-winres` for the icons and `go mod tidy`
-resolves the WebView2 binding. Produces `burnmon-cli.exe` and `burnmon.exe`, both portable
+resolves the WebView2 binding. Produces `burnmon-cli.exe`, `burnmon.exe` and `burnmon-dev.exe`, all portable
 single files. Copy them anywhere; no install. If a `build.local.ps1` exists next to
 `build.ps1` (gitignored, machine-local), it runs afterward.
 
@@ -331,10 +395,57 @@ Kit recipient up:
    more than one machine need combining into one number. Neither command needs the app
    open or a network call.
 
+## Roadmap
+
+Priority order lives in `02_roadmap\roadmap.md`; this is the short public version, as of
+2026-10-06.
+
+- **Now**: the Station polish pass (layout, seated poses, labels) and finding the cause of
+  its CPU climb. The project is otherwise parked until 2026-11-01, so expect little else
+  before then.
+- **Next**: test and fix macOS and Linux with help from real users (see above); bring the
+  version numbers of `burnmon.exe` and `burnmon-cli.exe` (0.3.2) in line with `burnmon-dev`;
+  a plan-limits panel (how much of a seat or allowance is left), briefed but not started.
+- **Later, undecided**: a local OTLP receiver, signed Windows builds, a native window off
+  Windows. A decision on whether and how to continue past 2026-12-19 is open.
+- **Not planned**: a server, an account, telemetry, or any undocumented vendor endpoint.
+
+Ideas and bug reports are welcome as GitHub issues.
+
+## Known issues
+
+- **Station CPU climbs while it is open.** Two clean 30 minute runs did not reproduce the
+  worst earlier ramp, but a Station left open costs about 4.5 points of one core more than
+  closed, and CPU follows the page's animation rate. Cause not found. Closing it (Esc)
+  removes the cost.
+- **macOS and Linux are untested** on real hardware, and have no app window.
+- **History is slow on a large store.** Every filter change re-reads the whole store, about
+  3 seconds at roughly 55,000 events.
+- **Time bounds compare text.** A stored timestamp in the first second of a range can be
+  wrongly excluded or included, because trailing zeros drop out of RFC3339 strings. Cost
+  is at most one event at a boundary.
+- **Old forecast rows.** One ISO week scored before the v0.3.2 local-time change keeps a
+  UTC week start.
+- **About tab only describes Claude's seat model**, not the other vendors.
+- **Copilot Business and Enterprise** have no per-seat price wired in, and their pooled
+  billing does not fit the single-machine model, so only plan credits for individual
+  plans are shown.
+- **No price, no guess.** Hermes, and any model without a book entry, show tokens only.
+- **Microsoft To Do** due dates are tested but were not checked against a live sign-in.
+- **Both exes share one store.** Running `burnmon.exe` and `burnmon-dev.exe` together
+  makes both ingest the same files. Measured safe, but it is double work.
+- **Test suite flakes.** `scripts\uicheck.ps1` d19 and d20 are skipped on a single small
+  screen, and w1 and w8 are known flaky; none has shown a user-visible bug.
+- **Copilot in VS Code** reports every client as "unassigned" until GitHub adds a
+  workspace attribute to its telemetry.
+
+The full list, with measurements, is in `STATUS.md`.
+
 ## Status
 
-Shipped: `v0.3.0`, 2026-10-09 (`02_roadmap\2026-09-23_v0.3_spec.md`); `v0.3.1`, a cleanup
-pass, 2026-09-24 (`02_roadmap\2026-09-24_ws1_burnmon_cleanup.md`); `v0.3.2`, shared ingest
-performance and local time everywhere, 2026-09-26
-(`02_roadmap\2026-09-26_ws3_shared_ingest_performance.md`). See `STATUS.md` for what is
-true at the current commit and `SESSION_LOG.md` for the session-by-session record.
+Shipped: `v0.3.0` (price books, client map, export and merge, Copilot in VS Code, macOS and
+Linux browser-mode builds), 2026-09-24; `v0.3.1`, a cleanup pass, 2026-09-24; `v0.3.2`,
+shared ingest performance and local time everywhere, 2026-09-26. `burnmon-dev.exe` is at
+`v0.4.0-alpha.10` (tag), with further Station work on `main` since. `burnmon.exe` and
+`burnmon-cli.exe` still report `0.3.2`. See `STATUS.md` for what is true at the current
+commit and `SESSION_LOG.md` for the session-by-session record.
