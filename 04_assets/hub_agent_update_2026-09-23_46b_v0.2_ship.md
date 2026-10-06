@@ -68,7 +68,7 @@ version/docs/roadmap only, per this session's own scope. Not touched: `C:\dev\Wo
 ## 5. Hub-level decision (if any)
 
 None. v0.2.0 shipping is a scheduled release per the 2026-09-22 v0.2 grill, not a new scope
-or pricing decision; nothing here crosses the CIPHER wall or touches Valona.
+or pricing decision; nothing here crosses the CIPHER wall or touches ClientA.
 
 ## 6. What the next hub read should update
 

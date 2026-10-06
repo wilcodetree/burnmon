@@ -59,14 +59,14 @@ address. Nothing is withheld and nothing is degraded. A second run prints the sa
 
 No CLA (contributors keep their copyright, MIT covers the grant). No dual licence. No
 "source-available" clause. No trademark filing before revenue. No telemetry, no licence
-server, no online activation. No contributor agreement with Valona: the pilot uses the
-public build and Valona contributes nothing but feedback, so no Valona IP enters the repo.
+server, no online activation. No contributor agreement with ClientA: the pilot uses the
+public build and ClientA contributes nothing but feedback, so no ClientA IP enters the repo.
 Anything a pilot developer proposes as code goes through a public PR under MIT, never
-through a Valona channel (wall `valona`).
+through a ClientA channel (wall `clienta`).
 
 ## Open calls (asked in phase 5 or carried)
 
 - BurnMon team price: OPEN, waits on the first firm asking, decided by 2026-12-19.
 - Domain: VERIFY at a registrar this week (A6).
-- Whether the Talon Groundwork Kit counts as "free tier" or as a paid Siteoffice inclusion:
+- Whether the ClientB Groundwork Kit counts as "free tier" or as a paid Siteoffice inclusion:
   ASSUMED free, as claudecost is today; confirm when the Kit is re-issued at v0.3.

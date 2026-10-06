@@ -324,14 +324,14 @@ func TestBuildOwnerFilter(t *testing.T) {
 	at := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
 	events := []schema.Event{
 		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", RequestID: "r1", At: at, Model: "claude-sonnet-5", Input: 10, Output: 5, Owner: "ZND"},
-		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s2", RequestID: "r2", At: at, Model: "claude-sonnet-5", Input: 10, Output: 5, Owner: "Valona"},
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s2", RequestID: "r2", At: at, Model: "claude-sonnet-5", Input: 10, Output: 5, Owner: "ClientA"},
 	}
 	payload := Build(events, &cfg, Filter{Period: "day", Owner: "ZND", From: "2026-09-01", To: "2026-09-30"})
 	if payload.Totals.Sessions != 1 {
-		t.Fatalf("sessions = %d, want 1 (owner filter must exclude the Valona session)", payload.Totals.Sessions)
+		t.Fatalf("sessions = %d, want 1 (owner filter must exclude the ClientA session)", payload.Totals.Sessions)
 	}
-	if len(payload.Owners) != 2 || payload.Owners[0] != "Valona" || payload.Owners[1] != "ZND" {
-		t.Errorf("owners = %+v, want [Valona ZND] (every owner seen, unfiltered)", payload.Owners)
+	if len(payload.Owners) != 2 || payload.Owners[0] != "ClientA" || payload.Owners[1] != "ZND" {
+		t.Errorf("owners = %+v, want [ClientA ZND] (every owner seen, unfiltered)", payload.Owners)
 	}
 }
 
@@ -364,17 +364,17 @@ func TestBuildClientFilterAndRows(t *testing.T) {
 	cfg := pricing.Defaults()
 	at := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
 	events := []schema.Event{
-		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", RequestID: "r1", At: at, Model: "claude-sonnet-5", Input: 1000, Output: 200, Client: "Talon"},
+		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", RequestID: "r1", At: at, Model: "claude-sonnet-5", Input: 1000, Output: 200, Client: "ClientB"},
 		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s2", RequestID: "r2", At: at.Add(time.Hour), Model: "claude-sonnet-5", Input: 500, Output: 100, Client: "OtherCo"},
 	}
-	filter := Filter{Period: "day", Client: "Talon", From: "2026-09-01", To: "2026-09-30"}
+	filter := Filter{Period: "day", Client: "ClientB", From: "2026-09-01", To: "2026-09-30"}
 	payload := Build(events, &cfg, filter)
 
 	if payload.Totals.Sessions != 1 {
 		t.Fatalf("Totals.Sessions = %d, want 1 (client filter must exclude OtherCo's session)", payload.Totals.Sessions)
 	}
-	if len(payload.Clients) != 2 || payload.Clients[0] != "OtherCo" || payload.Clients[1] != "Talon" {
-		t.Errorf("Clients = %+v, want [OtherCo Talon] (every client seen, unfiltered by Filter.Client)", payload.Clients)
+	if len(payload.Clients) != 2 || payload.Clients[0] != "OtherCo" || payload.Clients[1] != "ClientB" {
+		t.Errorf("Clients = %+v, want [OtherCo ClientB] (every client seen, unfiltered by Filter.Client)", payload.Clients)
 	}
 	if len(payload.ClientRows) != 2 {
 		t.Fatalf("ClientRows = %+v, want 2 (both clients, the row table ignores Filter.Client)", payload.ClientRows)
@@ -383,19 +383,19 @@ func TestBuildClientFilterAndRows(t *testing.T) {
 	for _, r := range payload.ClientRows {
 		byClient[r.Client] = r
 	}
-	talon := byClient["Talon"]
-	if talon.Sessions != 1 {
-		t.Errorf("Talon row sessions = %d, want 1", talon.Sessions)
+	clientb := byClient["ClientB"]
+	if clientb.Sessions != 1 {
+		t.Errorf("ClientB row sessions = %d, want 1", clientb.Sessions)
 	}
-	if talon.Tokens != 1200 {
-		t.Errorf("Talon row tokens = %d, want 1200", talon.Tokens)
+	if clientb.Tokens != 1200 {
+		t.Errorf("ClientB row tokens = %d, want 1200", clientb.Tokens)
 	}
-	if talon.CostUSD == nil {
-		t.Fatal("Talon row cost_usd is nil, want a figure (anthropic is covered)")
+	if clientb.CostUSD == nil {
+		t.Fatal("ClientB row cost_usd is nil, want a figure (anthropic is covered)")
 	}
 	wantCost := (1000.0*2.0 + 200.0*10.0) / 1e6
-	if diff := *talon.CostUSD - wantCost; diff > 1e-9 || diff < -1e-9 {
-		t.Errorf("Talon row cost_usd = %v, want %v", *talon.CostUSD, wantCost)
+	if diff := *clientb.CostUSD - wantCost; diff > 1e-9 || diff < -1e-9 {
+		t.Errorf("ClientB row cost_usd = %v, want %v", *clientb.CostUSD, wantCost)
 	}
 	other := byClient["OtherCo"]
 	if other.Sessions != 1 || other.Tokens != 600 {

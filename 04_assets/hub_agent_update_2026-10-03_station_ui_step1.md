@@ -18,7 +18,7 @@ Step 1 (the five Station UI items, plus a second round of site theme tweaks Wilc
   - `C:\ZND\50_projects\burnmon\tools\station_atlas\site_manifest.json` (12 seated worker entries, `SE` added to `site_excavator` and `site_frame`)
   - `C:\ZND\50_projects\burnmon\tools\station_atlas\preview\check_themes.js` (the node check, new assertions)
   - `C:\ZND\50_projects\burnmon\tools\uicheck\check_d23.go` (O view in the space theme, 12 s settle wait, repaint wait before each screenshot, re-focus)
-  - `C:\ZND\50_projects\burnmon\DEADLINES.md` (the 2026-10-24 Valona line removed, done earlier in the day)
+  - `C:\ZND\50_projects\burnmon\DEADLINES.md` (the 2026-10-24 ClientA line removed, done earlier in the day)
   - `C:\ZND\50_projects\burnmon\SESSION_LOG.md`
   - `C:\ZND\50_projects\burnmon\02_roadmap\2026-10-03_station_ui_and_backlog.md` (new, the step list)
 - **Untracked** (so it is not lost): this brief, `C:\ZND\50_projects\burnmon\04_assets\hub_agent_update_2026-10-03_station_ui_step1.md`.
@@ -29,7 +29,7 @@ Step 1 (the five Station UI items, plus a second round of site theme tweaks Wilc
 - **No version bump.** STATUS.md still names alpha.10 as current. Whether this becomes alpha.11 is Wilco's call.
 - **STATUS.md was not updated** this session.
 - **Steps 2 to 4 of the roadmap file were not started:** the Station CPU climb, `uicheck` d19 and d20 (known failing on the single 1600x1000 screen per STATUS.md, not re-run), the parked list, and the plan-limits panel brief.
-- **The decision records Wilco still owes** (listed in the roadmap file) were not done by this session: `C:\ZND\10_holding\03_logs\decisions.md`, the hub one-pager, and striking assumption A1 and the Valona rows in `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_burnmon_plan.md`.
+- **The decision records Wilco still owes** (listed in the roadmap file) were not done by this session: `C:\ZND\10_holding\03_logs\decisions.md`, the hub one-pager, and striking assumption A1 and the ClientA rows in `C:\ZND\50_projects\burnmon\02_roadmap\2026-09-22_burnmon_plan.md`.
 - Wilco's own `burnmon-dev.exe` (it blocked `uicheck`) was stopped once, with his explicit yes, and left stopped.
 
 ## 4. Findings worth propagating
@@ -46,17 +46,17 @@ Step 1 (the five Station UI items, plus a second round of site theme tweaks Wilc
 ## 5. Hub-level decision (if any)
 Recorded by Wilco earlier on 2026-10-03 in the roadmap file; it is not new in this session. Paste-ready, if not already in the log:
 
-  **Decision:** BurnMon has no Valona pilot. It is a ZeroNonsense.dev product only; developers use it through the public ZND GitHub.
-  **Context:** the plan carried a Valona pilot assumption (A1) and a 2026-10-24 date. Wilco decided against it on 2026-10-03.
-  **Alternatives considered:** keep a Valona pilot (rejected by Wilco).
-  **Consequences:** the 2026-10-24 line is removed from `C:\ZND\50_projects\burnmon\DEADLINES.md` (done). Still open for Wilco: this entry in `C:\ZND\10_holding\03_logs\decisions.md`, the hub one-pager `C:\ZND\10_holding\01_projects\burnmon.md`, and striking A1 and the Valona rows in the plan file.
+  **Decision:** BurnMon has no ClientA pilot. It is a ZeroNonsense.dev product only; developers use it through the public ZND GitHub.
+  **Context:** the plan carried a ClientA pilot assumption (A1) and a 2026-10-24 date. Wilco decided against it on 2026-10-03.
+  **Alternatives considered:** keep a ClientA pilot (rejected by Wilco).
+  **Consequences:** the 2026-10-24 line is removed from `C:\ZND\50_projects\burnmon\DEADLINES.md` (done). Still open for Wilco: this entry in `C:\ZND\10_holding\03_logs\decisions.md`, the hub one-pager `C:\ZND\10_holding\01_projects\burnmon.md`, and striking A1 and the ClientA rows in the plan file.
   **Links:** `C:\ZND\50_projects\burnmon\02_roadmap\2026-10-03_station_ui_and_backlog.md`
 
 ## 6. What the next hub read should update
 - `C:\ZND\50_projects\burnmon\STATUS.md`: top entry should say Step 1 of the Station UI pass is committed as `2908574`, unpushed and untagged, version still alpha.10.
-- `C:\ZND\10_holding\01_projects\burnmon.md` (hub one-pager): the Valona decision above, and the Station state.
+- `C:\ZND\10_holding\01_projects\burnmon.md` (hub one-pager): the ClientA decision above, and the Station state.
 - `C:\ZND\10_holding\03_logs\decisions.md`: the decision block in section 5, once Wilco confirms.
-- `C:\ZND\50_projects\burnmon\DEADLINES.md`: already edited, check that no Valona date remains.
+- `C:\ZND\50_projects\burnmon\DEADLINES.md`: already edited, check that no ClientA date remains.
 - Mission Deck This Week items: none named, because the deck was not read this session.
 
 Tracker rows moved: none identified. `C:\ZND\10_holding\02_roadmap\roadmap.md` section 5 was not read in this session, so a hub reader should check whether Station work maps to a row.
@@ -64,7 +64,7 @@ Tracker rows moved: none identified. `C:\ZND\10_holding\02_roadmap\roadmap.md` s
 ## 7. Open flags for next session
 - Wilco to decide: push `2908574`, tag, and whether this is alpha.11.
 - Step 2 of the roadmap file: the Station CPU climb (cause open) and d19 and d20.
-- The three Valona record edits listed in section 3.
+- The three ClientA record edits listed in section 3.
 - The clipped "E" in PLAN TABLE (space theme), if it bothers Wilco.
 - `check_themes.js` is not part of `go test`; it runs by hand with node. Worth wiring in if it should gate commits.
 

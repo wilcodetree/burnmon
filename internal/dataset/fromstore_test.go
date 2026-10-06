@@ -242,11 +242,11 @@ func TestBuildSessionCarriesClient(t *testing.T) {
 	cfg := pricing.Defaults()
 	events := []schema.Event{
 		{Vendor: "anthropic", SessionID: "s1", RequestID: "r1", Model: cfg.Families()[0],
-			At: time.Now().UTC(), Input: 1, Output: 1, Client: "Talon"},
+			At: time.Now().UTC(), Input: 1, Output: 1, Client: "ClientB"},
 	}
 	sessions := SessionsFromEvents(events, &cfg)
-	if sessions[0].Client != "Talon" {
-		t.Fatalf("Client = %q, want Talon", sessions[0].Client)
+	if sessions[0].Client != "ClientB" {
+		t.Fatalf("Client = %q, want ClientB", sessions[0].Client)
 	}
 }
 
@@ -276,15 +276,15 @@ func TestActiveMinutesByClientSumsAcrossSessions(t *testing.T) {
 	cfg := pricing.Defaults()
 	base := time.Date(2026, 9, 22, 9, 0, 0, 0, time.UTC)
 	events := []schema.Event{
-		{Vendor: "anthropic", SessionID: "s1", RequestID: "r1", Model: cfg.Families()[0], At: base, Input: 1, Output: 1, Client: "Talon"},
-		{Vendor: "anthropic", SessionID: "s1", RequestID: "r2", Model: cfg.Families()[0], At: base.Add(4 * time.Minute), Input: 1, Output: 1, Client: "Talon"},
-		{Vendor: "anthropic", SessionID: "s2", RequestID: "r1", Model: cfg.Families()[0], At: base, Input: 1, Output: 1, Client: "Talon"},
-		{Vendor: "anthropic", SessionID: "s2", RequestID: "r2", Model: cfg.Families()[0], At: base.Add(6 * time.Minute), Input: 1, Output: 1, Client: "Talon"},
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r1", Model: cfg.Families()[0], At: base, Input: 1, Output: 1, Client: "ClientB"},
+		{Vendor: "anthropic", SessionID: "s1", RequestID: "r2", Model: cfg.Families()[0], At: base.Add(4 * time.Minute), Input: 1, Output: 1, Client: "ClientB"},
+		{Vendor: "anthropic", SessionID: "s2", RequestID: "r1", Model: cfg.Families()[0], At: base, Input: 1, Output: 1, Client: "ClientB"},
+		{Vendor: "anthropic", SessionID: "s2", RequestID: "r2", Model: cfg.Families()[0], At: base.Add(6 * time.Minute), Input: 1, Output: 1, Client: "ClientB"},
 	}
 	sessions := SessionsFromEvents(events, &cfg)
 	byClient := ActiveMinutesByClient(sessions)
-	if byClient["Talon"] != 10 {
-		t.Fatalf("ActiveMinutesByClient[Talon] = %v, want 10 (4 + 6)", byClient["Talon"])
+	if byClient["ClientB"] != 10 {
+		t.Fatalf("ActiveMinutesByClient[ClientB] = %v, want 10 (4 + 6)", byClient["ClientB"])
 	}
 }
 

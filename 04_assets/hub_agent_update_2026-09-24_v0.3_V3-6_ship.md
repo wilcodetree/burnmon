@@ -93,22 +93,22 @@ command below. Not touched: `C:\dev\Work`.
   migration), confirmed via a fresh `TestMigrateRealV01Store` run this session; no event
   lost across the full v0.1-to-v0.3 migration chain.
 - **[STATE]** Real export/merge and Copilot VS Code data both flow correctly through the
-  current build against the real store: a `--owner ZND` export held zero Valona rows and
+  current build against the real store: a `--owner ZND` export held zero ClientA rows and
   zero paths, and the real `github`-vendor (Copilot VS Code) tokens appeared correctly in
   both the vendor strip and a merged report.
 
 ## 5. Hub-level decision (if any)
 
 None. v0.3.0 shipping is the scheduled release per the 2026-09-23 v0.3 grill, not a new
-scope or pricing decision; nothing here crosses the CIPHER wall or touches Valona.
+scope or pricing decision; nothing here crosses the CIPHER wall or touches ClientA.
 
 ## 6. What the next hub read should update
 
 `C:\ZND\10_holding\01_projects\burnmon.md` and the hub `roadmap.md` can mark BurnMon v0.3
 as shipped 2026-09-24, 15 days ahead of the 2026-10-09 target carried in `DEADLINES.md`.
 Next milestone: the 2026-12-19 decision (continue to a paid team line, keep free, or
-stop), informed by roughly nine weeks of Talon's own BurnMon exports through the
-Groundwork Kit once Talon actually starts using v0.3 in place of claudecost.
+stop), informed by roughly nine weeks of ClientB's own BurnMon exports through the
+Groundwork Kit once ClientB actually starts using v0.3 in place of claudecost.
 
 ## 7. Open flags for next session
 

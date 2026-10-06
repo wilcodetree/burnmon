@@ -6,11 +6,11 @@ Every UI item must hold in all four combinations (P space, P site, O space, O si
 
 ## Decision recorded
 
-BurnMon has no Valona pilot. It is ZND only; developers use it through the public ZND GitHub.
+BurnMon has no ClientA pilot. It is ZND only; developers use it through the public ZND GitHub.
 DEADLINES.md line for 2026-10-24 is removed (done 2026-10-03). The decision itself was already in
 `C:\ZND\10_holding\03_logs\decisions.md` (2026-09-29), so no second entry was added. Done
-2026-10-03: the hub one-pager's two stale Valona lines corrected, and in `2026-09-22_burnmon_plan.md`
-the Valona rows struck, assumption A1 marked KILLED, and H1's measure marked OPEN (Wilco sets it at
+2026-10-03: the hub one-pager's two stale ClientA lines corrected, and in `2026-09-22_burnmon_plan.md`
+the ClientA rows struck, assumption A1 marked KILLED, and H1's measure marked OPEN (Wilco sets it at
 the 2026-12-19 scoring).
 
 ## Step 1: Station UI (five items)
@@ -118,7 +118,7 @@ E. Site theme sky: clouds should look like clouds (Wilco, screenshot 16). Cause,
 ## Decisions 2026-10-05 (Wilco)
 
 - Esc closes every Station mode, O included: KEPT.
-- H1 measure without Valona: Wilco's own daily use plus public GitHub signals (stars, release
+- H1 measure without ClientA: Wilco's own daily use plus public GitHub signals (stars, release
   downloads, issues on the public ZND repo, counted over a fixed window before the 2026-12-19
   decision). No direct developer outreach. Still to do: write this into the H1 row of
   `2026-09-22_burnmon_plan.md` and set the window dates (OPEN: window start and the thresholds

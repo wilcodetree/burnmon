@@ -63,7 +63,7 @@ func TestBuildSnapshot_ClientAndBusinessCost(t *testing.T) {
 	events := []schema.Event{
 		{
 			Vendor: "anthropic", Agent: "claude-code", Surface: "cli",
-			SessionID: "running", RequestID: "r1", Model: "claude-sonnet-5", Client: "Talon",
+			SessionID: "running", RequestID: "r1", Model: "claude-sonnet-5", Client: "ClientB",
 			At: now.Add(-30 * time.Second), Input: 1_000_000, Output: 1_000_000,
 		},
 	}
@@ -72,8 +72,8 @@ func TestBuildSnapshot_ClientAndBusinessCost(t *testing.T) {
 		t.Fatalf("want 1 running session, got %d", len(snap.Sessions))
 	}
 	s := snap.Sessions[0]
-	if s.Client != "Talon" {
-		t.Fatalf("Client = %q, want %q", s.Client, "Talon")
+	if s.Client != "ClientB" {
+		t.Fatalf("Client = %q, want %q", s.Client, "ClientB")
 	}
 	if s.BusinessCost == nil {
 		t.Fatal("BusinessCost = nil, want a headline basis for anthropic")

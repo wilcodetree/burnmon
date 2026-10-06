@@ -16,7 +16,7 @@ files into `merged.json` (one column per label, totals per client/vendor/ISO wee
 refuses a schema mismatch) plus a static `report.html` rendered entirely server-side with Go's
 `html/template`, no `<script>` tag at all. Fully tested (`go vet ./...`, `go test ./... -count=1`,
 `.\build.ps1`, all green) and exercised for real: an export with `--owner ZND` on this laptop's
-real store produced 32 rows, all owner `"ZND"`, zero occurrences of "Valona" and zero path
+real store produced 32 rows, all owner `"ZND"`, zero occurrences of "ClientA" and zero path
 separators in the file; merged against a second export under a different label, opened
 `report.html` in the default browser, three plain tables matched the JSON.
 
@@ -43,7 +43,7 @@ separators in the file; merged against a second export under a different label, 
   Wilco. Exact commands below.
 - No `burnmon.json` with owner rules existed anywhere on this laptop before this session (checked
   both locations the app/CLI read). To exercise `--owner` meaningfully, a temporary `burnmon.json`
-  (owner rules matching the house tree: `C:\dev\Work\* -> Valona`, `C:\ZND\* -> ZND`) was dropped
+  (owner rules matching the house tree: `C:\dev\Work\* -> ClientA`, `C:\ZND\* -> ZND`) was dropped
   in the session's scratchpad only, never in the repo or next to a deployed exe, and used with
   `burnmon-cli reown` once to backfill `Owner` on the real store's 51,795 events. This is a real,
   intended mutation of the local `%LOCALAPPDATA%\burnmon\burnmon.db`, not a repo change; it broke
@@ -52,8 +52,8 @@ separators in the file; merged against a second export under a different label, 
   the same session by running `reown` once more against an empty-`owners` config (P6's documented
   "empty means no owner column at all"); the test was confirmed green again before stopping. No
   permanent `burnmon.json` was left on the machine.
-- The second, Valona-inclusive export made to give merge a second, different-totals file to
-  combine (`--owner ZND --owner Valona --label dev-2`) stayed in the session scratchpad only and
+- The second, ClientA-inclusive export made to give merge a second, different-totals file to
+  combine (`--owner ZND --owner ClientA --label dev-2`) stayed in the session scratchpad only and
   was never published anywhere, per the wall rule.
 
 ## 4. Findings worth propagating

@@ -62,8 +62,8 @@ the hub should absorb, write one hub agent update brief into `04_assets`
 
 Commits, tags, pushes and releases. Anything that spends money. Anything published or sent
 as ZeroNonsense.dev. The paid team line and its price (open until the 2026-12-19 decision).
-The Valona wall: BurnMon is a ZND product only, with no Valona handover and no Valona
-pilot. Never mix the Valona address or Valona client names into BurnMon files or exports.
+The ClientA wall: BurnMon is a ZND product only, with no ClientA handover and no ClientA
+pilot. Never mix the ClientA address or ClientA client names into BurnMon files or exports.
 Never copy client names, paths or prompts into exports or public material.
 
 ## Open questions

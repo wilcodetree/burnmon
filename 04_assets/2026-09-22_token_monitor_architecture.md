@@ -21,18 +21,18 @@ none of the crowded competitors sell: a month-end forecast from the developer's 
 history, and per-project attribution. Local only, no account, no server, no cloud sync.
 Windows first, macOS and Linux from the same Go codebase, WSL roots discovered from Windows.
 Recommended: a new name, the claudecost internals carried over, claudecost itself retired
-into it. Pilot: Wilco's laptop first, then the Valona Amsterdam team (ASSUMED, not agreed),
-then Talon's five laptops through the existing Groundwork Kit slot. No dates or money are
+into it. Pilot: Wilco's laptop first, then the ClientA Amsterdam team (ASSUMED, not agreed),
+then ClientB's five laptops through the existing Groundwork Kit slot. No dates or money are
 fixed; the plan (phase 6) proposes them.
 
 ## 1. Decided so far (phase 0, not reopened)
 
 - Kind: product. Owner: ZeroNonsense.dev. Public voice, MIT lineage of claudecost.
-- Scope v1: per developer, local only. Teams and Talon later.
+- Scope v1: per developer, local only. Teams and ClientB later.
 - Platforms: Windows, macOS, Linux, WSL.
 - Agents in scope: Claude Code (CLI and VS Code), OpenAI Codex (CLI and VS Code), GitHub
   Copilot (VS Code and CLI), Hermes Agent. Cowork stays because claudecost already has it.
-- Output language English. No Valona material into `C:\ZND`.
+- Output language English. No ClientA material into `C:\ZND`.
 
 ## 2. The two facts that shape the whole design
 
@@ -84,8 +84,8 @@ internal/report/    the HTML dashboard, one template, Chart.js vendored inline
 
 | Option | Pros | Cons | Failure it invites |
 |---|---|---|---|
-| A. Evolve claudecost in place, keep the name | zero migration, Talon already has it | name says Claude, GitHub repo and Talon config are Claude-shaped | product is dismissed as a Claude tool by Codex and Copilot users |
-| B. New name, fork claudecost internals, retire claudecost | keeps the working scan, dedup, pricing and app shell; honest name | one migration for Talon and Wilco; two repos for a while | half-finished migration leaves two tools alive |
+| A. Evolve claudecost in place, keep the name | zero migration, ClientB already has it | name says Claude, GitHub repo and ClientB config are Claude-shaped | product is dismissed as a Claude tool by Codex and Copilot users |
+| B. New name, fork claudecost internals, retire claudecost | keeps the working scan, dedup, pricing and app shell; honest name | one migration for ClientB and Wilco; two repos for a while | half-finished migration leaves two tools alive |
 | C. New tool from scratch, claudecost untouched | clean design | throws away tested WSL discovery, dedup and app recipe | months lost re-learning what claudecost already knows |
 
 Recommendation: **B**. The claudecost adapter becomes one of five; the README's "Coverage is
@@ -97,7 +97,7 @@ Cowork and Claude Code only" line becomes the changelog entry that closes claude
 |---|---|---|---|
 | A. Coverage parity plus Windows-native | fastest to ship | ccusage and tokscale already cover Windows paths | "why not ccusage" on day one |
 | B. Forecast: month-end cost and window exhaustion from history | nobody sells it; fits BurnRate's findings and the talks track | needs 4 to 8 weeks of history per developer before it is credible | a forecast that is wrong once is never trusted again |
-| C. Attribution: tokens per project or client | turns a curiosity into an invoiceable number; Talon and advisory need it | path-to-client mapping is manual; VS Code Copilot has no project path without OTel | attribution table nobody maintains |
+| C. Attribution: tokens per project or client | turns a curiosity into an invoiceable number; ClientB and advisory need it | path-to-client mapping is manual; VS Code Copilot has no project path without OTel | attribution table nobody maintains |
 | D. Quota windows (5h, weekly, credits) in a tray | what developers watch hourly | needs undocumented endpoints for Claude and Copilot; CodexBar owns it on macOS | breaks every time a vendor changes an internal endpoint |
 
 Recommendation (revised after the CodeBurn scan, Part 2 section 9): **C first, B second**,
@@ -133,12 +133,12 @@ labelled "upper bound" otherwise). The other two sit one click away.
 Recommendation: **D**, readers first (v1), receiver in v1.1. Dedup by vendor plus request id
 on both paths, the claudecost rule (largest output wins) carried over.
 
-### 4.5 Team and Talon aggregation
+### 4.5 Team and ClientB aggregation
 
 | Option | Pros | Cons | Failure it invites |
 |---|---|---|---|
-| A. Strictly personal, no export (claudecost design) | no personnel-data question | Talon PoC number must be hand-collected | manual spreadsheet |
-| B. Developer-initiated export file (JSON, totals only, no prompts) | developer stays in control; Talon gets a number by mailing five files | someone still merges five files | export nobody runs |
+| A. Strictly personal, no export (claudecost design) | no personnel-data question | ClientB PoC number must be hand-collected | manual spreadsheet |
+| B. Developer-initiated export file (JSON, totals only, no prompts) | developer stays in control; ClientB gets a number by mailing five files | someone still merges five files | export nobody runs |
 | C. Shared folder or server aggregation | real team view | a server, an account, a privacy review; competitors with accounts are exactly what we avoid | scope creep into a SaaS |
 
 Recommendation: **B** for v1, plus a `merge` CLI command that folds N export files into one
@@ -200,7 +200,7 @@ override, dated.
 Costs: Wilco's build hours (ASSUMED 6 to 10 sessions to v1 given the claudecost base), one
 laptop per OS for testing (macOS is the gap; ASSUMED none available), and a recurring
 15-minute price-book check per vendor per month. Does not cost: infrastructure, licences,
-signing certificates (deferred), any Valona budget (the Valona pilot uses the public build
+signing certificates (deferred), any ClientA budget (the ClientA pilot uses the public build
 on personal initiative; RELAYED nothing, confirm with the team lead).
 
 ## 8. Sources
@@ -211,7 +211,7 @@ github.com/openai/codex issues #20165, #21660, #24948; docs.github.com Copilot C
 Chronicle, billing; github/docs `copilot.yml` and `models-and-pricing.yml`;
 github.com/NousResearch/hermes-agent; platform.claude.com pricing and usage-cost API; GitHub
 API for competitor stars and releases. Internal: claudecost README and design doc, BurnRate
-AGENTS.md and findings.md, portfolio.md, decisions.md, Talon PoC plan.
+AGENTS.md and findings.md, portfolio.md, decisions.md, ClientB PoC plan.
 Secondary, VERIFY: Copilot CLI `data.db` token layout (tokenuse docs, ccusage issue #1174);
 Hermes native Windows path; Claude Pro/Max plan prices (aggregators); Codex `.jsonl.zst`
 compression; the non-interactive Claude credit pool (lowcode.agency).
@@ -232,7 +232,7 @@ What survives the scan, verified against CodeBurn, tokscale and tokenuse docs: n
 client or engagement dimension, none links tokens to hours or an invoice, only tokenuse
 keeps a durable archive, CodeBurn's desktop app phones home by default outside the EU, and
 none is a legal entity you can contract with. That is exactly the ground ZeroNonsense.dev
-already stands on: BurnRate logs time per node, Siteoffice is the company-as-a-site, Talon
+already stands on: BurnRate logs time per node, Siteoffice is the company-as-a-site, ClientB
 needs a closing number per PoC, advisory work bills per client.
 
 Revised 4.2 recommendation: C first, redefined as client and engagement attribution with
@@ -273,7 +273,7 @@ it watches, it does not control.
 2. Name: BurnMon. Domain availability VERIFY at a registrar.
 3. Hours in v1: session duration from the transcripts, labelled "active time", never
    "billable". The BurnRate time-log join moves to v1.1.
-4. Valona pilot: the Amsterdam team from the first build. Needs a team-lead yes; ASSUMED
+4. ClientA pilot: the Amsterdam team from the first build. Needs a team-lead yes; ASSUMED
    until then. Nothing leaves a laptop; the build is the public MIT one.
 5. macOS: ship untested from a GitHub Actions macOS runner, README says so, until a Mac user
    in the pilot reports.

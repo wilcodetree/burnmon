@@ -376,7 +376,7 @@ func runInsight(args []string) int {
 // <date> --owner <name>... --label <name> --out <file>`. Does a full
 // Collect pass first (same as live, tools and insight) so the store is as
 // current as a one-shot process can make it. When owner rules exist, --owner
-// is required and the command refuses without it, so a Valona row never
+// is required and the command refuses without it, so a ClientA row never
 // leaves this laptop by accident (P6's wall rule, v0.2 spec 2.2).
 func runExport(args []string) int {
 	fs := flag.NewFlagSet("export", flag.ExitOnError)
@@ -402,7 +402,7 @@ func runExport(args []string) int {
 	}
 	if len(cfg.Owners) > 0 && len(owners) == 0 {
 		fmt.Fprintln(os.Stderr, "export: owner rules are configured; --owner is required "+
-			"(repeat --owner for more than one), so a Valona row never leaves by accident")
+			"(repeat --owner for more than one), so a ClientA row never leaves by accident")
 		return 1
 	}
 

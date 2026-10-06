@@ -21,7 +21,7 @@ func TestOwnerForEmptyRulesMeansNoOwner(t *testing.T) {
 func TestOwnerForOrderedRulesFirstMatchWins(t *testing.T) {
 	cfg := Defaults()
 	cfg.Owners = []OwnerRule{
-		{Match: `C:\dev\Work\*`, Owner: "Valona"},
+		{Match: `C:\dev\Work\*`, Owner: "ClientA"},
 		{Match: `C:\ZND\*`, Owner: "ZND"},
 	}
 
@@ -29,7 +29,7 @@ func TestOwnerForOrderedRulesFirstMatchWins(t *testing.T) {
 		path string
 		want string
 	}{
-		{`C:\dev\Work\project\file.go`, "Valona"},
+		{`C:\dev\Work\project\file.go`, "ClientA"},
 		{`C:\ZND\projects\burnmon`, "ZND"},
 		// Case-insensitive match, same as the rest of the codebase's
 		// Windows-path handling (dataset.adapterForPath and friends).
@@ -85,7 +85,7 @@ func TestClientForPathFallbackWhenNoRemoteMatches(t *testing.T) {
 func TestClientForUnassignedWhenNothingMatches(t *testing.T) {
 	cfg := Defaults()
 	cfg.Owners = []OwnerRule{
-		{Match: `C:\dev\Work\*`, Owner: "Valona", Client: "Valona-client"},
+		{Match: `C:\dev\Work\*`, Owner: "ClientA", Client: "ClientA-client"},
 	}
 	if got := cfg.ClientFor(`C:\Users\me\scratch`); got != "unassigned" {
 		t.Fatalf("ClientFor = %q, want unassigned", got)
@@ -109,11 +109,11 @@ func TestClientForEmptyOwnersReturnsUnassigned(t *testing.T) {
 func TestOwnerForRemoteOnlyRuleDoesNotMatchEveryPath(t *testing.T) {
 	cfg := Defaults()
 	cfg.Owners = []OwnerRule{
-		{Remote: "github.com/multica-ai/dsi", Owner: "ZND", Client: "Talon"},
-		{Match: `C:\dev\Work\*`, Owner: "Valona"},
+		{Remote: "github.com/multica-ai/dsi", Owner: "ZND", Client: "ClientB"},
+		{Match: `C:\dev\Work\*`, Owner: "ClientA"},
 	}
-	if got := cfg.OwnerFor(`C:\dev\Work\project`); got != "Valona" {
-		t.Fatalf("OwnerFor = %q, want Valona (a remote-only rule must not match a path with no git remote)", got)
+	if got := cfg.OwnerFor(`C:\dev\Work\project`); got != "ClientA" {
+		t.Fatalf("OwnerFor = %q, want ClientA (a remote-only rule must not match a path with no git remote)", got)
 	}
 	if got := cfg.OwnerFor(`C:\Users\me\scratch`); got != "personal" {
 		t.Fatalf("OwnerFor = %q, want personal (no rule matches: not even the remote-only one)", got)
@@ -138,14 +138,14 @@ func TestMatchRuleUnifiesOwnerAndClientFromOneWinningRule(t *testing.T) {
 
 	cfg := Defaults()
 	cfg.Owners = []OwnerRule{
-		{Match: filepath.Join(root, "repo") + `\*`, Owner: "Valona"},
-		{Remote: "github.com/multica-ai/dsi", Owner: "ZND", Client: "Talon"},
+		{Match: filepath.Join(root, "repo") + `\*`, Owner: "ClientA"},
+		{Remote: "github.com/multica-ai/dsi", Owner: "ZND", Client: "ClientB"},
 	}
 	if got := cfg.OwnerFor(projectPath); got != "ZND" {
 		t.Fatalf("OwnerFor = %q, want ZND (the remote rule wins the match, so it decides owner too, not the path rule)", got)
 	}
-	if got := cfg.ClientFor(projectPath); got != "Talon" {
-		t.Fatalf("ClientFor = %q, want Talon", got)
+	if got := cfg.ClientFor(projectPath); got != "ClientB" {
+		t.Fatalf("ClientFor = %q, want ClientB", got)
 	}
 }
 
@@ -222,7 +222,7 @@ func TestLoadV02ConfigWithOwnersOnlyIsUnchanged(t *testing.T) {
 	path := filepath.Join(dir, "burnmon.json")
 	v02JSON := `{
   "owners": [
-    {"match": "C:\\dev\\Work\\*", "owner": "Valona"},
+    {"match": "C:\\dev\\Work\\*", "owner": "ClientA"},
     {"match": "C:\\ZND\\*", "owner": "ZND"}
   ]
 }`
@@ -236,11 +236,11 @@ func TestLoadV02ConfigWithOwnersOnlyIsUnchanged(t *testing.T) {
 	if len(cfg.Owners) != 2 {
 		t.Fatalf("got %d owner rules, want 2", len(cfg.Owners))
 	}
-	if cfg.Owners[0].Owner != "Valona" || cfg.Owners[0].Client != "" || cfg.Owners[0].Remote != "" {
-		t.Fatalf("owner rule 0 = %+v, want Owner=Valona, Client and Remote empty", cfg.Owners[0])
+	if cfg.Owners[0].Owner != "ClientA" || cfg.Owners[0].Client != "" || cfg.Owners[0].Remote != "" {
+		t.Fatalf("owner rule 0 = %+v, want Owner=ClientA, Client and Remote empty", cfg.Owners[0])
 	}
-	if got := cfg.OwnerFor(`C:\dev\Work\project`); got != "Valona" {
-		t.Fatalf("OwnerFor = %q, want Valona (v0.2 owner matching unchanged)", got)
+	if got := cfg.OwnerFor(`C:\dev\Work\project`); got != "ClientA" {
+		t.Fatalf("OwnerFor = %q, want ClientA (v0.2 owner matching unchanged)", got)
 	}
 	if got := cfg.ClientFor(`C:\dev\Work\project`); got != "unassigned" {
 		t.Fatalf("ClientFor = %q, want unassigned (no client set on any v0.2 rule)", got)

@@ -1401,21 +1401,21 @@ anything. Every Done-when item run against the built exe and the real local stor
    basis named right under the figure exactly as `sessionCardBusinessBody` writes it.
 2. **History answers "what did one client cost in tokens, euros and active time last
    week" in two clicks: PASS.** Dropped a scratch `owners` config
-   (`C:\ZND\* -> ZND`, `C:\dev\Work\* -> Valona`, each with a matching `client`) next to
+   (`C:\ZND\* -> ZND`, `C:\dev\Work\* -> ClientA`, each with a matching `client`) next to
    the exe, ran `burnmon-cli reown` against the real store (52,213 events), launched the
    real app, and drove two real clicks (History tab, then the Business toggle) over the
    dev eval channel: the per-client table read back `ZND 2.62B tokens, EUR 687, 3702 min,
-   312 sessions` and `unassigned 2.29B tokens, EUR 999, 5316 min, 378 sessions` (Valona
-   0, no Valona events exist on this laptop, correctly so). Reverted immediately after
+   312 sessions` and `unassigned 2.29B tokens, EUR 999, 5316 min, 378 sessions` (ClientA
+   0, no ClientA events exist on this laptop, correctly so). Reverted immediately after
    (`reown` again with an empty `owners` config) so the real store's baseline state was
    not left changed by this check.
-3. **An export from Wilco's laptop with `--owner ZND` holds no Valona row and no path:
+3. **An export from Wilco's laptop with `--owner ZND` holds no ClientA row and no path:
    PASS.** With the same scratch owner rules active, `burnmon-cli export --owner ZND
    --label wilco-laptop-v36 --out export1.json` wrote 35 rows; grepped the raw bytes for
-   "Valona" (0 matches), a Windows path separator pattern (0 matches), and a UUID-shaped
+   "ClientA" (0 matches), a Windows path separator pattern (0 matches), and a UUID-shaped
    session-id pattern (0 matches); every row's `"owner"` value is `"ZND"`.
 4. **Two exports merge into one offline HTML report: PASS.** A second export
-   (`--owner ZND --owner Valona --label dev-2-v36`) merged with the first via
+   (`--owner ZND --owner ClientA --label dev-2-v36`) merged with the first via
    `burnmon-cli merge export1.json export2.json --out merged\`: `report.html` has zero
    `<script>` tags and both labels appear in its tables; `merged.json`'s `by_client`/
    `by_vendor`/`by_week` breakdowns carry both labels as columns (e.g. `by_vendor.github`:
@@ -1708,7 +1708,7 @@ session, since one session's events can land in more than one row here). `export
 is the literal string `"dev-1"`; nothing in the export path calls `os.Hostname`. `burnmon-cli
 export --since --until --owner... --label --out`: refuses to run when `burnmon.json` carries
 owner rules and no `--owner` was given (`cfg.Owners` non-empty gate), silent otherwise, matching
-K4's "so a Valona row never leaves by accident." No field on `Row`/`Doc` carries a path, session
+K4's "so a ClientA row never leaves by accident." No field on `Row`/`Doc` carries a path, session
 id, prompt or project name; `TestExportedJSON_NoPathsOrSessionIDs`
 (`internal/export/export_test.go`) is the requested leak scanner: builds a doc from an event
 whose `Project`/`SessionID`/`Title` do carry a Windows path and a UUID, marshals it the way the
@@ -1729,12 +1729,12 @@ CLI-parsing not package logic, so this was only caught by actually running the e
 on this laptop: no `burnmon.json` with owner rules existed anywhere on it yet (checked
 `%LOCALAPPDATA%\burnmon\burnmon.json` and next to the exe, neither existed), so `--owner ZND`
 would have matched nothing meaningful; dropped a temporary `burnmon.json` in the scratchpad with
-`C:\dev\Work\* -> Valona`, `C:\ZND\* -> ZND` (the same rule shape `burnmon.example.json` already
+`C:\dev\Work\* -> ClientA`, `C:\ZND\* -> ZND` (the same rule shape `burnmon.example.json` already
 documents) and ran `burnmon-cli reown` against the real store once to backfill Owner on the
 51,795 events already in it, per K1. `burnmon-cli export --owner ZND --label wilco-laptop`
-produced 32 rows, every one `"owner": "ZND"`, zero occurrences of "Valona" and zero path
+produced 32 rows, every one `"owner": "ZND"`, zero occurrences of "ClientA" and zero path
 separators in the file (checked by grep, not just by eye). A second export with `--owner ZND
---owner Valona --label dev-2` (kept local, in the scratchpad only, never published, per the wall
+--owner ClientA --label dev-2` (kept local, in the scratchpad only, never published, per the wall
 rule) gave a second file with different totals to merge against; `burnmon-cli merge` on the two
 produced `merged.json` (three breakdowns, both labels as columns, e.g. by_vendor.anthropic:
 wilco-laptop 2,403,871,082 vs dev-2 2,404,052,920 tokens) and a `report.html` that opens with
@@ -1898,7 +1898,7 @@ prefixes the project wins; otherwise owner `"personal"`, client `"unassigned"`. 
 rule decides owner and client together, not two independent lookups: an Opus code-review pass
 after the first implementation caught a Critical bug in the original (independent) version, a
 remote-only rule (no `match`) made `OwnerFor`'s path prefix check empty, so it matched every
-path and leaked a client's owner onto every other project, including Valona's. Fixed by the
+path and leaked a client's owner onto every other project, including ClientA's. Fixed by the
 unification above (a rule with an empty `match` and no matching `remote` never wins). The same
 review caught two more real issues, both fixed and covered by new tests: (1) remote matching was
 a bare substring, so a pattern for one repo (`github.com/org/dsi`) also matched a sibling
@@ -1949,7 +1949,7 @@ session, ledgered as minors from the Opus review): `normalizeRemote` does not re
 `ssh://` remote with an explicit port or a non-`git` SSH user; per-client active time is a plain
 sum of that client's sessions, so two overlapping sessions (an agent subsession inside its
 parent, seen in the spot-check above) can push a client's total past real wall-clock time, worth
-revisiting when K4's export numbers are checked against Talon's own time log.
+revisiting when K4's export numbers are checked against ClientB's own time log.
 
 ## 2026-09-23, v0.3 V3-1: price books restructured into dated JSON, C2 cost function
 

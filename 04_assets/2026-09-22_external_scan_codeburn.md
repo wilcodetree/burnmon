@@ -91,7 +91,7 @@ email and team size. Nothing about revenue or customers is verified outside thei
 | Always-on | tray or menubar, telemetry on outside EU | one window on demand, zero telemetry |
 | Interface | CLI, web, desktop, tray, six languages | one exe, one page, EN and NL |
 | Expertise | itemising the bill | what the bill should be per client, and a written opinion on why |
-| Distribution | npm, brew, Store, dmg | portable exe, later winget and brew; Groundwork Kit for Talon |
+| Distribution | npm, brew, Store, dmg | portable exe, later winget and brew; Groundwork Kit for ClientB |
 | Harness | 41 adapters, heuristic attribution | 5 adapters done well, deterministic attribution or "unassigned" |
 
 ## 6. What we take from them

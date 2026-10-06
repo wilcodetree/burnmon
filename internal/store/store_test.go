@@ -565,7 +565,7 @@ func TestReownEvents(t *testing.T) {
 		if strings.HasPrefix(strings.ToLower(project), `c:\znd\`) {
 			return "ZND"
 		}
-		return "Valona"
+		return "ClientA"
 	}
 	clientFor := func(string) string { return "" }
 	n, err := st.ReownEvents(ownerFor, clientFor)
@@ -587,8 +587,8 @@ func TestReownEvents(t *testing.T) {
 	if bySession["s1"].Owner != "ZND" {
 		t.Fatalf("s1 Owner = %q, want ZND", bySession["s1"].Owner)
 	}
-	if bySession["s2"].Owner != "Valona" {
-		t.Fatalf("s2 Owner = %q, want Valona", bySession["s2"].Owner)
+	if bySession["s2"].Owner != "ClientA" {
+		t.Fatalf("s2 Owner = %q, want ClientA", bySession["s2"].Owner)
 	}
 
 	n2, err := st.ReownEvents(ownerFor, clientFor)
@@ -623,7 +623,7 @@ func TestReownEventsReappliesClient(t *testing.T) {
 	ownerFor := func(string) string { return "ZND" }
 	clientFor := func(project string) string {
 		if strings.HasPrefix(strings.ToLower(project), `c:\znd\projects\dsi`) {
-			return "Talon"
+			return "ClientB"
 		}
 		return "unassigned"
 	}
@@ -639,8 +639,8 @@ func TestReownEventsReappliesClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[0].Client != "Talon" {
-		t.Fatalf("Client = %q, want Talon", got[0].Client)
+	if got[0].Client != "ClientB" {
+		t.Fatalf("Client = %q, want ClientB", got[0].Client)
 	}
 
 	n2, err := st.ReownEvents(ownerFor, clientFor)
@@ -665,7 +665,7 @@ func TestMigration7AddsClientColumn(t *testing.T) {
 	events := []schema.Event{
 		{Vendor: "anthropic", Agent: "claude-code", SessionID: "s1", RequestID: "r1",
 			At: time.Now().UTC(), Model: "claude-sonnet-5", Input: 1, Output: 1,
-			Owner: "ZND", Client: "Talon"},
+			Owner: "ZND", Client: "ClientB"},
 	}
 	if err := st.UpsertEvents(events); err != nil {
 		t.Fatalf("UpsertEvents: %v", err)
@@ -674,8 +674,8 @@ func TestMigration7AddsClientColumn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllEvents: %v", err)
 	}
-	if len(got) != 1 || got[0].Client != "Talon" {
-		t.Fatalf("got %+v, want one event with Client=Talon", got)
+	if len(got) != 1 || got[0].Client != "ClientB" {
+		t.Fatalf("got %+v, want one event with Client=ClientB", got)
 	}
 }
 

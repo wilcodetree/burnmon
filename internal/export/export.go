@@ -1,7 +1,7 @@
 // Package export builds K4's export file: one JSON document, aggregated to
 // day/owner/client/vendor/model rows, with nothing that leaves a path,
 // session id, prompt or project name on the machine it was built on (the
-// wall rule, v0.2 spec 2.2 P6: "Valona usage numbers are Wilco's to read on
+// wall rule, v0.2 spec 2.2 P6: "ClientA usage numbers are Wilco's to read on
 // his own laptop").
 package export
 

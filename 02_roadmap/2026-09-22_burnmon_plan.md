@@ -20,8 +20,8 @@ Codex, Copilot CLI, Hermes and Cowork trails from the developer's own disk into 
 SQLite store, prices them three ways, forecasts the month, and attributes tokens and active
 time to projects and clients. Built one session a week beside Siteoffice from 2026-09-22.
 v0.1 (Windows, Claude and Codex adapters, SQLite, coverage floor, the live Now page) by 2026-10-17.
-No Valona pilot: BurnMon is a ZND product only, handed out through the public ZND GitHub, and H1
-is rescored on Talon (decision `C:\ZND\10_holding\03_logs\decisions.md` 2026-09-29). v0.2 (Copilot CLI,
+No ClientA pilot: BurnMon is a ZND product only, handed out through the public ZND GitHub, and H1
+is rescored on ClientB (decision `C:\ZND\10_holding\03_logs\decisions.md` 2026-09-29). v0.2 (Copilot CLI,
 Hermes, forecast) by 2026-11-14, v0.3 (client attribution, export and merge, macOS and
 Linux builds) by 2026-12-12. Decision on 2026-12-19: continue to a team line, keep as a
 free tool, or stop.
@@ -30,9 +30,9 @@ free tool, or stop.
 
 | # | Hypothesis | Measure | Kill signal |
 |---|---|---|---|
-| H1 | Developers on mixed agents want one local number and will run a tool that never phones home | OPEN: rescored on Talon (decision 2026-09-29); Wilco sets the measure at the 2026-12-19 scoring. The Valona measure (5 pilot developers in week 4) is void | OPEN, set with the measure |
+| H1 | Developers on mixed agents want one local number and will run a tool that never phones home | OPEN: rescored on ClientB (decision 2026-09-29); Wilco sets the measure at the 2026-12-19 scoring. The ClientA measure (5 pilot developers in week 4) is void | OPEN, set with the measure |
 | H2 | A forecast with its own error band changes behaviour | At least 2 pilot developers report a change (model switch, compact earlier, plan change) citing the forecast | Nobody cites it after 6 weeks, or the error band stays above 30% in month 2 |
-| H3 | Client attribution is worth money to a small firm | Talon uses a BurnMon export as one of the three PoC closing numbers, and one of Talon or an advisory client asks for the team line | No firm asks by 2026-12-19 |
+| H3 | Client attribution is worth money to a small firm | ClientB uses a BurnMon export as one of the three PoC closing numbers, and one of ClientB or an advisory client asks for the team line | No firm asks by 2026-12-19 |
 
 ## 2. Scope
 
@@ -40,7 +40,7 @@ In (v0.1 to v0.3): adapters for Claude Code and Cowork (carried from claudecost)
 Copilot CLI, Hermes; the five-class token schema; SQLite store with per-file cursors;
 three price books (API list per vendor, Copilot AI credits, subscription share) shipped
 as dated JSON; dedup by vendor plus request id; dashboard with vendor, month, week, day,
-session, project and client views; the Now page (running sessions with context fill gauge, cache clock, live burn chart per minute, turn ticker, plan-window strip where written to disk, forecast chart under it); dev and business switch, dev default, Talon config sets business; forecast card with error band and track record;
+session, project and client views; the Now page (running sessions with context fill gauge, cache clock, live burn chart per minute, turn ticker, plan-window strip where written to disk, forecast chart under it); dev and business switch, dev default, ClientB config sets business; forecast card with error band and track record;
 active time per session from transcript timestamps; `scan`, `report`, `export`, `merge`,
 `forecast`, `price-check` CLI commands; portable exe for Windows, macOS (untested,
 labelled) and Linux; WSL discovery from Windows; MIT licence; README in EN.
@@ -53,7 +53,7 @@ per-person comparison; code signing; NL README (v1.1); a paid tier before a firm
 ## 3. Roles
 
 - Wilco: product owner, builder, first user, price-book keeper (15 minutes per vendor per month).
-- Talon (Martijn, Bart, Jeroen): receive BurnMon through the Groundwork Kit slot claudecost
+- ClientB (Martijn, Bart, Jeroen): receive BurnMon through the Groundwork Kit slot claudecost
   holds today; supply one export per laptop for the PoC closing number.
 - Claude sessions: Fable or Opus for adapter design and forecast method, Sonnet for
   adapter mechanics and the dashboard, Haiku or a script for price-book refresh.
@@ -72,7 +72,7 @@ week slips every row below by a week, and the plan says so rather than compressi
 | Week 42 (to 10-17) | v0.1: Now page (file watchers, running Claude and Codex sessions, context fill, live burn chart), vendor column, price books as dated JSON, `price-check` | Now page shows Wilco's running Claude and Codex sessions with context fill and a live chart. Cache clock and ticker slip to v0.2 if the week is short |
 | Week 43 (to 10-24) | Pilot start (if yes); Copilot CLI adapter against a real pilot install (A3) | first pilot report received; Copilot tokens visible or the gap named |
 | Weeks 44 to 46 (to 11-14) | Hermes adapter (5 s poll); forecast live line with error band and track record; re-prefill and compaction events; Copilot rows with the honest label; dev and business switch; v0.2 | forecast shown only once it has one closed week to score against; the switch flips every number on the Now page |
-| Weeks 47 to 50 (to 12-12) | Client map, active time, `export` and `merge`, macOS and Linux builds from Actions; v0.3 | Talon receives v0.3 through the Groundwork Kit; one merged report exists |
+| Weeks 47 to 50 (to 12-12) | Client map, active time, `export` and `merge`, macOS and Linux builds from Actions; v0.3 | ClientB receives v0.3 through the Groundwork Kit; one merged report exists |
 | 2026-12-19 | Decision | H1 to H3 scored in the hub, one decision block written |
 
 ## 5. Terms
@@ -98,19 +98,19 @@ PRs.
 | The estate rename moves claudecost mid-fork | DEADLINES 09-28 to 10-11 | fork in week 39, before the window |
 | Price books go stale | note section 6 | `price-check` prints dates; monthly 15-minute task in Wilco's calendar |
 | New risk (2026-09-22, features note): the Now page pulls v0.1 from "claudecost plus Codex" to a new first page on one session a week | `04_assets/2026-09-22_burnmon_now_page_features.md` section 6 | Week 42 "done when" is the minimum (sessions, gauge, chart); ticker and cache clock slip to v0.2 |
-| New risk: BurnMon and claudecost both alive at Talon | note 4.1 | Week 47 to 50 replaces claudecost in the Kit; claudecost README points at BurnMon |
+| New risk: BurnMon and claudecost both alive at ClientB | note 4.1 | Week 47 to 50 replaces claudecost in the Kit; claudecost README points at BurnMon |
 
 ## 7. Assumptions register
 
 | # | Assumption | Source | Confirms or kills it | Status |
 |---|---|---|---|---|
-| A1 | (struck) Valona Amsterdam team as pilot | Wilco, phase 0 | killed by decision 2026-09-29: ZND only, no Valona pilot | KILLED |
+| A1 | (struck) ClientA Amsterdam team as pilot | Wilco, phase 0 | killed by decision 2026-09-29: ZND only, no ClientA pilot | KILLED |
 | A2 | Every agent leaves a readable local trail | facts list A to D | done | CONFIRMED (Copilot layout VERIFY, see A3) |
 | A3 | Current Copilot CLI stores tokens in `data.db` | tokenuse docs, ccusage #1174 | inspect one pilot install in week 43 | VERIFY |
 | A4 | Claude Pro/Max plan prices as listed | aggregators | read claude.com/pricing in week 42 | VERIFY |
 | A5 | 6 to 10 sessions reach v0.3 | note section 7 | week 46 kill check | ASSUMED |
 | A6 | burnmon.com / .dev / .app are free | sandbox probe gave no answer | registrar lookup this week | VERIFY |
-| A7 | Talon accepts BurnMon in place of claudecost in the Kit | Talon PoC plan :50 | ask Martijn when v0.3 exists | ASSUMED |
+| A7 | ClientB accepts BurnMon in place of claudecost in the Kit | ClientB PoC plan :50 | ask Martijn when v0.3 exists | ASSUMED |
 | A8 | Transcript timestamps give usable active time | Claude and Codex JSONL have per-message timestamps (HELD) | week 47 spot check against Wilco's own time log | ASSUMED |
 
 ## 8. Why not the nearest alternatives
@@ -141,5 +141,5 @@ No desktop, no client, no forecast.
 - `DEADLINES.md`: 2026-10-17 v0.1, 2026-10-24 pilot answer, 2026-11-14 v0.2, 2026-12-12
   v0.3, 2026-12-19 decision.
 - `02_roadmap\roadmap.md`: a pointer to this plan under the side-track allocation.
-- Groundwork Kit and the Talon PoC plan: claudecost slot becomes BurnMon at v0.3.
+- Groundwork Kit and the ClientB PoC plan: claudecost slot becomes BurnMon at v0.3.
 - `C:\ZND\50_projects\claudecost`: README gains a pointer once the `burnmon` repo exists.

@@ -22,7 +22,7 @@ BurnMon v0.1 Step 2, the Codex adapter, is merged to `main` and tagged. Wilco's 
 - The spec's fallback path (deriving a Codex turn from a `total_token_usage` delta when `last_token_usage` is absent) is implemented but has never run against real data: every rollout line on Wilco's laptop carried `last_token_usage`. Flagged as untested-on-live-data in `SESSION_LOG.md`, not claimed as verified.
 - No `.jsonl.zst` compressed rollout sibling was found on this laptop to test the "logged and skipped" path against; the code path exists and is inert (relies on `scan.FindJSONL`'s existing `.jsonl`-suffix filter) but was not exercised by a real `.zst` file.
 - `docs\2026-08-17_wsl-source-detection-design.md`'s design was extended, not rewritten; Codex's WSL sources use the same 5-second deadline and the same "two cadences" fast/slow split as Claude's, not a separately tuned budget.
-- Nothing was pushed to any Valona-facing location; `C:\dev\Work` was never read or touched this session.
+- Nothing was pushed to any ClientA-facing location; `C:\dev\Work` was never read or touched this session.
 
 ## 4. Findings worth propagating
 - [RESULT] 34 of Wilco's real Codex sessions (`gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-terra` priced; `codex-auto-review` deliberately left unpriced) ingested correctly from a wiped store via a live `burnmon-cli.exe report` run against his actual `~/.codex/sessions` and `~/.claude/projects` trails, three months back. One example: a GPT-6 Astra session, 230 calls, $56.72 list-price cost.

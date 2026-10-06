@@ -39,29 +39,29 @@ WebView2, one window, no server, no open port)" (portfolio.md:38). claudecost is
 the roadmap priority order. Leaves open: no slot for a successor.
 
 **`decisions.md`.** 2026-08-11 (:1214-1220): claudecost and perfadvisor published as public
-MIT repos under github.com/wilcodetree, personal, not Valona-owned, Valona invoice and seat
-data stripped. Public `C:\ZND\50_projects\claudecost` diverges from the Valona working copy
-`C:\dev\Work\claudecost`. 2026-08-28 (:400): Talon claudecost config, 5 seats, EUR 273,58 per
+MIT repos under github.com/wilcodetree, personal, not ClientA-owned, ClientA invoice and seat
+data stripped. Public `C:\ZND\50_projects\claudecost` diverges from the ClientA working copy
+`C:\dev\Work\claudecost`. 2026-08-28 (:400): ClientB claudecost config, 5 seats, EUR 273,58 per
 month. 2026-09-08 (:312): the `claudecost` GitHub repo excluded from renames.
 
-**Talon.** Martijn, Bart, Jeroen (talon.studio), Siteoffice's first customer, pilot since
+**ClientB.** Martijn, Bart, Jeroen (clientb.studio), Siteoffice's first customer, pilot since
 2026-09-01, PoC 2026-11-01 to 2027-02-01. Got the free Groundwork Kit incl. claudecost.
-claudecost "on every laptop" (`02_roadmap\2026-09-08_talon_poc_plan.md:50`); its exports
+claudecost "on every laptop" (`02_roadmap\2026-09-08_clientb_poc_plan.md:50`); its exports
 supply one of the PoC's three closing numbers (:38).
 
-**DEADLINES within 3 weeks.** 2026-09-22: archive `C:\dev` (minus `Work`), where the Valona
+**DEADLINES within 3 weeks.** 2026-09-22: archive `C:\dev` (minus `Work`), where the ClientA
 claudecost fork lives. 2026-09-27: Siteoffice sprint 1 ends. 2026-09-28 to 10-11: estate
 rename window, will move `C:\ZND\50_projects\claudecost`. 2026-10-04: siteoffice-git kill check.
-2026-10-11: sprint 2 ends. 2026-10-15: Talon MLP.
+2026-10-11: sprint 2 ends. 2026-10-15: ClientB MLP.
 
 ### Conflicts between sources
 
 1. Pricing basis: claudecost prices a subscription share plus API list comparison; BurnRate
    says API list is about 8.5x reality on Team plans. Order-of-magnitude disagreement.
-2. Aggregation: claudecost design forbids cross-person aggregation; the Talon PoC plan wants
+2. Aggregation: claudecost design forbids cross-person aggregation; the ClientB PoC plan wants
    claudecost output as a firm-level closing number.
-3. Two claudecost copies (public MIT vs Valona working copy in `C:\dev\Work`).
-4. Talon seat mix unresolved (decisions.md:350).
+3. Two claudecost copies (public MIT vs ClientA working copy in `C:\dev\Work`).
+4. ClientB seat mix unresolved (decisions.md:350).
 
 ## Part 2. Facts list (live research)
 

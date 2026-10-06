@@ -117,7 +117,7 @@ One toggle in the header, remembered per machine. Same events, two vocabularies.
 | Events | re-prefill, compaction, model switch | "expensive turn: EUR 0,42, cause: cache expired" |
 | Drawer | tool calls, file paths, request ids | active time per client, export button |
 
-The business mode is where Talon and an advisory client look; the dev mode is where a
+The business mode is where ClientB and an advisory client look; the dev mode is where a
 developer learns why. Both are the same 40 events; the switch costs one template branch.
 
 ## 5. Other features worth a slot (not yet in the plan)
@@ -153,7 +153,7 @@ developer learns why. Both are the same 40 events; the switch costs one template
 1. The Now page enters v0.1 (2026-10-17): running Claude and Codex sessions with context
    fill, a live burn chart; cache clock and turn ticker if the week allows, else v0.2.
    The forecast chart slot shows history only until a scored week exists.
-2. Default mode: dev. Talon's `burnmon.json` sets business as default. The toggle is one
+2. Default mode: dev. ClientB's `burnmon.json` sets business as default. The toggle is one
    click and remembered per machine.
 
 ## 8. VERIFY list carried

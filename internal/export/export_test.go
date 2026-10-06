@@ -42,7 +42,7 @@ func TestBuild_GroupsByDayOwnerClientVendorModel(t *testing.T) {
 		{Vendor: "anthropic", SessionID: "s2", RequestID: "r3", At: day2, Model: "claude-sonnet-5",
 			Owner: "ZND", Client: "burnmon", Input: 200, Output: 20},
 		{Vendor: "openai", SessionID: "s3", RequestID: "r4", At: day1, Model: "gpt-5.6-terra",
-			Owner: "Valona", Client: "unassigned", Input: 300, Output: 30},
+			Owner: "ClientA", Client: "unassigned", Input: 300, Output: 30},
 	}
 	doc := Build(events, &cfg, "dev-1", time.Now())
 	if len(doc.Rows) != 3 {

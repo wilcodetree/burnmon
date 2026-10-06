@@ -165,7 +165,7 @@ classes, cost on every basis, active minutes); no paths, session ids, prompts or
 names, enforced by a test that scans the output bytes for a path separator or a
 session-id pattern. `--owner` is required whenever `owners` rules exist. Verified for
 real this session: an export with `--owner ZND` against the real local store held zero
-"Valona" occurrences, zero path separators, zero session-id patterns (35 rows). `burnmon-
+"ClientA" occurrences, zero path separators, zero session-id patterns (35 rows). `burnmon-
 cli merge` combines any number of exports (no cap) into `merged.json` and a `report.html`
 that opens offline (zero `<script>` tags), one column per label, totals by client, vendor
 and week; verified for real by merging two exports of the real store under different

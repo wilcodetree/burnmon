@@ -9,17 +9,17 @@ Skill: grill-me-product. Started 2026-09-22 in the hub; moved to `C:\ZND\50_proj
   more than one AI coding agent (Claude Code, OpenAI Codex, GitHub Copilot, Hermes), via
   VS Code and CLIs. Successor of `claudecost`, which is Claude-only.
 - For whom: individual developers first (per developer, local only). Later: teams, and
-  Talon as a possible customer. Test group: Wilco plus the Valona Amsterdam development
-  team (ASSUMED: Valona has not agreed yet).
-- Owner: ZeroNonsense.dev product. Outputs go to the ZND hub. No Valona material enters
-  `C:\ZND` (wall `valona`).
+  ClientB as a possible customer. Test group: Wilco plus the ClientA Amsterdam development
+  team (ASSUMED: ClientA has not agreed yet).
+- Owner: ZeroNonsense.dev product. Outputs go to the ZND hub. No ClientA material enters
+  `C:\ZND` (wall `clienta`).
 - Platforms: Windows, macOS, Linux, WSL.
 - Dates fixed: none. Money fixed: none.
 - Output language: English.
 
 ## Phase reached
 
-Phase 3 Part 2 appended and phase 4 (CodeBurn scan) done, 2026-09-22. Phase 5 complete. Phase 6 plan written (`02_roadmap\2026-09-22_burnmon_plan.md`) and phase L written. Phase 7 complete 2026-09-22: decisions.md block, portfolio row plus BurnRate note, 01_projects/burnmon.md, five DEADLINES rows, roadmap pointer, SESSION_LOG paragraph. Skipped: nothing. Wilco's steps: fork repo, registrar check, Valona ask.
+Phase 3 Part 2 appended and phase 4 (CodeBurn scan) done, 2026-09-22. Phase 5 complete. Phase 6 plan written (`02_roadmap\2026-09-22_burnmon_plan.md`) and phase L written. Phase 7 complete 2026-09-22: decisions.md block, portfolio row plus BurnRate note, 01_projects/burnmon.md, five DEADLINES rows, roadmap pointer, SESSION_LOG paragraph. Skipped: nothing. Wilco's steps: fork repo, registrar check, ClientA ask.
 
 ## Files written
 
@@ -39,21 +39,21 @@ Phase 3 Part 2 appended and phase 4 (CodeBurn scan) done, 2026-09-22. Phase 5 co
 1. Differentiator order: coverage parity Windows-first (floor), forecast, client attribution; all in v1.
 2. Name: BurnMon.
 3. Hours v1: session duration from transcripts, "active time". BurnRate time-log join v1.1.
-4. Pilot: Valona Amsterdam team from the first build (team-lead yes pending, ASSUMED).
+4. Pilot: ClientA Amsterdam team from the first build (team-lead yes pending, ASSUMED).
 5. macOS: ship untested via GitHub Actions runner, labelled.
 6. Licence: MIT core, paid team line (merge, client reports) later.
 7. Start now, one session a week beside Siteoffice; v0.1 target 2026-10-17.
-8. Now page (live sessions, context gauges, live burn chart) enters v0.1; dev mode default, Talon config sets business.
+8. Now page (live sessions, context gauges, live burn chart) enters v0.1; dev mode default, ClientB config sets business.
 
-Still open: domain registration (VERIFY), Valona team-lead approval (A1).
+Still open: domain registration (VERIFY), ClientA team-lead approval (A1).
 
 ## Assumptions register
 
 | # | Assumption | Status | Confirms or kills it |
 |---|---|---|---|
-| A1 | Valona Amsterdam dev team is available as test group | ASSUMED | Wilco asks the team lead |
+| A1 | ClientA Amsterdam dev team is available as test group | ASSUMED | Wilco asks the team lead |
 | A2 | Every listed agent leaves a local, readable usage trail | CONFIRMED (Claude, Codex, Hermes HELD; Copilot layout unstable, VERIFY current install) | Phase 2 research |
-| A3 | Copilot CLI current build stores tokens in `data.db` | VERIFY | Inspect one Valona laptop with a current Copilot CLI |
+| A3 | Copilot CLI current build stores tokens in `data.db` | VERIFY | Inspect one ClientA laptop with a current Copilot CLI |
 | A4 | Subscription pricing figures (Claude Pro/Max) | VERIFY | Read claude.com/pricing |
 
 ## v0.2 grill, 2026-09-22 (release scoping, one question at a time, Fable)
@@ -68,10 +68,10 @@ Hermes and Copilot CLI fixtures locally (Microsoft Copilot out of scope, no loca
 8 Copilot CLI only, one-hour OTel check for VS Code Copilot; 9 `internal/insight`,
 computed on the fly, marker + ticker + drawer + Sessions tab; 10 versioned additive
 migrations first; 11 two sessions a week, no slip order; 12 fixed 30-minute chart,
-time axis sliding 2 s per poll, damped Y max; 13 owner split (Valona / ZND / personal by
+time axis sliding 2 s per poll, damped Y max; 13 owner split (ClientA / ZND / personal by
 path rule, empty by default) into v0.2 as the light client map, with the wall rule for
 anything published.
-New goal recorded: BurnMon plus modelwatch to understand Valona and ZND token usage,
+New goal recorded: BurnMon plus modelwatch to understand ClientA and ZND token usage,
 learn from it, possibly a LinkedIn post; content work once both have weeks of data.
 Files: `..\02_roadmap\2026-09-22_v0.1.2_patch_spec.md`, `..\02_roadmap\2026-09-22_v0.2_spec.md`,
 roadmap and DEADLINES updated, hub roadmap allocation, decisions.md, DEADLINES rows.
