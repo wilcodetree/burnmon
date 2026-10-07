@@ -12,6 +12,16 @@ renamed and extended from v0.2 onward. Repo:
 `02_roadmap\2026-09-22_burnmon_plan.md`; the spec building the current release:
 `02_roadmap\2026-09-23_v0.3_spec.md`.
 
+## Screenshots
+
+The Now page, live burn across vendors:
+
+![BurnMon Now page: live burn chart, session cards and vendor strip](assets/screenshots/now-page.png)
+
+BurnMon Dev, the developer build with the station view and system panels:
+
+<img src="assets/screenshots/dev-station.png" alt="BurnMon Dev station view with system panels" width="560">
+
 ## What it reads
 
 - **Claude Code** and **Cowork** (Claude's desktop agent mode): `claude-code-sessions`
