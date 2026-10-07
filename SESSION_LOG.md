@@ -2,6 +2,10 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-10-07, turn card column fix and two roadmap findings (uncommitted)
+
+In the compact turn card opened from the Station, the Tool, In and Out columns of "Tool calls this turn" wrapped one letter per line (320px card with `overflow-wrap:anywhere`). Those cells now carry class `fit` with a one-line rule; Path is the only column that wraps (`cmd\burnmon-dev\page.html`). Test first: `cmd\burnmon-dev\turnpopup_columns_test.go`. Not run here (no Go in the Cowork sandbox); go vet, go test, build.ps1 and uicheck are Wilco's run. Logged two findings in `02_roadmap\roadmap.md` item 10 for after the park: the browser-mode Refresh button that never finishes, and an Auto theme. Wilco confirmed the wall: no outside fork or port is accepted. Nothing committed.
+
 ## 2026-10-07, README: Groundwork Kit section removed (uncommitted)
 
 Checked the licence: MIT, copyright "Wilco de Tree" in `LICENSE` and in `LegalCopyright` of all three `winres` files (no `CompanyName` set). On Wilco's request, removed the "The Groundwork Kit" section from `README.md` (17 lines, between "Default transcript roots, by OS" and "Roadmap"); no other "Groundwork" mention left in the README. No code change. Nothing committed.

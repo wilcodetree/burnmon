@@ -72,7 +72,14 @@ Priority order lives here and only here.
 9. v0.4.0-alpha.3, later, no date: BurnMon Dev minimized RAM (297 MB against a 250 MB
    target), WebView2 memory target, To Do due dates in local time, d9 at 1920x1080, w1 solo
    re-run. Items and main-side follow-ups: `2026-09-26_parked_after_alpha2.md`.
-10. Decision 2026-12-19.
+10. After the park (2026-11-01), no date, two findings logged 2026-10-07:
+    a. Browser mode (darwin, linux): the Refresh button stays on "Rebuilding..." because
+       `window.ccRefresh` is not bound outside the WebView2 window (`cmd\burnmon\main_other.go`).
+       Hide the button in browser mode and say the page reloads with the next rewrite.
+    b. Auto theme: a third theme state next to Dark and Light that follows the system
+       (`prefers-color-scheme`), in `internal\report\template.html` and
+       `cmd\burnmon-dev\page.html`.
+11. Decision 2026-12-19.
 
 Full plan with hypotheses, risks and assumptions: `2026-09-22_burnmon_plan.md`.
 Architecture (decided): `..\04_assets\2026-09-22_token_monitor_architecture.md`.

@@ -214,6 +214,9 @@ tr.totalrow td{font-weight:700; color:var(--strong); border-bottom:1px solid var
 #turnPopupOverlay.over-station #turnPopup{position:absolute; width:320px; max-width:calc(100vw - 8px);
   padding:10px 12px; overflow-wrap:anywhere}
 #turnPopupOverlay.over-station #turnPopup td{white-space:normal}
+/* Tool, In and Out stay on one line and take only the width they need;
+   Path is the one column that wraps. */
+#turnPopupOverlay.over-station #turnPopup th.fit, #turnPopupOverlay.over-station #turnPopup td.fit{white-space:nowrap; overflow-wrap:normal; width:1%}
 #turnPopup{position:relative; background:var(--panel); border:1px solid var(--amber); color:var(--txt);
   padding:18px 20px; width:480px; max-width:92vw; max-height:84vh; overflow:hidden; font-size:12px}
 #turnPopup h3{margin:0 0 2px; color:var(--strong); font-size:14px}
@@ -1773,8 +1776,8 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
       : '<div class="dim">No findings on this turn.</div>';
 
     var toolRowList = (d.tool_calls || []).map(function(c){
-      return '<tr><td>' + esc(c.tool) + '</td><td>' + esc(c.path || '') + '</td>' +
-        '<td class="num">' + fmtTokens(c.input_bytes) + '</td><td class="num">' +
+      return '<tr><td class="fit">' + esc(c.tool) + '</td><td>' + esc(c.path || '') + '</td>' +
+        '<td class="num fit">' + fmtTokens(c.input_bytes) + '</td><td class="num fit">' +
         (c.result_bytes != null ? fmtTokens(c.result_bytes) : '') + '</td></tr>';
     });
     var fileItemList = (d.files || []).map(function(p){ return '<li>' + esc(p) + '</li>'; });
@@ -1789,7 +1792,7 @@ body.todo-grow .todopanel{flex:1 1 auto; max-height:none; min-height:0}
       if(!toolRowList.length) return '<div class="dim">No tool calls recorded for this turn.</div>';
       var shown = toolRowList.slice(0, n);
       var footer = n < toolRowList.length ? '<tr><td colspan="4" class="dim">+' + (toolRowList.length - n) + ' more</td></tr>' : '';
-      return '<table><thead><tr><th>Tool</th><th>Path</th><th>In</th><th>Out</th></tr></thead><tbody>' + shown.join('') + footer + '</tbody></table>';
+      return '<table><thead><tr><th class="fit">Tool</th><th>Path</th><th class="fit">In</th><th class="fit">Out</th></tr></thead><tbody>' + shown.join('') + footer + '</tbody></table>';
     }
     function filesHtml(n){
       if(!fileItemList.length) return '<div class="dim">No files recorded for this turn.</div>';
