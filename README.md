@@ -378,23 +378,6 @@ single files. Copy them anywhere; no install. If a `build.local.ps1` exists next
 WSL distro detection (the registry-based scan for Claude Code and Codex transcripts
 inside a WSL distribution) only exists on Windows; it is a no-op everywhere else.
 
-## The Groundwork Kit
-
-BurnMon is the token-cost slot in ZeroNonsense.dev's Groundwork Kit (the standard tool
-set a Siteoffice client gets), replacing claudecost there from v0.3 onward. Setting a
-Kit recipient up:
-
-1. **Install**: copy `burnmon.exe`/`burnmon-cli.exe` and a `burnmon.json` next to them,
-   no admin rights, no account. Portable: copy the folder to move it.
-2. **Set client rules**: add `"owners"` rules with a `client` per project if the client
-   bills more than one engagement through the same BurnMon install, so History's
-   per-client table and the export below carry the right client name.
-3. **Export**: on a cadence that suits the engagement (weekly is a reasonable default),
-   `burnmon-cli export --owner <name> --label <machine-or-person> --out export.json`,
-   then `burnmon-cli merge export1.json export2.json ... --out report\` once exports from
-   more than one machine need combining into one number. Neither command needs the app
-   open or a network call.
-
 ## Roadmap
 
 Priority order lives in `02_roadmap\roadmap.md`; this is the short public version, as of

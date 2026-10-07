@@ -2,6 +2,10 @@
 
 One paragraph per work session, newest on top.
 
+## 2026-10-07, README: Groundwork Kit section removed (uncommitted)
+
+Checked the licence: MIT, copyright "Wilco de Tree" in `LICENSE` and in `LegalCopyright` of all three `winres` files (no `CompanyName` set). On Wilco's request, removed the "The Groundwork Kit" section from `README.md` (17 lines, between "Default transcript roots, by OS" and "Roadmap"); no other "Groundwork" mention left in the README. No code change. Nothing committed.
+
 ## 2026-10-05, Station backlog D and E (uncommitted)
 
 D: the space theme's engine glow is now filled into a square that covers its whole gradient
